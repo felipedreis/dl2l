@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Diagram>
+  <ID>JAVA</ID>
+  <OriginalElement>br.cefetmg.lsi.l2l.creature.bd</OriginalElement>
+  <nodes>
+    <node x="151.0" y="272.0">br.cefetmg.lsi.l2l.creature.bd.NoseState</node>
+    <node x="1405.8991228070176" y="0.0">br.cefetmg.lsi.l2l.creature.bd.MouthInteractionType</node>
+    <node x="1107.6491228070174" y="0.0">br.cefetmg.lsi.l2l.creature.bd.EmotionalState</node>
+    <node x="760.8991228070174" y="119.0">br.cefetmg.lsi.l2l.creature.bd.EyeState</node>
+    <node x="283.0" y="272.0">br.cefetmg.lsi.l2l.creature.bd.BDActor</node>
+    <node x="633.3991228070174" y="0.0">br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState</node>
+    <node x="335.8991228070175" y="119.0">br.cefetmg.lsi.l2l.creature.bd.BodyState</node>
+    <node x="442.8991228070175" y="119.0">br.cefetmg.lsi.l2l.creature.bd.ObjectSeenState</node>
+    <node x="858.8991228070174" y="119.0">br.cefetmg.lsi.l2l.creature.bd.BehaviouralEfficiencyState</node>
+    <node x="0.0" y="272.0">br.cefetmg.lsi.l2l.creature.bd.CreatureState</node>
+    <node x="209.89912280701753" y="119.0">br.cefetmg.lsi.l2l.creature.bd.StimulusState</node>
+    <node x="175.06578947368428" y="0.0">br.cefetmg.lsi.l2l.creature.bd.StimulusType</node>
+    <node x="37.25" y="119.0">br.cefetmg.lsi.l2l.creature.bd.ChosenActionState</node>
+    <node x="0.0" y="0.0">br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType</node>
+    <node x="1052.8991228070174" y="119.0">br.cefetmg.lsi.l2l.creature.bd.InternalDynamicState</node>
+    <node x="1271.6491228070176" y="0.0">br.cefetmg.lsi.l2l.creature.bd.SmellType</node>
+    <node x="1366.8991228070176" y="119.0">br.cefetmg.lsi.l2l.creature.bd.MouthInteractionState</node>
+    <node x="409.63377192982455" y="198.0">br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder</node>
+    <node x="582.8991228070174" y="119.0">br.cefetmg.lsi.l2l.creature.bd.MemoryEvocationState</node>
+    <node x="1221.8991228070174" y="119.0">br.cefetmg.lsi.l2l.creature.bd.ObjectSmeltState</node>
+    <node x="1396.3991228070176" y="198.0">br.cefetmg.lsi.l2l.creature.bd.MouthState</node>
+  </nodes>
+  <notes />
+  <edges>
+    <edge source="br.cefetmg.lsi.l2l.creature.bd.ObjectSmeltState" target="br.cefetmg.lsi.l2l.creature.bd.SmellType">
+      <point x="31.25" y="-14.5" />
+      <point x="0.0" y="14.5" />
+    </edge>
+    <edge source="br.cefetmg.lsi.l2l.creature.bd.ObjectSmeltState" target="br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState">
+      <point x="-31.25" y="-14.5" />
+      <point x="1253.1491228070174" y="59.0" />
+      <point x="760.2741228070174" y="59.0" />
+      <point x="54.37500000000006" y="14.5" />
+    </edge>
+    <edge source="br.cefetmg.lsi.l2l.creature.bd.StimulusState" target="br.cefetmg.lsi.l2l.creature.bd.StimulusType">
+      <point x="-35.33333333333326" y="-14.5" />
+      <point x="0.0" y="14.5" />
+    </edge>
+    <edge source="br.cefetmg.lsi.l2l.creature.bd.BodyState" target="br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState">
+      <point x="0.0" y="-14.5" />
+      <point x="379.3991228070175" y="79.0" />
+      <point x="675.690789473684" y="79.0" />
+      <point x="-30.208333333333343" y="14.5" />
+    </edge>
+    <edge source="br.cefetmg.lsi.l2l.creature.bd.ChosenActionState" target="br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState">
+      <point x="33.25" y="-14.5" />
+      <point x="137.0" y="49.0" />
+      <point x="639.440789473684" y="49.0" />
+      <point x="-66.45833333333334" y="14.5" />
+    </edge>
+    <edge source="br.cefetmg.lsi.l2l.creature.bd.MouthState" target="br.cefetmg.lsi.l2l.creature.bd.MouthInteractionState">
+      <point x="0.0" y="-14.5" />
+      <point x="0.0" y="14.5" />
+    </edge>
+    <edge source="br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState" target="br.cefetmg.lsi.l2l.creature.bd.StimulusState">
+      <point x="-42.291666666666686" y="14.5" />
+      <point x="663.6074561403507" y="69.0" />
+      <point x="298.2324561403508" y="69.0" />
+      <point x="35.33333333333326" y="-14.5" />
+    </edge>
+    <edge source="br.cefetmg.lsi.l2l.creature.bd.ChosenActionState" target="br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType">
+      <point x="-33.25" y="-14.5" />
+      <point x="0.0" y="14.5" />
+    </edge>
+    <edge source="br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder" target="br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState">
+      <point x="45.75" y="-14.5" />
+      <point x="546.8837719298245" y="173.0" />
+      <point x="750.3991228070174" y="173.0" />
+      <point x="750.3991228070174" y="99.0" />
+      <point x="711.9407894736842" y="99.0" />
+      <point x="6.041666666666686" y="14.5" />
+    </edge>
+    <edge source="br.cefetmg.lsi.l2l.creature.bd.MouthInteractionState" target="br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState">
+      <point x="-38.5" y="-14.5" />
+      <point x="1405.3991228070176" y="49.0" />
+      <point x="772.3574561403508" y="49.0" />
+      <point x="66.4583333333334" y="14.5" />
+    </edge>
+    <edge source="br.cefetmg.lsi.l2l.creature.bd.InternalDynamicState" target="br.cefetmg.lsi.l2l.creature.bd.EmotionalState">
+      <point x="37.25" y="-14.5" />
+      <point x="0.0" y="14.5" />
+    </edge>
+    <edge source="br.cefetmg.lsi.l2l.creature.bd.InternalDynamicState" target="br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState">
+      <point x="-37.25" y="-14.5" />
+      <point x="1090.1491228070174" y="69.0" />
+      <point x="748.1907894736842" y="69.0" />
+      <point x="42.291666666666714" y="14.5" />
+    </edge>
+    <edge source="br.cefetmg.lsi.l2l.creature.bd.EyeState" target="br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState">
+      <point x="0.0" y="-14.5" />
+      <point x="799.8991228070174" y="89.0" />
+      <point x="724.0241228070174" y="89.0" />
+      <point x="18.12500000000003" y="14.5" />
+    </edge>
+    <edge source="br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder" target="br.cefetmg.lsi.l2l.creature.bd.StimulusState">
+      <point x="-45.75" y="-14.5" />
+      <point x="455.38377192982455" y="173.0" />
+      <point x="262.89912280701753" y="173.0" />
+      <point x="0.0" y="14.5" />
+    </edge>
+    <edge source="br.cefetmg.lsi.l2l.creature.bd.StimulusState" target="br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState">
+      <point x="0.0" y="-14.5" />
+      <point x="262.89912280701753" y="59.0" />
+      <point x="651.5241228070174" y="59.0" />
+      <point x="-54.375" y="14.5" />
+    </edge>
+    <edge source="br.cefetmg.lsi.l2l.creature.bd.MemoryEvocationState" target="br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState">
+      <point x="0.0" y="-14.5" />
+      <point x="661.3991228070174" y="99.0" />
+      <point x="699.8574561403508" y="99.0" />
+      <point x="-6.041666666666657" y="14.5" />
+    </edge>
+    <edge source="br.cefetmg.lsi.l2l.creature.bd.BehaviouralEfficiencyState" target="br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState">
+      <point x="0.0" y="-14.5" />
+      <point x="945.8991228070174" y="79.0" />
+      <point x="736.1074561403508" y="79.0" />
+      <point x="30.20833333333337" y="14.5" />
+    </edge>
+    <edge source="br.cefetmg.lsi.l2l.creature.bd.ObjectSeenState" target="br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState">
+      <point x="0.0" y="-14.5" />
+      <point x="502.8991228070175" y="89.0" />
+      <point x="687.7741228070174" y="89.0" />
+      <point x="-18.125" y="14.5" />
+    </edge>
+    <edge source="br.cefetmg.lsi.l2l.creature.bd.MouthInteractionState" target="br.cefetmg.lsi.l2l.creature.bd.MouthInteractionType">
+      <point x="38.5" y="-14.5" />
+      <point x="0.0" y="14.5" />
+    </edge>
+  </edges>
+  <settings layout="Hierarchic Group" zoom="0.8385053831538949" x="779.5" y="150.5" />
+  <SelectedNodes />
+  <Categories />
+  <SCOPE>All</SCOPE>
+  <VISIBILITY>private</VISIBILITY>
+</Diagram>
+

@@ -1,0 +1,16 @@
+# Add any directories, files, or patterns you don't want to be tracked by version control
+*.class
+target/
+data/
+*.iml
+*.jar
+*.pdf
+.idea
+*.aux
+*.log
+*.pyc
+*.csv
+*.jpg
+*.png
+experiments/
+results/
