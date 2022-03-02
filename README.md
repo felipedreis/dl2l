@@ -2,47 +2,44 @@
 
 ## DL2L ##
 
-### Sumário ###
+### Summary ###
 
-Este é o repositório do DL2L (Distributed - Live to learn, learn to live), um simulador de vida artificial baseado na arquitetura Artífice e utiliza o modelo de atores como fundamento para concorrência e distribuição. Foi tema da defesa de TCC (2017/2) do aluno Felipe Duarte dos Reis (felipedreis@cefetmg.br) sob a orientação do professor Dr. Henrique Elias Borges. O código fonte é predominantemente Java, e utiliza a implementação do modelo de atores Akka.
+This is the repository for DL2L (Distributed - Live to learn, learn to live), an artificial life simulator based on the Artifice architecture and using the actors model as a foundation for concurrency and distribution. It was the subject of the undergrad final project (2017/2) by student Felipe Duarte dos Reis (felipedreis@cefetmg.br) under the guidance of Professor Dr. Henrique Elias Borges. The source code is predominantly Java, and uses the Akka actor model implementation.
 
-## Como executar o DL2L ##
+## How to run DL2L ##
 
-O DL2L pode ser tanto executado na máquina local para testes rápidos, ou em um cluster para simular experimentos de longa duração. Utilizando a máquina local, só é permitido um único holder por enquanto. 
+DL2L can either be run on the local machine for quick tests, or on a cluster to simulate long-running experiments. Using the local machine, only a single holder is allowed for now.
 
-### Executando na máquina local ###
+### Running on local machine ###
 
-Para executar na máquina local é necessário alterar a configuração akka.cluster.seed-nodes no arquivo de configuração localizado em src/main/resources/application.conf, mudando o IP para localhost. É necessário também alterar o arquivo src/main/resources/META-INF/persistence.xml com as informações corretas do mecanismo de persistência. Ao criar o banco de dados, tomar o cuidado de criar um schema com o nome data. Feitas as devidas configurações, empacotar o projeto com o comando `mvn package` na raiz do projeto.
+To run on the local machine it is necessary to change the akka.cluster.seed-nodes configuration in the configuration file located at src/main/resources/application.conf, changing the IP to localhost. You also need to change the src/main/resources/META-INF/persistence.xml file with the correct persistence engine information. When creating the database, be careful to create a schema named data. Once the necessary settings have been made, package the project with the `mvn package` command at the root of the project.
 
-No diretório scripts estão disponíveis quatro scripts que instanciam cada um dos nós da simulação, são eles: manager.sh, provider.sh, detector.sh e holder.sh. Execute-os em terminais diferentes nesta ordem a partir do diretório raiz do projeto, e.g., no diretório tcc execute ./scripts/manager.sh e assim por diante. Os logs do holder.sh e do manager.sh informarão se a simulação iniciou ou não com sucesso. A configuração executada sera a basic.conf que está no diretório simulations.
+In the scripts directory there are four scripts that instantiate each of the simulation nodes, they are: manager.sh, provider.sh, detector.sh and holder.sh. Run them on different terminals in this order from the project root directory, e.g. in the tcc directory run ./scripts/manager.sh and so on. The holder.sh and manager.sh logs will inform you whether the simulation started successfully or not. The configuration executed will be the basic.conf that is in the simulations directory.
 
-### Executando no cluster do PPGMMC ###
+### Running on PPGMMC cluster ###
 
-Para executar as simulações no cluster os mesmos arquivos de configuração do item anterior devem ser alterados, tomando o cuidado de colocar o real endereço IP do compute-0-34, onde o manager executará. Feitas as alterações é necessário executar o comando copyToCluster.sh <user> que empacotará o projeto e copiará as dependências necessárias para o diretório do usuário passado por parâmetro. Como vários arquivos são copiados um-a-um, é sugerido criar uma chave ssh para o seu usuário, evitando a digitação da senha a cada login.
+To run the simulations on the cluster, the same configuration files as in the previous item must be changed, taking care to put the real IP address of compute-0-34, where the manager will run it. Once the changes are made, it is necessary to run the copyToCluster.sh <user> command, which will package the project and copy the necessary dependencies to the user's directory passed by parameter. As several files are copied one-by-one, it is suggested to create an ssh key for your user, avoiding typing the password at each login.
 
-Tendo terminado de copiar, basta acessar o cluster do PPGMMC e executar o script deploy.sh passando como parâmetro o arquivo de configuração da simulação e o número de repetições. 
+Having finished copying, just access the PPGMMC cluster and run the deploy.sh script, passing the simulation configuration file and the number of repetitions as parameters.
 
-### Analise de dados ###
+### Data analysis ###
 
-Os holders, ao terminarem de executar, armazenarão os dados da simulação bem como os backups em uma pasta cujo nome será o id do processo no SLURM. Esses dados devem ser comprimidos e copiados de volta para o diretório do projeto para serem analisados.
+The holders, when they finish running, will store the simulation data as well as the backups in a folder whose name will be the process id in SLURM. This data must be compressed and copied back to the project directory for analysis.
 
-Os scripts para analise de dados estão no diretório analysis, na raiz do projeto. Eles foram escritos em Python 2.7 utilizando a biblioteca numpy e scipy. Os principais arquivos são exp1.py, exp2.py, exp3.py e tracing.py. Em cada um deles deve ser alterada a variável `wd`, que aponta para o diretório onde estão os resultados das simulações. 
+The scripts for data analysis are in the analysis directory, at the root of the project. They were written in Python 2.7 using the numpy and scipy libraries. The main files are exp1.py, exp2.py, exp3.py and tracing.py. In each of them, the `wd` variable must be changed, which points to the directory where the simulation results are.
 
 
-## Como contribuir ##
+## How to contribute ##
 
-O código fonte do projeto está bem organizado em alguns poucos pacotes. São eles: 
+The project's source code is neatly organized into a few packages. Are they:
 
-* `analysis`: Neste pacote estão as classes responsáveis por executar as consultas de banco de dados, extrair, organizar e escrever os dados em um arquivo CSV. Existem dois tipos de dados, os que dizem respeito a amostra (os dados do conjunto de criaturas, e.g. nutrientes comidos, distância percorrida) e os que dizem respeito a dinâmica de cada criatura;
-* `cluster`: Neste pacote estão as classes que definem os atores e mensagens de controle entre as entidades que formam o cluster. Essas entidades são o SimulationManager, o IdProvider, o CollisionDetector e o Holder. Cada um desses membros tem um papel claro na simulação e estes estão explicados na monografia; 
-* `common`: Contem classes que são úteis para o desenvolvimento do projeto mas não fazem parte do seu objetivo central, como extensões do modelo de atores, estruturas de dados que complementam a biblioteca padrão Java, etc;
-* `creature`: Os atores que formam a criatura artificial, bem como seus subsistemas, estão nesse pacote;
-* `gui`: Pacote destinado aos componentes da interface gráfica;
-* `physics`: Pacote destinado à representação física das criaturas e nutrientes no `CollisionDetector`, chamados de `Geometry`, e aos `PositioningAttributes`, classes usadas nos `holders` para transmitir informações de localização; 
-* `stimuli`: Os estímulos trocados internamente entre os componentes da criatura e os estímulos trocados com o mundo artificial estão neste pacote;
-* `world`: Entitades do mundo artificial, como nutrientes e predadores devem ficar neste pacote.
+* `analysis`: In this package are the classes responsible for executing the database queries, extracting, organizing and writing the data in a CSV file. There are two types of data, those concerning the sample (data from the set of creatures, e.g. nutrients eaten, distance traveled) and those concerning the dynamics of each creature;
+* `cluster`: In this package are the classes that define the actors and control messages between the entities that make up the cluster. These entities are the SimulationManager, the IdProvider, the CollisionDetector, and the Holder. Each of these members has a clear role in the simulation and these are explained in the monograph;
+* `common`: Contains classes that are useful for project development but are not part of its main objective, such as actor model extensions, data structures that complement the Java standard library, etc;
+* `creature`: The actors that make up the artificial creature, as well as its subsystems, are in this package;
+* `gui`: Package intended for GUI components;
+* `physics`: Package for the physical representation of creatures and nutrients in the `CollisionDetector`, called `Geometry`, and the `PositioningAttributes`, classes used in `holders` to transmit location information;
+* `stimuli`: The stimuli exchanged internally between the creature components and the stimuli exchanged with the artificial world are in this package;
+* `world`: Entities from the artificial world such as nutrients and predators should be in this package.
 
-As classes não seguem todas o padrão JavaBeans, isso principalmente graças ao modelo de atores. Mensagens trocadas entre os atores devem ser imutáveis, por uma recomendação do _toolkit_ Akka. Portanto, seus atributos são todos do tipo `final`. Por serem constantes, eles devem ser setados pelo método construtor, e não podem ser alterados por métodos `set`. Neste sentido, os métodos get são na sua maioria desnecessários, pois não há o que encapsular. Mas isso deve ser bem analisado no projeto de novas classes, pois algum método pode ser eventualmente necessário.
-
-Os componentes da criatura, bem como os do mundo e também as classes que formam o cluster da simulação são essencialmente atores, e por esse motivo, se comunicam exclusivamente por troca de mensagens. Algumas trocas podem ser síncronas, e há ferramentas para isso no pacote `common`, mas a maioria delas é assíncrona. Para fins de padronização, toda classe ou sub-sistema que tem uma interface bem definida (e.g. sistema de memória, ou sistema de condicionamento) e são acessados por mais de um componente foram projetados como atores tipados. Os demais componentes que funcionam por troca de estímulos, foram projetados como atores não-tipados. Não é recomendado fugir a esse padrão da arquitetura, forçando o compartilhamento de memória entre componentes, seja com o uso de _threads_ ou de outro artíficio, principalmente por ser uma restrição do modelo de atores que impacta diretamente no desempenho do sistema.
-
+Classes don't all follow the JavaBeans standard, this mainly thanks to the actors model. Messages exchanged between actors should be immutable, per a recommendation from _toolkit_ Akka
