@@ -21,7 +21,6 @@ import br.cefetmg.lsi.l2l.stimuli.Stimulus;
 import br.cefetmg.lsi.l2l.world.FruitType;
 import br.cefetmg.lsi.l2l.world.Self;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
-import org.lwjgl.Sys;
 
 import java.util.ArrayList;
 import java.util.List;

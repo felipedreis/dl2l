@@ -4,24 +4,20 @@ import br.cefetmg.lsi.l2l.common.ResourceLoader;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.physics.CreatureGeometry;
 import br.cefetmg.lsi.l2l.physics.ObjectGeometry;
-import org.newdawn.slick.*;
-import org.newdawn.slick.geom.Rectangle;
-import org.newdawn.slick.geom.ShapeRenderer;
-import org.newdawn.slick.state.GameState;
-import org.newdawn.slick.state.StateBasedGame;
 
-import java.util.*;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Created by felipe on 07/01/17.
+ * @deprecated
  */
-public class GUIState implements GameState {
+public class GUIState { // implements GameState {
 
     private Map<SequentialId, ObjectGeometry> objects;
     private Map<SequentialId, CreatureGeometry> creatures;
 
-    private Image background;
+    //private Image background;
 
     public GUIState() {
         objects = new ConcurrentHashMap<>();
@@ -43,7 +39,7 @@ public class GUIState implements GameState {
     public void removeObject(SequentialId id) {
         objects.remove(id);
     }
-
+    /*
     @Override
     public int getID() {
         return 0;
@@ -205,4 +201,5 @@ public class GUIState implements GameState {
     public void inputStarted() {
 
     }
+     */
 }

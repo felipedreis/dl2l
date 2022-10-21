@@ -7,10 +7,7 @@ import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.gui.GUIState;
 import br.cefetmg.lsi.l2l.physics.CreatureGeometry;
 import br.cefetmg.lsi.l2l.physics.ObjectGeometry;
-import org.newdawn.slick.AppGameContainer;
-import org.newdawn.slick.GameContainer;
-import org.newdawn.slick.SlickException;
-import org.newdawn.slick.state.StateBasedGame;
+
 import scala.concurrent.duration.Duration;
 
 import java.util.Map;
@@ -19,12 +16,13 @@ import java.util.logging.Logger;
 
 /**
  * Created by felipe on 30/01/17.
+ * @deprecated
  */
-public class GUIActor extends UntypedActor {
-
+public class GUIActor { //extends UntypedActor {
+    /*
     private GUIState state;
 
-    private AppGameContainer container;
+    //private AppGameContainer container;
 
     private Logger logger;
 
@@ -83,4 +81,5 @@ public class GUIActor extends UntypedActor {
         } else
             unhandled(message);
     }
+     */
 }
