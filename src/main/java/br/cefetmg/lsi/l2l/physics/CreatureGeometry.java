@@ -3,7 +3,6 @@ package br.cefetmg.lsi.l2l.physics;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.ResourceLoader;
 import br.cefetmg.lsi.l2l.common.SequentialId;
-import org.newdawn.slick.Image;
 import org.newdawn.slick.geom.Circle;
 
 import java.io.Serializable;
@@ -19,8 +18,8 @@ public class CreatureGeometry extends Geometry implements Serializable {
     public final Arc mouth;
     public final Arc visionField;
 
-    public Image bodyTexture;
-    public Image mouthTexture;
+    //public Image bodyTexture;
+    //public Image mouthTexture;
 
     public CreatureGeometry(CreaturePositioningAttr attr) {
         body = new Circle((float) attr.position.x, (float) attr.position.y,
@@ -47,11 +46,9 @@ public class CreatureGeometry extends Geometry implements Serializable {
         if(loaded) {
             return;
         }
-
         super.load();
-
-        bodyTexture = loader.loadImage("body");
-        mouthTexture = loader.loadImage("mouth");
+        //bodyTexture = loader.loadImage("body");
+        //mouthTexture = loader.loadImage("mouth");
         loaded = true;
     }
 }

@@ -53,6 +53,7 @@ public class Main {
             String [] roles = commandLine.getOptionValues("roles");
 
             Simulation simulation = new Simulation(ConfigFactory.parseFile(configFile));
+            simulation.setNoUI(true);
 
             String roleParam = roles[0];
 

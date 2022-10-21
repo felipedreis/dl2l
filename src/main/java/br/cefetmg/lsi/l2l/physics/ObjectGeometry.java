@@ -5,7 +5,7 @@ import br.cefetmg.lsi.l2l.common.ResourceLoader;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.world.FruitType;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
-import org.newdawn.slick.Image;
+//import org.newdawn.slick.Image;
 import org.newdawn.slick.geom.Circle;
 import org.newdawn.slick.geom.Shape;
 
@@ -17,7 +17,7 @@ public class ObjectGeometry extends Geometry {
 
     public final Shape shape;
     public final WorldObjectType type;
-    private Image texture;
+    //private Image texture;
     public final Point point;
 
     public ObjectGeometry(WorldObjectPositioningAttr attr) {
@@ -31,7 +31,7 @@ public class ObjectGeometry extends Geometry {
             this.shape = new Circle((float) point.x, (float) point.y, (float) fruitType.radius);
 
         } else {
-            texture = null;
+            //texture = null;
             shape = null;
         }
 
@@ -49,16 +49,17 @@ public class ObjectGeometry extends Geometry {
 
         if (type instanceof FruitType) {
             FruitType fruitType = (FruitType) type;
-            texture = loader.loadImage(fruitType.name().toLowerCase());
+            //texture = loader.loadImage(fruitType.name().toLowerCase());
 
         } else {
-            texture = null;
+            //texture = null;
         }
 
         this.loaded = true;
     }
-
+    /*
     public Image getTexture() {
         return texture;
     }
+     */
 }
