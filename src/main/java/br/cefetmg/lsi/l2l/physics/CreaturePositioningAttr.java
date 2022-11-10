@@ -9,7 +9,7 @@ import java.io.Serializable;
 /**
  * Created by felipe on 06/01/17.
  */
-public class CreaturePositioningAttr implements Serializable{
+public class CreaturePositioningAttr implements Collidable {
 
     public final SequentialId creatureId;
 
@@ -54,5 +54,15 @@ public class CreaturePositioningAttr implements Serializable{
         this.olfactoryFieldRadius = olfactoryFieldRadius;
         this.salivating = salivating;
         this.shock = shock;
+    }
+
+    @Override
+    public Point getMostLeftDownPoint() {
+        return null;
+    }
+
+    @Override
+    public Point getMostRightUpPoint() {
+        return null;
     }
 }
