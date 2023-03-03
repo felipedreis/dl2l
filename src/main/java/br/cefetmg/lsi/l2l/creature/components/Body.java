@@ -18,7 +18,7 @@ import java.util.List;
 /**
  * Created by felipe on 02/01/17.
  */
-public class Body extends CreatureComponent{
+public class Body extends CreatureComponent {
 
     public Body(SequentialId id) {
         super(id);

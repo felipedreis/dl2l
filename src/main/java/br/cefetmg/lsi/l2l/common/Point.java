@@ -1,5 +1,7 @@
 package br.cefetmg.lsi.l2l.common;
 
+import org.newdawn.slick.geom.SlickPoint;
+
 import java.io.Serializable;
 
 /**
@@ -13,6 +15,11 @@ public class Point implements Serializable {
     public final double y;
     public final double z;
 
+    public Point(SlickPoint slickPoint) {
+        this.x = slickPoint.getX();
+        this.y =slickPoint.getY();
+        z = 0.;
+    }
 
     public Point(double x, double y) {
         this.x = x;
@@ -45,5 +52,25 @@ public class Point implements Serializable {
      */
     public double angleAlpha(Point p) {
         return Math.atan2(y - p.y, x - p.x);
+    }
+
+    public double getX() {
+        return x;
+    }
+
+    public double getY() {
+        return y;
+    }
+
+    public double getZ() {
+        return z;
+    }
+
+    @Override
+    public String toString() {
+        return "Point{" +
+            "x=" + x +
+            ", y=" + y +
+            '}';
     }
 }

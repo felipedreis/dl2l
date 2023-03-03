@@ -1,7 +1,10 @@
 package br.cefetmg.lsi.l2l.physics;
 
 import org.newdawn.slick.geom.Shape;
+import org.newdawn.slick.geom.SlickPoint;
 import org.newdawn.slick.geom.Transform;
+
+import java.util.List;
 
 public class Arc extends Shape{
 
@@ -28,18 +31,18 @@ public class Arc extends Shape{
         points = new float[(segments+3) * 2];
 
 
-        float segmentAngle = (float) (this.arcOpening / this.segments);
+        float segmentAngle = (this.arcOpening / this.segments);
 
 
         for(int i=0; i<this.segments; i++){
-            float angle = (float) segmentAngle*(i+1);
-            points[i*2] = (float) ((float)centerX + (float)radius*((float) Math.cos((float)(Math.toRadians(this.startAngle+angle)))));
+            float angle = segmentAngle *(i+1);
+            points[i*2] = centerX + (radius * ((float) Math.cos(Math.toRadians(startAngle + angle))));
 
         }
 
         for(int i=0; i<this.segments; i++){
-            float angle = (float) segmentAngle*(i+1);
-            points[(i*2)+1] = (float) ((float)centerY + (float)radius*((float) - Math.sin((float)(Math.toRadians(this.startAngle+angle)))));
+            float angle = segmentAngle*(i+1);
+            points[(i*2)+1] = (centerY + radius*((float) - Math.sin((Math.toRadians(startAngle+angle)))));
 
         }
 
@@ -53,15 +56,14 @@ public class Arc extends Shape{
 
 
         //2
-        points2[2] = (float) ((float)centerX + (float)radius*((float)Math.cos((float)(Math.toRadians(this.startAngle)))));
-        points2[3] = (float) ((float)centerY + (float)radius*((float) - Math.sin((float)(Math.toRadians(this.startAngle)))));
+        points2[2] =  (centerX + radius*((float)Math.cos((float)(Math.toRadians(this.startAngle)))));
+        points2[3] =  (centerY + radius*((float) - Math.sin((float)(Math.toRadians(this.startAngle)))));
 
         //Ultimo
-        points2[((segments+3) * 2)-2] = (float) ((float)centerX + (float)radius*((float)Math.cos((float)(Math.toRadians(this.startAngle+this.arcOpening)))));
-        points2[((segments+3) * 2)-1] = (float) ((float)centerY + (float)radius*((float) - Math.sin((float)(Math.toRadians(this.startAngle+this.arcOpening)))));
+        points2[((segments+3) * 2)-2] = (centerX + radius*((float)Math.cos((float)(Math.toRadians(startAngle + arcOpening)))));
+        points2[((segments+3) * 2)-1] = (centerY + radius*((float) - Math.sin((float)(Math.toRadians(startAngle + arcOpening)))));
 
         points = points2;
-
     }
 
 

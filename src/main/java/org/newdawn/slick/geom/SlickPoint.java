@@ -1,14 +1,11 @@
 package org.newdawn.slick.geom;
 
-import org.newdawn.slick.geom.Shape; 
-import org.newdawn.slick.geom.Transform; 
-
 /**
  * A single point shape
  * 
  * @author Kova
  */
-public class Point extends Shape 
+public class SlickPoint extends Shape
 { 
 	/**
 	 * Create a new point
@@ -16,7 +13,7 @@ public class Point extends Shape
 	 * @param x The x coordinate of the point
 	 * @param y The y coordinate of the point
 	 */
-    public Point(float x, float y) 
+    public SlickPoint(float x, float y)
     { 
         this.x = x; 
         this.y = y; 
@@ -31,7 +28,7 @@ public class Point extends Shape
         float result[] = new float[points.length]; 
         transform.transform(points, 0, result, 0, points.length / 2); 
         
-        return new Point(points[0], points[1]); 
+        return new SlickPoint(points[0], points[1]);
     } 
 
     /**

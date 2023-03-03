@@ -1,15 +1,19 @@
 package br.cefetmg.lsi.l2l.physics;
 
 import br.cefetmg.lsi.l2l.common.Constants;
+import br.cefetmg.lsi.l2l.common.Pair;
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.common.SequentialId;
+import org.newdawn.slick.geom.SlickPoint;
 
-import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * Created by felipe on 06/01/17.
  */
-public class CreaturePositioningAttr implements Collidable {
+public class CreaturePositioningAttr {
 
     public final SequentialId creatureId;
 
@@ -28,6 +32,7 @@ public class CreaturePositioningAttr implements Collidable {
 
     public final boolean salivating;
     public final boolean shock;
+
 
     public CreaturePositioningAttr(
             SequentialId creatureId,
@@ -56,13 +61,4 @@ public class CreaturePositioningAttr implements Collidable {
         this.shock = shock;
     }
 
-    @Override
-    public Point getMostLeftDownPoint() {
-        return null;
-    }
-
-    @Override
-    public Point getMostRightUpPoint() {
-        return null;
-    }
 }

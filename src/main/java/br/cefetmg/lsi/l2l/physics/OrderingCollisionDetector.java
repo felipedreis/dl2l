@@ -11,14 +11,16 @@ public class OrderingCollisionDetector extends CollisionDetector {
 
   List<Collidable> xOrderedObjects;
 
-  OrderingCollisionDetector() {
+  public OrderingCollisionDetector() {
     xOrderedObjects = new ArrayList<>();
   }
 
-
-
   @Override
-  public List<SequentialId[]> getCollidingObjects() {
+  public List<Collidable[]> pruneCollidingObjects() {
+
+    xOrderedObjects.addAll(worldObjects.values());
+    xOrderedObjects.addAll(creatures.values());
+
     xOrderedObjects.sort(xComparator);
 
     double firstObjectEndingX = xOrderedObjects.get(0).getMostRightUpPoint().x;
@@ -32,8 +34,8 @@ public class OrderingCollisionDetector extends CollisionDetector {
         continue;
 
       Collidable[] colliding = xOrderedObjects.subList(i, j).toArray(Collidable[]::new);
-
+      possibleXCollidingObjects.add(colliding);
     }
-    return null;
+    return possibleXCollidingObjects;
   }
 }
