@@ -57,9 +57,9 @@ public class MannTriangulator implements Triangulator {
 	}
 	
 	/**
-	 * @see Triangulator#addPolyPoint(float, float)
+	 * @see Triangulator#addPolyPoint(double, double)
 	 */
-	public void addPolyPoint(float x, float y) {
+	public void addPolyPoint(double x, double y) {
     	addPoint(new Vector2f(x,y));
     }
 
@@ -608,10 +608,10 @@ public class MannTriangulator implements Triangulator {
 	/**
 	 * @see Triangulator#getTrianglePoint(int, int)
 	 */
-	public float[] getTrianglePoint(int tri, int i) {
+	public double[] getTrianglePoint(int tri, int i) {
 		Vector2f pt = (Vector2f) triangles.get((tri * 3) + i);
 
-		return new float[] { pt.x, pt.y };
+		return new double[] { pt.x, pt.y };
 	}
 
 }

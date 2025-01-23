@@ -5,14 +5,14 @@ import org.newdawn.slick.geom.Transform;
 
 public class Arc extends Shape{
 
-    private float centerX;
-    private float centerY;
-    private float startAngle;
-    private float arcOpening;
-    private float radius;
-    private int segments;
+    public final double centerX;
+    public final double centerY;
+    public final double startAngle;
+    public final double arcOpening;
+    public final double radius;
+    public final int segments;
 
-    public Arc(float centerX, float centerY, float radius, float startAngle, float arcOpening, int segments){
+    public Arc(double centerX, double centerY, double radius, double startAngle, double arcOpening, int segments){
         this.centerX = centerX;
         this.centerY = centerY;
         this.radius = radius;
@@ -25,25 +25,25 @@ public class Arc extends Shape{
     protected void createPoints() {
 
         //Inicializa o vetor pontos com o maximo de pontos que vou precisar.
-        points = new float[(segments+3) * 2];
+        points = new double[(segments+3) * 2];
 
 
-        float segmentAngle = (float) (this.arcOpening / this.segments);
+        double segmentAngle = (double) (this.arcOpening / this.segments);
 
 
         for(int i=0; i<this.segments; i++){
-            float angle = (float) segmentAngle*(i+1);
-            points[i*2] = (float) ((float)centerX + (float)radius*((float) Math.cos((float)(Math.toRadians(this.startAngle+angle)))));
+            double angle = (double) segmentAngle*(i+1);
+            points[i*2] = (double) ((double)centerX + (double)radius*((double) Math.cos((double)(Math.toRadians(this.startAngle+angle)))));
 
         }
 
         for(int i=0; i<this.segments; i++){
-            float angle = (float) segmentAngle*(i+1);
-            points[(i*2)+1] = (float) ((float)centerY + (float)radius*((float) - Math.sin((float)(Math.toRadians(this.startAngle+angle)))));
+            double angle = (double) segmentAngle*(i+1);
+            points[(i*2)+1] = (double) ((double)centerY + (double)radius*((double) - Math.sin((double)(Math.toRadians(this.startAngle+angle)))));
 
         }
 
-        float[] points2 = new float[((segments+3) * 2)];
+        double[] points2 = new double[((segments+3) * 2)];
 
         System.arraycopy(points, 0, points2, 4, segments * 2);
 
@@ -53,12 +53,12 @@ public class Arc extends Shape{
 
 
         //2
-        points2[2] = (float) ((float)centerX + (float)radius*((float)Math.cos((float)(Math.toRadians(this.startAngle)))));
-        points2[3] = (float) ((float)centerY + (float)radius*((float) - Math.sin((float)(Math.toRadians(this.startAngle)))));
+        points2[2] = (double) ((double)centerX + (double)radius*((double)Math.cos((double)(Math.toRadians(this.startAngle)))));
+        points2[3] = (double) ((double)centerY + (double)radius*((double) - Math.sin((double)(Math.toRadians(this.startAngle)))));
 
         //Ultimo
-        points2[((segments+3) * 2)-2] = (float) ((float)centerX + (float)radius*((float)Math.cos((float)(Math.toRadians(this.startAngle+this.arcOpening)))));
-        points2[((segments+3) * 2)-1] = (float) ((float)centerY + (float)radius*((float) - Math.sin((float)(Math.toRadians(this.startAngle+this.arcOpening)))));
+        points2[((segments+3) * 2)-2] = (double) ((double)centerX + (double)radius*((double)Math.cos((double)(Math.toRadians(this.startAngle+this.arcOpening)))));
+        points2[((segments+3) * 2)-1] = (double) ((double)centerY + (double)radius*((double) - Math.sin((double)(Math.toRadians(this.startAngle+this.arcOpening)))));
 
         points = points2;
 

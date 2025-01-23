@@ -1,34 +1,19 @@
 package br.cefetmg.lsi.l2l.physics;
 
-import br.cefetmg.lsi.l2l.common.ResourceLoader;
+
+import br.cefetmg.lsi.l2l.common.Point;
+import org.newdawn.slick.geom.Rectangle;
 
 /**
  * Created by felipe on 20/02/17.
  */
-public abstract class Geometry {
-    protected boolean loaded;
-    protected ResourceLoader loader;
+public interface Geometry {
 
-    public Geometry(){
-        loader = null;
-        loaded = false;
-    }
+    double getX();
 
-    public boolean isLoaded() {
-        return loaded;
-    }
+    double getY();
 
-    public void setLoaded(boolean loaded) {
-        this.loaded = loaded;
-    }
+    Point getPoint();
 
-    public void load() {
-        if (loader == null) {
-            try {
-                loader = new ResourceLoader();
-            } catch (Exception ex) {
-                ex.printStackTrace();
-            }
-        }
-    }
+    Rectangle getBoundingBox();
 }

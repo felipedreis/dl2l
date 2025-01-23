@@ -10,23 +10,23 @@ import java.io.Serializable;
  */
 public abstract class Shape implements Serializable {
     /** The points representing this polygon. */
-    protected float points[];
+    protected double points[];
     /** Center point of the polygon. */
-    protected float center[];
+    protected double center[];
     /** The left most point of this shape. */
-    protected float x;
+    protected double x;
     /** The top most point of this shape. */
-    protected float y;
+    protected double y;
     /** The right most point of this shape */
-    protected float maxX;
+    protected double maxX;
     /** The bottom most point of this shape */
-    protected float maxY;
+    protected double maxY;
     /** The left most point of this shape. */
-    protected float minX;
+    protected double minX;
     /** The top most point of this shape. */
-    protected float minY;
+    protected double minY;
     /** Radius of a circle that can completely enclose this shape. */
-    protected float boundingCircleRadius;
+    protected double boundingCircleRadius;
     /** Flag to tell whether points need to be generated */
     protected boolean pointsDirty;
     /** The triangles that define the shape */
@@ -48,7 +48,7 @@ public abstract class Shape implements Serializable {
      * @param x The x coordinate of the new location of the shape
      * @param y The y coordinate of the new location of the shape
      */
-    public void setLocation(float x, float y) {
+    public void setLocation(double x, double y) {
     	setX(x);
     	setY(y);
     }
@@ -73,7 +73,7 @@ public abstract class Shape implements Serializable {
      * 
      * @return The x location of the left side of this shape.
      */
-    public float getX() {
+    public double getX() {
         return x;
     }
     
@@ -82,9 +82,9 @@ public abstract class Shape implements Serializable {
      * 
      * @param x The new x position of the left side this shape.
      */
-    public void setX(float x) {
+    public void setX(double x) {
     	if (x != this.x) {
-    		float dx = x - this.x;
+    		double dx = x - this.x;
 	        this.x = x;
 	        
 	        if ((points == null) || (center == null)) {
@@ -107,9 +107,9 @@ public abstract class Shape implements Serializable {
      * 
      * @param y The new y position of the top of this shape.
      */
-    public void setY(float y) {
+    public void setY(double y) {
     	if (y != this.y) {
-    		float dy = y - this.y;
+    		double dy = y - this.y;
 	        this.y = y;
 
 	        if ((points == null) || (center == null)) {
@@ -132,7 +132,7 @@ public abstract class Shape implements Serializable {
      * 
      * @return The y position of the top of this shape.
      */
-    public float getY() {
+    public double getY() {
         return y;
     }
     
@@ -160,7 +160,7 @@ public abstract class Shape implements Serializable {
      * 
      * @return The x center of this shape.
      */
-    public float getCenterX() {
+    public double getCenterX() {
         checkPoints();
         
         return center[0];
@@ -171,12 +171,12 @@ public abstract class Shape implements Serializable {
      * 
      * @param centerX The center point to set.
      */
-    public void setCenterX(float centerX) {
+    public void setCenterX(double centerX) {
         if ((points == null) || (center == null)) {
         	checkPoints();
         }
         
-        float xDiff = centerX - getCenterX();
+        double xDiff = centerX - getCenterX();
         setX(x + xDiff);
     }
 
@@ -185,7 +185,7 @@ public abstract class Shape implements Serializable {
      * 
      * @return The y center of this shape.
      */
-    public float getCenterY() {
+    public double getCenterY() {
         checkPoints();
         
         return center[1];
@@ -196,12 +196,12 @@ public abstract class Shape implements Serializable {
      * 
      * @param centerY The center point to set.
      */
-    public void setCenterY(float centerY) {
+    public void setCenterY(double centerY) {
         if ((points == null) || (center == null)) {
         	checkPoints();
         }
         
-        float yDiff = centerY - getCenterY();
+        double yDiff = centerY - getCenterY();
         setY(y + yDiff);
     }
     
@@ -210,7 +210,7 @@ public abstract class Shape implements Serializable {
      * 
      * @return The right most point of this shape.
      */
-    public float getMaxX() {
+    public double getMaxX() {
         checkPoints();
         return maxX;
     }
@@ -219,7 +219,7 @@ public abstract class Shape implements Serializable {
      * 
      * @return The bottom most point of this shape.
      */
-    public float getMaxY() {
+    public double getMaxY() {
         checkPoints();
         return maxY;
     }
@@ -229,7 +229,7 @@ public abstract class Shape implements Serializable {
      * 
      * @return The left most point of this shape.
      */
-    public float getMinX() {
+    public double getMinX() {
         checkPoints();
         return minX;
     }
@@ -239,7 +239,7 @@ public abstract class Shape implements Serializable {
      * 
      * @return The top most point of this shape.
      */
-    public float getMinY() {
+    public double getMinY() {
         checkPoints();
         return minY;
     }
@@ -249,7 +249,7 @@ public abstract class Shape implements Serializable {
      * 
      * @return The radius of the circle.
      */
-    public float getBoundingCircleRadius() {
+    public double getBoundingCircleRadius() {
         checkPoints();
         return boundingCircleRadius;
     }
@@ -259,7 +259,7 @@ public abstract class Shape implements Serializable {
      * 
      * @return The x,y coordinates of the center.
      */
-    public float[] getCenter() {
+    public double[] getCenter() {
         checkPoints();
         return center;
     }
@@ -269,7 +269,7 @@ public abstract class Shape implements Serializable {
      * 
      * @return an array of x,y points
      */
-    public float[] getPoints() {
+    public double[] getPoints() {
         checkPoints();
         return points;
     }
@@ -290,10 +290,10 @@ public abstract class Shape implements Serializable {
      * @param index The index of the point to retrieve
      * @return The point's coordinates
      */
-    public float[] getPoint(int index) {
+    public double[] getPoint(int index) {
         checkPoints();
 
-        float result[] = new float[2];
+        double result[] = new double[2];
         
         result[0] = points[index * 2];
         result[1] = points[index * 2 + 1];
@@ -307,13 +307,13 @@ public abstract class Shape implements Serializable {
      * @param index The index of the point whose normal should be retrieved
      * @return The combined normal of a given point
      */
-    public float[] getNormal(int index) {
-    	float[] current = getPoint(index);
-    	float[] prev = getPoint(index - 1 < 0 ? getPointCount() - 1 : index - 1);
-    	float[] next = getPoint(index + 1 >= getPointCount() ? 0 : index + 1);
+    public double[] getNormal(int index) {
+    	double[] current = getPoint(index);
+    	double[] prev = getPoint(index - 1 < 0 ? getPointCount() - 1 : index - 1);
+    	double[] next = getPoint(index + 1 >= getPointCount() ? 0 : index + 1);
     	
-    	float[] t1 = getNormal(prev, current);
-    	float[] t2 = getNormal(current, next);
+    	double[] t1 = getNormal(prev, current);
+    	double[] t2 = getNormal(current, next);
     	
     	if ((index == 0) && (!closed())) {
     		return t2;
@@ -322,10 +322,10 @@ public abstract class Shape implements Serializable {
     		return t1;
     	}
     	
-    	float tx = (t1[0]+t2[0])/2;
-    	float ty = (t1[1]+t2[1])/2;
-    	float len = (float) Math.sqrt((tx*tx)+(ty*ty));
-    	return new float[] {tx/len,ty/len};
+    	double tx = (t1[0]+t2[0])/2;
+    	double ty = (t1[1]+t2[1])/2;
+    	double len = (double) Math.sqrt((tx*tx)+(ty*ty));
+    	return new double[] {tx/len,ty/len};
     }
 
     /**
@@ -342,7 +342,7 @@ public abstract class Shape implements Serializable {
     	}
     	
     	for (int i=0;i<other.getPointCount();i++) {
-    		float[] pt = other.getPoint(i);
+    		double[] pt = other.getPoint(i);
     		if (!contains(pt[0], pt[1])) {
     			return false;
     		}
@@ -357,13 +357,13 @@ public abstract class Shape implements Serializable {
      * @param end The end point
      * @return The normal of the line between the two points
      */
-    private float[] getNormal(float[] start, float[] end) {
-		float dx = start[0] - end[0];
-		float dy = start[1] - end[1];
-		float len = (float) Math.sqrt((dx*dx)+(dy*dy));
+    private double[] getNormal(double[] start, double[] end) {
+		double dx = start[0] - end[0];
+		double dy = start[1] - end[1];
+		double len = (double) Math.sqrt((dx*dx)+(dy*dy));
 		dx /= len;
 		dy /= len;
-		return new float[] {-dy,dx};
+		return new double[] {-dy,dx};
     }
     
     /**
@@ -374,7 +374,7 @@ public abstract class Shape implements Serializable {
      * @param y The y position of the point to check
      * @return True if the point is includes in the path of the polygon
      */
-    public boolean includes(float x, float y) {
+    public boolean includes(double x, double y) {
     	if (points.length == 0) {
     		return false;
     	}
@@ -406,7 +406,7 @@ public abstract class Shape implements Serializable {
      * @param y The y coordinate of the point
      * @return The index of the point or -1 if the point is not part of this shape path
      */
-    public int indexOf(float x, float y) {
+    public int indexOf(double x, double y) {
     	for (int i=0;i<points.length;i+=2) {
     		if ((points[i] == x) && (points[i+1] == y)) {
     			return i / 2;
@@ -423,17 +423,17 @@ public abstract class Shape implements Serializable {
      * @param y The y position of the point to check
      * @return True if the point is contained in the polygon
      */
-    public boolean contains(float x, float y) {
+    public boolean contains(double x, double y) {
     	checkPoints();
     	if (points.length == 0) {
     		return false;
     	}
     	
         boolean result = false;
-        float xnew,ynew;
-        float xold,yold;
-        float x1,y1;
-        float x2,y2;
+        double xnew,ynew;
+        double xold,yold;
+        double x1,y1;
+        double x2,y2;
         int npoints = points.length;
 
         xold=points[npoints - 2];
@@ -489,8 +489,8 @@ public abstract class Shape implements Serializable {
         checkPoints();
 
         boolean result = false;
-        float points[] = getPoints();           // (x3, y3)  and (x4, y4)
-        float thatPoints[] = shape.getPoints(); // (x1, y1)  and (x2, y2)
+        double points[] = getPoints();           // (x3, y3)  and (x4, y4)
+        double thatPoints[] = shape.getPoints(); // (x1, y1)  and (x2, y2)
         int length = points.length;
         int thatLength = thatPoints.length;
         double unknownA;
@@ -552,7 +552,7 @@ public abstract class Shape implements Serializable {
      * @param y The y coordinate to check
      * @return True if the cordinates supplied are a vertex of this polygon
      */
-    public boolean hasVertex(float x, float y) {    	
+    public boolean hasVertex(double x, double y) {    	
     	if (points.length == 0) {
     		return false;
     	}
@@ -573,7 +573,7 @@ public abstract class Shape implements Serializable {
      *
      */
     protected void findCenter() {
-        center = new float[]{0, 0};
+        center = new double[]{0, 0};
         int length = points.length;
         for(int i=0;i<length;i+=2) {
             center[0] += points[i];
@@ -591,11 +591,11 @@ public abstract class Shape implements Serializable {
         boundingCircleRadius = 0;
         
         for(int i=0;i<points.length;i+=2) {
-            float temp = ((points[i] - center[0]) * (points[i] - center[0])) + 
+            double temp = ((points[i] - center[0]) * (points[i] - center[0])) + 
                     ((points[i + 1] - center[1]) * (points[i + 1] - center[1]));
             boundingCircleRadius = (boundingCircleRadius > temp) ? boundingCircleRadius : temp;
         }
-        boundingCircleRadius = (float)Math.sqrt(boundingCircleRadius);
+        boundingCircleRadius = (double)Math.sqrt(boundingCircleRadius);
     }
     
     /**
@@ -607,12 +607,12 @@ public abstract class Shape implements Serializable {
     	}
     	if (points.length >= 6) {
     		boolean clockwise = true;
-    		float area = 0;
+    		double area = 0;
     		for (int i=0;i<(points.length/2)-1;i++) {
-    			float x1 = points[(i*2)];
-    			float y1 = points[(i*2)+1];
-    			float x2 = points[(i*2)+2];
-    			float y2 = points[(i*2)+3];
+    			double x1 = points[(i*2)];
+    			double y1 = points[(i*2)+1];
+    			double x2 = points[(i*2)+2];
+    			double y2 = points[(i*2)+3];
     			
     			area += (x1 * y2) - (y1 * x2);
     		}
@@ -705,13 +705,13 @@ public abstract class Shape implements Serializable {
     		int next = i+1 >= getPointCount() ? 0 : i+1;
     		int prev = i-1 < 0 ? getPointCount() - 1 : i-1;
     		
-    		float dx1 = getPoint(i)[0] - getPoint(prev)[0];
-    		float dy1 = getPoint(i)[1] - getPoint(prev)[1];
-    		float dx2 = getPoint(next)[0] - getPoint(i)[0];
-    		float dy2 = getPoint(next)[1] - getPoint(i)[1];
+    		double dx1 = getPoint(i)[0] - getPoint(prev)[0];
+    		double dy1 = getPoint(i)[1] - getPoint(prev)[1];
+    		double dx2 = getPoint(next)[0] - getPoint(i)[0];
+    		double dy2 = getPoint(next)[1] - getPoint(i)[1];
     		
-    		float len1 = (float) Math.sqrt((dx1*dx1) + (dy1*dy1));
-    		float len2 = (float) Math.sqrt((dx2*dx2) + (dy2*dy2));
+    		double len1 = (double) Math.sqrt((dx1*dx1) + (dy1*dy1));
+    		double len2 = (double) Math.sqrt((dx2*dx2) + (dy2*dy2));
     		dx1 /= len1;
     		dy1 /= len1;
     		dx2 /= len2;
@@ -751,7 +751,7 @@ public abstract class Shape implements Serializable {
      * 
      * @return The width of the shape
      */
-    public float getWidth() {
+    public double getWidth() {
     	return maxX - minX;
     }
 
@@ -761,7 +761,7 @@ public abstract class Shape implements Serializable {
      * 
      * @return The height of the shape
      */
-    public float getHeight() {
+    public double getHeight() {
     	return maxY - minY;
     }
 }

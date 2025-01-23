@@ -15,7 +15,7 @@ public class Line extends Shape {
 	/** The vector between the two points */
 	private Vector2f vec;
 	/** The length of the line squared */
-	private float lenSquared;
+	private double lenSquared;
 
 	/** Temporary storage - declared globally to reduce GC */
 	private Vector2f loc = new Vector2f(0, 0);
@@ -48,7 +48,7 @@ public class Line extends Shape {
 	 * @param outer
 	 *            True if this line blocks on it's outer edge
 	 */
-	public Line(float x, float y, boolean inner, boolean outer) {
+	public Line(double x, double y, boolean inner, boolean outer) {
 		this(0, 0, x, y);
 	}
 
@@ -60,7 +60,7 @@ public class Line extends Shape {
 	 * @param y
 	 *            The end point of the line
 	 */
-	public Line(float x, float y) {
+	public Line(double x, double y) {
 		this(x, y, true, true);
 	}
 
@@ -76,7 +76,7 @@ public class Line extends Shape {
 	 * @param y2
 	 *            The y coordinate of the end point
 	 */
-	public Line(float x1, float y1, float x2, float y2) {
+	public Line(double x1, double y1, double x2, double y2) {
 		this(new Vector2f(x1, y1), new Vector2f(x2, y2));
 	}
 
@@ -94,7 +94,7 @@ public class Line extends Shape {
 	 * @param dummy
 	 *            A dummy value
 	 */
-	public Line(float x1, float y1, float dx, float dy, boolean dummy) {
+	public Line(double x1, double y1, double dx, double dy, boolean dummy) {
 		this(new Vector2f(x1, y1), new Vector2f(x1 + dx, y1 + dy));
 	}
 
@@ -106,7 +106,7 @@ public class Line extends Shape {
 	 * @param end
 	 *            The end point
 	 */
-	public Line(float[] start, float[] end) {
+	public Line(double[] start, double[] end) {
 		super();
 
 		set(start, end);
@@ -134,7 +134,7 @@ public class Line extends Shape {
 	 * @param end
 	 *            The end point of the line
 	 */
-	public void set(float[] start, float[] end) {
+	public void set(double[] start, double[] end) {
 		set(start[0], start[1], end[0], end[1]);
 	}
 
@@ -161,7 +161,7 @@ public class Line extends Shape {
 	 * 
 	 * @return The the length of the line
 	 */
-	public float length() {
+	public double length() {
 		return vec.length();
 	}
 
@@ -170,7 +170,7 @@ public class Line extends Shape {
 	 * 
 	 * @return The length of the line squared
 	 */
-	public float lengthSquared() {
+	public double lengthSquared() {
 		return vec.lengthSquared();
 	}
 
@@ -212,12 +212,12 @@ public class Line extends Shape {
 	 * @param ey
 	 *            The y coordinate of the end
 	 */
-	public void set(float sx, float sy, float ex, float ey) {
+	public void set(double sx, double sy, double ex, double ey) {
 		super.pointsDirty = true;
 		start.set(sx, sy);
 		end.set(ex, ey);
-		float dx = (ex - sx);
-		float dy = (ey - sy);
+		double dx = (ex - sx);
+		double dy = (ey - sy);
 		vec.set(dx,dy);
 		
 		lenSquared = (dx * dx) + (dy * dy);
@@ -228,7 +228,7 @@ public class Line extends Shape {
 	 * 
 	 * @return The x direction of this line
 	 */
-	public float getDX() {
+	public double getDX() {
 		return end.getX() - start.getX();
 	}
 
@@ -237,21 +237,21 @@ public class Line extends Shape {
 	 * 
 	 * @return The y direction of this line
 	 */
-	public float getDY() {
+	public double getDY() {
 		return end.getY() - start.getY();
 	}
 
 	/**
 	 * @see Shape#getX()
 	 */
-	public float getX() {
+	public double getX() {
 		return getX1();
 	}
 
 	/**
 	 * @see Shape#getY()
 	 */
-	public float getY() {
+	public double getY() {
 		return getY1();
 	}
 
@@ -260,7 +260,7 @@ public class Line extends Shape {
 	 * 
 	 * @return The x coordinate of the start point
 	 */
-	public float getX1() {
+	public double getX1() {
 		return start.getX();
 	}
 
@@ -269,7 +269,7 @@ public class Line extends Shape {
 	 * 
 	 * @return The y coordinate of the start point
 	 */
-	public float getY1() {
+	public double getY1() {
 		return start.getY();
 	}
 
@@ -278,7 +278,7 @@ public class Line extends Shape {
 	 * 
 	 * @return The x coordinate of the end point
 	 */
-	public float getX2() {
+	public double getX2() {
 		return end.getX();
 	}
 
@@ -287,7 +287,7 @@ public class Line extends Shape {
 	 * 
 	 * @return The y coordinate of the end point
 	 */
-	public float getY2() {
+	public double getY2() {
 		return end.getY();
 	}
 
@@ -298,8 +298,8 @@ public class Line extends Shape {
 	 *            The point from which we want the distance
 	 * @return The distance from the line to the point
 	 */
-	public float distance(Vector2f point) {
-		return (float) Math.sqrt(distanceSquared(point));
+	public double distance(Vector2f point) {
+		return (double) Math.sqrt(distanceSquared(point));
 	}
 
 	/**
@@ -322,11 +322,11 @@ public class Line extends Shape {
 	 *            The point from which we want the distance
 	 * @return The distance squared from the line to the point
 	 */
-	public float distanceSquared(Vector2f point) {
+	public double distanceSquared(Vector2f point) {
 		getClosestPoint(point, closest);
 		closest.sub(point);
 
-		float result = closest.lengthSquared();
+		double result = closest.lengthSquared();
 
 		return result;
 	}
@@ -343,7 +343,7 @@ public class Line extends Shape {
 		loc.set(point);
 		loc.sub(start);
 
-		float projDistance = vec.dot(loc);
+		double projDistance = vec.dot(loc);
 
 		projDistance /= vec.lengthSquared();
 
@@ -409,20 +409,20 @@ public class Line extends Shape {
 	 * @return True if the lines intersect
 	 */
 	public boolean intersect(Line other, boolean limit, Vector2f result) {
-		float dx1 = end.getX() - start.getX();
-		float dx2 = other.end.getX() - other.start.getX();
-		float dy1 = end.getY() - start.getY();
-		float dy2 = other.end.getY() - other.start.getY();
-		float denom = (dy2 * dx1) - (dx2 * dy1);
+		double dx1 = end.getX() - start.getX();
+		double dx2 = other.end.getX() - other.start.getX();
+		double dy1 = end.getY() - start.getY();
+		double dy2 = other.end.getY() - other.start.getY();
+		double denom = (dy2 * dx1) - (dx2 * dy1);
 
 		if (denom == 0) {
 			return false;
 		}
 
-		float ua = (dx2 * (start.getY() - other.start.getY()))
+		double ua = (dx2 * (start.getY() - other.start.getY()))
 				- (dy2 * (start.getX() - other.start.getX()));
 		ua /= denom;
-		float ub = (dx1 * (start.getY() - other.start.getY()))
+		double ub = (dx1 * (start.getY() - other.start.getY()))
 				- (dy1 * (start.getX() - other.start.getX()));
 		ub /= denom;
 
@@ -430,10 +430,10 @@ public class Line extends Shape {
 			return false;
 		}
 
-		float u = ua;
+		double u = ua;
 
-		float ix = start.getX() + (u * (end.getX() - start.getX()));
-		float iy = start.getY() + (u * (end.getY() - start.getY()));
+		double ix = start.getX() + (u * (end.getX() - start.getX()));
+		double iy = start.getY() + (u * (end.getY() - start.getY()));
 
 		result.set(ix, iy);
 		return true;
@@ -443,7 +443,7 @@ public class Line extends Shape {
 	 * @see Shape#createPoints()
 	 */
 	protected void createPoints() {
-		points = new float[4];
+		points = new double[4];
 		points[0] = getX1();
 		points[1] = getY1();
 		points[2] = getX2();
@@ -454,7 +454,7 @@ public class Line extends Shape {
 	 * @see Shape#transform(Transform)
 	 */
 	public Shape transform(Transform transform) {
-		float[] temp = new float[4];
+		double[] temp = new double[4];
 		createPoints();
 		transform.transform(points, 0, temp, 0, 2);
 

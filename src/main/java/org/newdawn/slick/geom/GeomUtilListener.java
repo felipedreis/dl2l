@@ -12,7 +12,7 @@ public interface GeomUtilListener {
 	 * @param x The x coordinate of the point
 	 * @param y The y coordinate of the point
 	 */
-	public void pointExcluded(float x, float y);
+	public void pointExcluded(double x, double y);
 
 	/**
 	 * Notification that a point was intersected between two geometries 
@@ -20,7 +20,7 @@ public interface GeomUtilListener {
 	 * @param x The x coordinate of the point
 	 * @param y The y coordinate of the point
 	 */
-	public void pointIntersected(float x, float y);
+	public void pointIntersected(double x, double y);
 
 	/**
 	 * Notification that a point was used to build a new geometry
@@ -28,5 +28,5 @@ public interface GeomUtilListener {
 	 * @param x The x coordinate of the point
 	 * @param y The y coordinate of the point
 	 */
-	public void pointUsed(float x, float y);
+	public void pointUsed(double x, double y);
 }

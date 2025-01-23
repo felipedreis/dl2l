@@ -9,9 +9,9 @@ import java.util.ArrayList;
  */
 public class GeomUtil {
 	/** The tolerance for determining changes and steps */
-	public float EPSILON = 0.0001f;
+	public double EPSILON = 0.0001f;
 	/** The tolerance for determining direction change */
-	public float EDGE_SCALE = 1f;
+	public double EDGE_SCALE = 1f;
 	/** The maximum number of points returned by an operation - prevents full lockups */
 	public int MAX_POINTS = 10000;
 	/** The listener to notify of operations */
@@ -76,7 +76,7 @@ public class GeomUtil {
 	 * @param y The y coordiante of teh point to check
 	 * @return True if the point is on the path
 	 */
-	private boolean onPath(Shape path, float x, float y) {
+	private boolean onPath(Shape path, double x, double y) {
 		for (int i=0;i<path.getPointCount()+1;i++) {
 			int n = rationalPoint(path, i+1);
 			Line line = getLine(path, rationalPoint(path, i), n);
@@ -161,7 +161,7 @@ public class GeomUtil {
 			// remove any points that are contianed in the shape we're removing, these
 			// are implicitly used
 			for (int i=0;i<target.getPointCount();i++) {
-				float[] point = target.getPoint(i);
+				double[] point = target.getPoint(i);
 				if (other.contains(point[0], point[1])) {
 					used.add(new Vector2f(point[0], point[1]));
 					if (listener != null) {
@@ -171,14 +171,14 @@ public class GeomUtil {
 			}
 
 			for (int i=0;i<target.getPointCount();i++) {
-				float[] point = target.getPoint(i);
+				double[] point = target.getPoint(i);
 				Vector2f pt = new Vector2f(point[0], point[1]);
 				
 				if (!used.contains(pt)) {
 					Shape result = combineSingle(target, other, true, i);
 					shapes.add(result);
 					for (int j=0;j<result.getPointCount();j++) {
-						float[] kpoint = result.getPoint(j);
+						double[] kpoint = result.getPoint(j);
 						Vector2f kpt = new Vector2f(kpoint[0], kpoint[1]);
 						used.add(kpt);
 					}
@@ -221,8 +221,8 @@ public class GeomUtil {
 		int loop = 0;
 		
 		// while we've not reached the same point
-		float px = current.getPoint(point)[0];
-		float py = current.getPoint(point)[1];
+		double px = current.getPoint(point)[0];
+		double py = current.getPoint(point)[1];
 		
 		while (!poly.hasVertex(px, py) || (first) || (current != target)) {
 			first = false;
@@ -265,8 +265,8 @@ public class GeomUtil {
 					continue;
 				}
 				
-				float dx = hitLine.getDX() / hitLine.length();
-				float dy = hitLine.getDY() / hitLine.length();
+				double dx = hitLine.getDX() / hitLine.length();
+				double dy = hitLine.getDY() / hitLine.length();
 				dx *= EDGE_SCALE;
 				dy *= EDGE_SCALE;
 				
@@ -358,7 +358,7 @@ public class GeomUtil {
 	 * @return The result describing the intersection or null if none
 	 */
 	public HitResult intersect(Shape shape, Line line) {
-		float distance = Float.MAX_VALUE;
+		double distance = Float.MAX_VALUE;
 		HitResult hit = null;
 		
 		for (int i=0;i<shape.getPointCount();i++) {
@@ -367,7 +367,7 @@ public class GeomUtil {
 		
 			Vector2f pt = line.intersect(local, true);
 			if (pt != null) {
-				float newDis = pt.distance(line.getStart());
+				double newDis = pt.distance(line.getStart());
 				if ((newDis < distance) && (newDis > EPSILON)) {
 					hit = new HitResult();
 					hit.pt = pt;
@@ -409,8 +409,8 @@ public class GeomUtil {
 	 * @return The line between the two points
 	 */
 	public Line getLine(Shape shape, int s, int e) {
-		float[] start = shape.getPoint(s);
-		float[] end = shape.getPoint(e);
+		double[] start = shape.getPoint(s);
+		double[] end = shape.getPoint(e);
 		
 		Line line = new Line(start[0],start[1],end[0],end[1]);
 		return line;
@@ -425,8 +425,8 @@ public class GeomUtil {
 	 * @param e The index of the end point
 	 * @return The line between the two points
 	 */
-	public Line getLine(Shape shape, float sx, float sy, int e) {
-		float[] end = shape.getPoint(e);
+	public Line getLine(Shape shape, double sx, double sy, int e) {
+		double[] end = shape.getPoint(e);
 		
 		Line line = new Line(sx,sy,end[0],end[1]);
 		return line;

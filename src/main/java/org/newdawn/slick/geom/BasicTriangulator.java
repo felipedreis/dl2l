@@ -10,7 +10,7 @@ import java.util.ArrayList;
  */
 public class BasicTriangulator implements Triangulator {
 	/** The accepted error value */
-	private static final float EPSILON = 0.0000000001f;
+	private static final double EPSILON = 0.0000000001f;
 	/** The list of points to be triangulated */
 	private PointList poly = new PointList();
 	/** The list of points describing the triangles */
@@ -30,7 +30,7 @@ public class BasicTriangulator implements Triangulator {
 	 * @param x The x coordinate of the point
 	 * @param y the y coordinate of the point
 	 */
-	public void addPolyPoint(float x, float y) {
+	public void addPolyPoint(double x, double y) {
 		Point p = new Point(x,y);
 		if (!poly.contains(p)) {
 			poly.add(p);
@@ -52,8 +52,8 @@ public class BasicTriangulator implements Triangulator {
 	 * @param index The index of the point to retrieve
 	 * @return The oordinates of the point at the specified index
 	 */
-	public float[] getPolyPoint(int index) {
-		return new float[] {poly.get(index).x,poly.get(index).y};
+	public double[] getPolyPoint(int index) {
+		return new double[] {poly.get(index).x,poly.get(index).y};
 	}
 	
 	/**
@@ -88,7 +88,7 @@ public class BasicTriangulator implements Triangulator {
 	 * (0 - 2)
 	 * @return The x,y coordinate pair for the point
 	 */
-	public float[] getTrianglePoint(int tri, int i) {
+	public double[] getTrianglePoint(int tri, int i) {
 		if (!tried) {
 			throw new RuntimeException("Call triangulate() before accessing triangles");
 		}
@@ -104,10 +104,10 @@ public class BasicTriangulator implements Triangulator {
 	 * (Vector2f)
 	 * @return The area of the polygon defined
 	 */
-	private float area(PointList contour) {
+	private double area(PointList contour) {
 		int n = contour.size();
 
-		float A = 0.0f;
+		double A = 0.0f;
 
 		for (int p = n - 1, q = 0; q < n; p = q++) {
 			Point contourP = contour.get(p);
@@ -133,10 +133,10 @@ public class BasicTriangulator implements Triangulator {
 	 * @param Py Point P y-coordinate
 	 * @return True if the point specified is within the triangle
 	 */
-	private boolean insideTriangle(float Ax, float Ay, float Bx,
-			float By, float Cx, float Cy, float Px, float Py) {
-		float ax, ay, bx, by, cx, cy, apx, apy, bpx, bpy, cpx, cpy;
-		float cCROSSap, bCROSScp, aCROSSbp;
+	private boolean insideTriangle(double Ax, double Ay, double Bx,
+			double By, double Cx, double Cy, double Px, double Py) {
+		double ax, ay, bx, by, cx, cy, apx, apy, bpx, bpy, cpx, cpy;
+		double cCROSSap, bCROSScp, aCROSSbp;
 
 		ax = Cx - Bx;
 		ay = Cy - By;
@@ -173,7 +173,7 @@ public class BasicTriangulator implements Triangulator {
 	private boolean snip(PointList contour, int u, int v, int w, int n,
 			int[] V) {
 		int p;
-		float Ax, Ay, Bx, By, Cx, Cy, Px, Py;
+		double Ax, Ay, Bx, By, Cx, Cy, Px, Py;
 
 		Ax = contour.get(V[u]).getX();
 		Ay = contour.get(V[u]).getY();
@@ -292,11 +292,11 @@ public class BasicTriangulator implements Triangulator {
 	 */
 	private class Point {
 		/** The x coorindate of this point */
-		private float x;
+		private double x;
 		/** The y coorindate of this point */
-		private float y;
+		private double y;
 		/** The points in an array */
-		private float[] array;
+		private double[] array;
 		
 		/**
 		 * Create a new point
@@ -304,10 +304,10 @@ public class BasicTriangulator implements Triangulator {
 		 * @param x The x coordindate of the point
 		 * @param y The y coordindate of the point
 		 */
-		public Point(float x, float y) {
+		public Point(double x, double y) {
 			this.x = x;
 			this.y = y;
-			array = new float[] {x,y};
+			array = new double[] {x,y};
 		}
 
 		/**
@@ -315,7 +315,7 @@ public class BasicTriangulator implements Triangulator {
 		 * 
 		 * @return The x coordinate of the point
 		 */
-		public float getX() {
+		public double getX() {
 			return x;
 		}
 
@@ -324,16 +324,16 @@ public class BasicTriangulator implements Triangulator {
 		 * 
 		 * @return The y coordinate of the point
 		 */
-		public float getY() {
+		public double getY() {
 			return y;
 		}
 	
 		/**
-		 * Convert this point into a float array
+		 * Convert this point into a double array
 		 * 
-		 * @return The contents of this point as a float array
+		 * @return The contents of this point as a double array
 		 */
-		public float[] toArray() {
+		public double[] toArray() {
 			return array;
 		}
 		

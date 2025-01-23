@@ -9,12 +9,12 @@ package org.newdawn.slick.geom;
 public class NeatTriangulator implements Triangulator
 {
 	/** The error factor */
-    static final float EPSILON = 1E-006F;
+    static final double EPSILON = 1E-006F;
     
     /** The x coordinates */
-    private float pointsX[];
+    private double pointsX[];
     /** The y coordiantes */
-    private float pointsY[];
+    private double pointsY[];
     /** The number of points that have been added */
     private int numPoints;
     /** The edges defines by triangulation */
@@ -28,15 +28,15 @@ public class NeatTriangulator implements Triangulator
     /** The number of triangles found */
     private int numTriangles;
     /** The current offset */
-    private float offset = EPSILON;
+    private double offset = EPSILON;
     
     /**
      * Create a new triangulator
      */
     public NeatTriangulator()
     {
-        pointsX = new float[100];
-        pointsY = new float[100];
+        pointsX = new double[100];
+        pointsY = new double[100];
         numPoints = 0;
         edges = new Edge[100];
         numEdges = 0;
@@ -206,25 +206,25 @@ public class NeatTriangulator implements Triangulator
      * @param f5 Factor 6
      * @return The computation of rho
      */
-    private static float rho(float f, float f1, float f2, float f3, float f4, float f5)
+    private static double rho(double f, double f1, double f2, double f3, double f4, double f5)
     {
-        float f6 = f4 - f2;
-        float f7 = f5 - f3;
-        float f8 = f - f4;
-        float f9 = f1 - f5;
-        float f18 = f6 * f9 - f7 * f8;
+        double f6 = f4 - f2;
+        double f7 = f5 - f3;
+        double f8 = f - f4;
+        double f9 = f1 - f5;
+        double f18 = f6 * f9 - f7 * f8;
         if(f18 > 0.0F)
         {
             if(f18 < 1E-006F)
                 f18 = 1E-006F;
-            float f12 = f6 * f6;
-            float f13 = f7 * f7;
-            float f14 = f8 * f8;
-            float f15 = f9 * f9;
-            float f10 = f2 - f;
-            float f11 = f3 - f1;
-            float f16 = f10 * f10;
-            float f17 = f11 * f11;
+            double f12 = f6 * f6;
+            double f13 = f7 * f7;
+            double f14 = f8 * f8;
+            double f15 = f9 * f9;
+            double f10 = f2 - f;
+            double f11 = f3 - f1;
+            double f16 = f10 * f10;
+            double f17 = f11 * f11;
             return ((f12 + f13) * (f14 + f15) * (f16 + f17)) / (f18 * f18);
         } else
         {
@@ -246,23 +246,23 @@ public class NeatTriangulator implements Triangulator
 	 * @param f7 Point P y-coordinate
 	 * @return True if the point specified is within the triangle
 	 */
-    private static boolean insideTriangle(float f, float f1, float f2, float f3, float f4, float f5, float f6, float f7)
+    private static boolean insideTriangle(double f, double f1, double f2, double f3, double f4, double f5, double f6, double f7)
     {
-        float f8 = f4 - f2;
-        float f9 = f5 - f3;
-        float f10 = f - f4;
-        float f11 = f1 - f5;
-        float f12 = f2 - f;
-        float f13 = f3 - f1;
-        float f14 = f6 - f;
-        float f15 = f7 - f1;
-        float f16 = f6 - f2;
-        float f17 = f7 - f3;
-        float f18 = f6 - f4;
-        float f19 = f7 - f5;
-        float f22 = f8 * f17 - f9 * f16;
-        float f20 = f12 * f15 - f13 * f14;
-        float f21 = f10 * f19 - f11 * f18;
+        double f8 = f4 - f2;
+        double f9 = f5 - f3;
+        double f10 = f - f4;
+        double f11 = f1 - f5;
+        double f12 = f2 - f;
+        double f13 = f3 - f1;
+        double f14 = f6 - f;
+        double f15 = f7 - f1;
+        double f16 = f6 - f2;
+        double f17 = f7 - f3;
+        double f18 = f6 - f4;
+        double f19 = f7 - f5;
+        double f22 = f8 * f17 - f9 * f16;
+        double f20 = f12 * f15 - f13 * f14;
+        double f21 = f10 * f19 - f11 * f18;
         return f22 >= 0.0D && f21 >= 0.0D && f20 >= 0.0D;
     }
 
@@ -278,19 +278,19 @@ public class NeatTriangulator implements Triangulator
 	 */
     private boolean snip(int i, int j, int k, int l)
     {
-        float f = pointsX[V[i]];
-        float f1 = pointsY[V[i]];
-        float f2 = pointsX[V[j]];
-        float f3 = pointsY[V[j]];
-        float f4 = pointsX[V[k]];
-        float f5 = pointsY[V[k]];
+        double f = pointsX[V[i]];
+        double f1 = pointsY[V[i]];
+        double f2 = pointsX[V[j]];
+        double f3 = pointsY[V[j]];
+        double f4 = pointsX[V[k]];
+        double f5 = pointsY[V[k]];
         if(1E-006F > (f2 - f) * (f5 - f1) - (f3 - f1) * (f4 - f))
             return false;
         for(int i1 = 0; i1 < l; i1++)
             if(i1 != i && i1 != j && i1 != k)
             {
-                float f6 = pointsX[V[i1]];
-                float f7 = pointsY[V[i1]];
+                double f6 = pointsX[V[i1]];
+                double f7 = pointsY[V[i1]];
                 if(insideTriangle(f, f1, f2, f3, f4, f5, f6, f7))
                     return false;
             }
@@ -303,9 +303,9 @@ public class NeatTriangulator implements Triangulator
      * 
      * @return The area defined by the points
      */
-    private float area()
+    private double area()
     {
-        float f = 0.0F;
+        double f = 0.0F;
         int i = numPoints - 1;
         for(int j = 0; j < numPoints;)
         {
@@ -431,18 +431,18 @@ public class NeatTriangulator implements Triangulator
                 throw new InternalException("can't find quad");
             }
             
-            float f = pointsX[i1];
-            float f1 = pointsY[i1];
-            float f2 = pointsX[j1];
-            float f3 = pointsY[j1];
-            float f4 = pointsX[k1];
-            float f5 = pointsY[k1];
-            float f6 = pointsX[l1];
-            float f7 = pointsY[l1];
-            float f8 = rho(f, f1, f2, f3, f4, f5);
-            float f9 = rho(f, f1, f4, f5, f6, f7);
-            float f10 = rho(f2, f3, f4, f5, f6, f7);
-            float f11 = rho(f2, f3, f6, f7, f, f1);
+            double f = pointsX[i1];
+            double f1 = pointsY[i1];
+            double f2 = pointsX[j1];
+            double f3 = pointsY[j1];
+            double f4 = pointsX[k1];
+            double f5 = pointsY[k1];
+            double f6 = pointsX[l1];
+            double f7 = pointsY[l1];
+            double f8 = rho(f, f1, f2, f3, f4, f5);
+            double f9 = rho(f, f1, f4, f5, f6, f7);
+            double f10 = rho(f2, f3, f4, f5, f6, f7);
+            double f11 = rho(f2, f3, f6, f7, f, f1);
             if(0.0F > f8 || 0.0F > f9) {
                 throw new InternalException("original triangles backwards");
             }
@@ -495,7 +495,7 @@ public class NeatTriangulator implements Triangulator
     /** 
      * Add a point to the polygon
      */
-    public void addPolyPoint(float x, float y)
+    public void addPolyPoint(double x, double y)
     {
     	for (int i=0;i<numPoints;i++) {
     		if ((pointsX[i] == x) && (pointsY[i] == y)) {
@@ -507,10 +507,10 @@ public class NeatTriangulator implements Triangulator
     	
         if(numPoints == pointsX.length)
         {
-            float af[] = new float[numPoints * 2];
+            double af[] = new double[numPoints * 2];
             System.arraycopy(pointsX, 0, af, 0, numPoints);
             pointsX = af;
-            af = new float[numPoints * 2];
+            af = new double[numPoints * 2];
             System.arraycopy(pointsY, 0, af, 0, numPoints);
             pointsY = af;
         }
@@ -602,11 +602,11 @@ public class NeatTriangulator implements Triangulator
 	/**
 	 * @see Triangulator#getTrianglePoint(int, int)
 	 */
-	public float[] getTrianglePoint(int tri, int i) {
-		float xp = pointsX[triangles[tri].v[i]];
-		float yp = pointsY[triangles[tri].v[i]];
+	public double[] getTrianglePoint(int tri, int i) {
+		double xp = pointsX[triangles[tri].v[i]];
+		double yp = pointsY[triangles[tri].v[i]];
 		
-		return new float[] {xp,yp};
+		return new double[] {xp,yp};
 	}
 
 	/**

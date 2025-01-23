@@ -4,8 +4,6 @@ import br.cefetmg.lsi.l2l.cluster.settings.Simulation;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigBeanFactory;
 import com.typesafe.config.ConfigFactory;
-import org.junit.Assert;
-import org.junit.Test;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -18,7 +16,6 @@ import java.util.ResourceBundle;
  */
 public class ConfigTest {
 
-    @Test
     public void test() throws Exception{
     }
 }

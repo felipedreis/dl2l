@@ -1,7 +1,6 @@
 package br.cefetmg.lsi.l2l.creature;
 
 import akka.actor.*;
-import static akka.pattern.PatternsCS.*;
 
 import akka.japi.Creator;
 import br.cefetmg.lsi.l2l.cluster.Sync;

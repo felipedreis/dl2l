@@ -11,7 +11,7 @@ public class MorphShape extends Shape {
 	/** The shapes to morph between */
 	private ArrayList shapes = new ArrayList();
 	/** The offset between the shapes */
-	private float offset;
+	private double offset;
 	
 	/** The current shape */
 	private Shape current;
@@ -25,8 +25,8 @@ public class MorphShape extends Shape {
 	 */
 	public MorphShape(Shape base) {
 		shapes.add(base);
-		float[] copy = base.points;
-		this.points = new float[copy.length];
+		double[] copy = base.points;
+		this.points = new double[copy.length];
 		
 		current = base;
 		next = base;
@@ -80,10 +80,10 @@ public class MorphShape extends Shape {
 	 * 
 	 * @param time The time index to represent on this shape
 	 */
-	public void setMorphTime(float time) {
+	public void setMorphTime(double time) {
 		int p = (int) time;
 		int n = p + 1;
-		float offset = time - p;
+		double offset = time - p;
 		
 		p = rational(p);
 		n = rational(n);
@@ -96,7 +96,7 @@ public class MorphShape extends Shape {
 	 * 
 	 * @param delta The amount to change the morph time by
 	 */
-	public void updateMorphTime(float delta) {
+	public void updateMorphTime(double delta) {
 		offset += delta;
 		if (offset < 0) {
 			int index = shapes.indexOf(current);
@@ -156,7 +156,7 @@ public class MorphShape extends Shape {
 	 * @param b The index of the second shape
 	 * @param offset The offset between the two shapes to represent
 	 */
-	private void setFrame(int a, int b, float offset) {
+	private void setFrame(int a, int b, double offset) {
 		current = (Shape) shapes.get(a);
 		next = (Shape) shapes.get(b);
 		this.offset = offset;
@@ -172,8 +172,8 @@ public class MorphShape extends Shape {
 			return;
 		}
 		
-		float[] apoints = current.points;
-		float[] bpoints = next.points;
+		double[] apoints = current.points;
+		double[] bpoints = next.points;
 		
 		for (int i=0;i<points.length;i++) {
 			points[i] = apoints[i] * (1 - offset);

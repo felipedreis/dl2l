@@ -12,9 +12,9 @@ public strictfp class Vector2f implements Serializable {
 	private static final long serialVersionUID = 1339934L;
 	
 	/** The x component of this vector */
-	public float x;
+	public double x;
 	/** The y component of this vector */
-	public float y;
+	public double y;
 	
 	/**
 	 * Create an empty vector
@@ -27,7 +27,7 @@ public strictfp class Vector2f implements Serializable {
 	 * 
 	 * @param coords The coordinates array, index 0 = x, index 1 = y
 	 */
-	public Vector2f(float[] coords) {
+	public Vector2f(double[] coords) {
 		x = coords[0];
 		y = coords[1];
 	}
@@ -65,14 +65,14 @@ public strictfp class Vector2f implements Serializable {
 			oldTheta = 360 + oldTheta;
 		}
 
-		float len = length();
-		x = len * (float) FastTrig.cos(StrictMath.toRadians(theta));
-		y = len * (float) FastTrig.sin(StrictMath.toRadians(theta));
+		double len = length();
+		x = len * (double) FastTrig.cos(StrictMath.toRadians(theta));
+		y = len * (double) FastTrig.sin(StrictMath.toRadians(theta));
 		
-//		x = x / (float) FastTrig.cos(StrictMath.toRadians(oldTheta))
-//				* (float) FastTrig.cos(StrictMath.toRadians(theta));
-//		y = x / (float) FastTrig.sin(StrictMath.toRadians(oldTheta))
-//				* (float) FastTrig.sin(StrictMath.toRadians(theta));
+//		x = x / (double) FastTrig.cos(StrictMath.toRadians(oldTheta))
+//				* (double) FastTrig.cos(StrictMath.toRadians(theta));
+//		y = x / (double) FastTrig.sin(StrictMath.toRadians(oldTheta))
+//				* (double) FastTrig.sin(StrictMath.toRadians(theta));
 	} 
 	
 	/**
@@ -123,7 +123,7 @@ public strictfp class Vector2f implements Serializable {
 	 * 
 	 * @return The x component
 	 */
-	public float getX() {
+	public double getX() {
 		return x;
 	}
 
@@ -132,7 +132,7 @@ public strictfp class Vector2f implements Serializable {
 	 * 
 	 * @return The y component
 	 */
-	public float getY() {
+	public double getY() {
 		return y;
 	}
 	
@@ -151,7 +151,7 @@ public strictfp class Vector2f implements Serializable {
 	 * @param x The x component to assign
 	 * @param y The y component to assign
 	 */
-	public Vector2f(float x, float y) {
+	public Vector2f(double x, double y) {
 		this.x = x;
 		this.y = y;
 	}
@@ -171,7 +171,7 @@ public strictfp class Vector2f implements Serializable {
 	 * @param other The other vector dot agianst
 	 * @return The dot product of the two vectors
 	 */
-	public float dot(Vector2f other) {
+	public double dot(Vector2f other) {
 		return (x * other.getX()) + (y * other.getY());
 	}
 	
@@ -182,7 +182,7 @@ public strictfp class Vector2f implements Serializable {
 	 * @param y The y component to set
 	 * @return This vector - useful for chaining operations
 	 */
-	public Vector2f set(float x, float y) { 
+	public Vector2f set(double x, double y) { 
 		this.x = x; 
 		this.y = y; 
 		
@@ -204,7 +204,7 @@ public strictfp class Vector2f implements Serializable {
 	 * @param pt The pair of values to set into the vector
 	 * @return This vector - useful for chaining operations
 	 */
-	public Vector2f set(float[] pt) {
+	public Vector2f set(double[] pt) {
 		return set(pt[0], pt[1]);
 	}
 	
@@ -263,7 +263,7 @@ public strictfp class Vector2f implements Serializable {
 	 * @param a The value to scale this vector by
 	 * @return This vector - useful for chaining operations
 	 */
-	public Vector2f scale(float a)
+	public Vector2f scale(double a)
 	{
 		x *= a; 
 		y *= a;
@@ -277,7 +277,7 @@ public strictfp class Vector2f implements Serializable {
 	 * @return This vector - useful for chaning operations
 	 */
 	public Vector2f normalise() {
-		float l = length();
+		double l = length();
 		
 		if (l == 0) {
 			return this;
@@ -304,7 +304,7 @@ public strictfp class Vector2f implements Serializable {
 	 * 
 	 * @return The length of the vector squared
 	 */
-	public float lengthSquared() {
+	public double lengthSquared() {
 		return (x * x) + (y * y);
 	}
 	
@@ -313,9 +313,9 @@ public strictfp class Vector2f implements Serializable {
 	 * 
 	 * @return The length of this vector
 	 */
-	public float length() 
+	public double length() 
 	{
-		return (float) Math.sqrt(lengthSquared());
+		return (double) Math.sqrt(lengthSquared());
 	}
 	
 	/**
@@ -325,7 +325,7 @@ public strictfp class Vector2f implements Serializable {
 	 * @param result The projected vector
 	 */
 	public void projectOntoUnit(Vector2f b, Vector2f result) {
-		float dp = b.dot(this);
+		double dp = b.dot(this);
 		
 		result.x = dp * b.getX();
 		result.y = dp * b.getY();
@@ -354,8 +354,8 @@ public strictfp class Vector2f implements Serializable {
 	 * @param other The other point we're measuring to
 	 * @return The distance to the other point
 	 */
-	public float distance(Vector2f other) {
-		return (float) Math.sqrt(distanceSquared(other));
+	public double distance(Vector2f other) {
+		return (double) Math.sqrt(distanceSquared(other));
 	}
 	
 	/**
@@ -366,11 +366,11 @@ public strictfp class Vector2f implements Serializable {
 	 * @param other The other point we're measuring to 
 	 * @return The distance to the other point squared
 	 */
-	public float distanceSquared(Vector2f other) {
-		float dx = other.getX() - getX();
-		float dy = other.getY() - getY();
+	public double distanceSquared(Vector2f other) {
+		double dx = other.getX() - getX();
+		double dy = other.getY() - getY();
 		
-		return (float) (dx*dx)+(dy*dy);
+		return (double) (dx*dx)+(dy*dy);
 	}
 	
 	/**

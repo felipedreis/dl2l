@@ -7,12 +7,15 @@ import br.cefetmg.lsi.l2l.world.FruitType;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 //import org.newdawn.slick.Image;
 import org.newdawn.slick.geom.Circle;
+import org.newdawn.slick.geom.Rectangle;
 import org.newdawn.slick.geom.Shape;
+
+import java.util.Objects;
 
 /**
  * Created by felipe on 07/01/17.
  */
-public class ObjectGeometry extends Geometry {
+public class ObjectGeometry implements Geometry {
     public final SequentialId id;
 
     public final Shape shape;
@@ -38,25 +41,52 @@ public class ObjectGeometry extends Geometry {
         id = attr.id;
     }
 
+    @Override
+    public double getX() {
+        return point.x;
+    }
+
+    @Override
+    public double getY() {
+        return point.y;
+    }
+
+    @Override
+    public Point getPoint() {
+        return point;
+    }
+
+    @Override
+    public Rectangle getBoundingBox() {
+        if (type instanceof FruitType fruitType)
+            return new Rectangle(point.x - fruitType.radius, point.y - fruitType.radius, fruitType.radius*2, fruitType.radius*2);
+        else return null;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) return false;
+        ObjectGeometry that = (ObjectGeometry) o;
+        return Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(id);
+    }
+
+    @Override
+    public String toString() {
+        return "ObjectGeometry{" +
+                "id=" + id +
+                ", type=" + type +
+                ", point=" + point +
+                '}';
+    }
+
     /**
      * Loads the resources of geometry if necessary. It should be called just inside an OpenGL context, otherwise it may crash
      */
-    public void load() {
-        if(loaded) {
-            return;
-        }
-        super.load();
-
-        if (type instanceof FruitType) {
-            FruitType fruitType = (FruitType) type;
-            //texture = loader.loadImage(fruitType.name().toLowerCase());
-
-        } else {
-            //texture = null;
-        }
-
-        this.loaded = true;
-    }
     /*
     public Image getTexture() {
         return texture;

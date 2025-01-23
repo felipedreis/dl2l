@@ -24,7 +24,7 @@ public class RoundedRectangle extends Rectangle {
     private static final int DEFAULT_SEGMENT_COUNT = 25;
 
     /** radius of each corner */
-    private float cornerRadius;
+    private double cornerRadius;
     /** number of segments for each corner */
     private int segmentCount;
     /** The flags indicating which corners should be rounded */
@@ -39,7 +39,7 @@ public class RoundedRectangle extends Rectangle {
      * @param height The hieght of the rectangle.
      * @param cornerRadius The radius to use for the arc in each corner.
      */
-    public RoundedRectangle(float x, float y, float width, float height, float cornerRadius) {
+    public RoundedRectangle(double x, double y, double width, double height, double cornerRadius) {
         this(x, y, width, height, cornerRadius, DEFAULT_SEGMENT_COUNT);
     }
 
@@ -53,7 +53,7 @@ public class RoundedRectangle extends Rectangle {
      * @param cornerRadius The radius to use for the arc in each corner.
      * @param segmentCount The number of segments to use to draw each corner arc.
      */
-    public RoundedRectangle(float x, float y, float width, float height, float cornerRadius, int segmentCount) {
+    public RoundedRectangle(double x, double y, double width, double height, double cornerRadius, int segmentCount) {
     	this(x,y,width,height,cornerRadius,segmentCount,ALL);
     }
     	
@@ -68,8 +68,8 @@ public class RoundedRectangle extends Rectangle {
      * @param segmentCount The number of segments to use to draw each corner arc.
      * @param cornerFlags Indicates which corners should be rounded 
      */
-    public RoundedRectangle(float x, float y, float width, float height, 
-    						float cornerRadius, int segmentCount, int cornerFlags) {
+    public RoundedRectangle(double x, double y, double width, double height, 
+    						double cornerRadius, int segmentCount, int cornerFlags) {
         super(x,y,width,height);
         
     	if(cornerRadius < 0) {
@@ -90,7 +90,7 @@ public class RoundedRectangle extends Rectangle {
      * 
      * @return The radius for each corner.
      */
-    public float getCornerRadius() {
+    public double getCornerRadius() {
         return cornerRadius;
     }
 
@@ -99,7 +99,7 @@ public class RoundedRectangle extends Rectangle {
      * 
      * @param cornerRadius The radius for each corner to set.
      */
-    public void setCornerRadius(float cornerRadius) {
+    public void setCornerRadius(double cornerRadius) {
         if (cornerRadius >= 0) {
         	if (cornerRadius != this.cornerRadius) {
 	            this.cornerRadius = cornerRadius;
@@ -113,7 +113,7 @@ public class RoundedRectangle extends Rectangle {
      * 
      * @return The height of this rectangle.
      */
-    public float getHeight() {
+    public double getHeight() {
         return height;
     }
 
@@ -122,7 +122,7 @@ public class RoundedRectangle extends Rectangle {
      * 
      * @param height The height to set.
      */
-    public void setHeight(float height) {
+    public void setHeight(double height) {
     	if (this.height != height) {
 	        this.height = height;
 	        pointsDirty = true;
@@ -134,7 +134,7 @@ public class RoundedRectangle extends Rectangle {
      * 
      * @return The width of this rectangle.
      */
-    public float getWidth() {
+    public double getWidth() {
         return width;
     }
 
@@ -143,7 +143,7 @@ public class RoundedRectangle extends Rectangle {
      * 
      * @param width The width to set.
      */
-    public void setWidth(float width) {
+    public void setWidth(double width) {
     	if (width != this.width) {
 	        this.width = width;
 	        pointsDirty = true;
@@ -155,10 +155,10 @@ public class RoundedRectangle extends Rectangle {
         maxY = y + height;
         minX = x;
         minY = y;
-        float useWidth = width - 1;
-        float useHeight = height - 1;
+        double useWidth = width - 1;
+        double useHeight = height - 1;
         if(cornerRadius == 0) {
-            points = new float[8];
+            points = new double[8];
             
             points[0] = x;
             points[1] = y;
@@ -173,7 +173,7 @@ public class RoundedRectangle extends Rectangle {
             points[7] = y + useHeight;
         }
         else {
-            float doubleRadius = cornerRadius * 2;
+            double doubleRadius = cornerRadius * 2;
             if(doubleRadius > useWidth) {
                 doubleRadius = useWidth;
                 cornerRadius = doubleRadius / 2;
@@ -191,37 +191,37 @@ public class RoundedRectangle extends Rectangle {
             if ((cornerFlags & TOP_LEFT) != 0) {
             	tempPoints.addAll(createPoints(segmentCount, cornerRadius, x + cornerRadius, y + cornerRadius, 180, 270));
             } else {
-            	tempPoints.add(new Float(x));
-            	tempPoints.add(new Float(y));
+            	tempPoints.add(x);
+            	tempPoints.add(y);
             }
             
             //top right corner arc
             if ((cornerFlags & TOP_RIGHT) != 0) {
             	tempPoints.addAll(createPoints(segmentCount, cornerRadius, x + useWidth - cornerRadius, y + cornerRadius, 270, 360));
             } else {
-            	tempPoints.add(new Float(x+useWidth));
-            	tempPoints.add(new Float(y));
+            	tempPoints.add(x+useWidth);
+            	tempPoints.add(y);
             }
             
             //bottom right corner arc
             if ((cornerFlags & BOTTOM_RIGHT) != 0) {
             	tempPoints.addAll(createPoints(segmentCount, cornerRadius, x + useWidth - cornerRadius, y + useHeight - cornerRadius, 0, 90));
             } else {
-            	tempPoints.add(new Float(x+useWidth));
-            	tempPoints.add(new Float(y+useHeight));
+            	tempPoints.add(x+useWidth);
+            	tempPoints.add(y+useHeight);
             }
             
             //bottom left corner arc
             if ((cornerFlags & BOTTOM_LEFT) != 0) {
 	            tempPoints.addAll(createPoints(segmentCount, cornerRadius, x + cornerRadius, y + useHeight - cornerRadius, 90, 180));
 	        } else {
-	        	tempPoints.add(new Float(x));
-	        	tempPoints.add(new Float(y+useHeight));
+	        	tempPoints.add(x);
+	        	tempPoints.add(y+useHeight);
 	        }
             
-            points = new float[tempPoints.size()];
+            points = new double[tempPoints.size()];
             for(int i=0;i<tempPoints.size();i++) {
-                points[i] = ((Float)tempPoints.get(i)).floatValue();
+                points[i] = ((Float)tempPoints.get(i)).doubleValue();
             }
         }
         
@@ -240,21 +240,21 @@ public class RoundedRectangle extends Rectangle {
      * @param end The end angle of the arc.
      * @return The points created.
      */
-    private List createPoints(int numberOfSegments, float radius, float cx, float cy, float start, float end) {
+    private List createPoints(int numberOfSegments, double radius, double cx, double cy, double start, double end) {
         ArrayList tempPoints = new ArrayList();
 
         int step = 360 / numberOfSegments;
         
-        for (float a=start;a<=end+step;a+=step) {
-            float ang = a;
+        for (double a=start;a<=end+step;a+=step) {
+            double ang = a;
             if (ang > end) {
                 ang = end;
             }
-            float x = (float) (cx + (FastTrig.cos(Math.toRadians(ang)) * radius));
-            float y = (float) (cy + (FastTrig.sin(Math.toRadians(ang)) * radius));
+            double x = (double) (cx + (FastTrig.cos(Math.toRadians(ang)) * radius));
+            double y = (double) (cy + (FastTrig.sin(Math.toRadians(ang)) * radius));
             
-            tempPoints.add(new Float(x));
-            tempPoints.add(new Float(y));
+            tempPoints.add(x);
+            tempPoints.add(y);
         }
         
         return tempPoints;
@@ -271,7 +271,7 @@ public class RoundedRectangle extends Rectangle {
         
         Polygon resultPolygon = new Polygon();
         
-        float result[] = new float[points.length];
+        double result[] = new double[points.length];
         transform.transform(points, 0, result, 0, points.length / 2);
         resultPolygon.points = result;
         resultPolygon.findCenter();

@@ -56,17 +56,17 @@ public class Curve extends Shape {
 	 * @param t A value between 0 and 1 defining the location of the curve the point is at
 	 * @return The point on the curve
 	 */
-	public Vector2f pointAt(float t) {
-		float a = 1 - t;
-		float b = t;
+	public Vector2f pointAt(double t) {
+		double a = 1 - t;
+		double b = t;
 		
-		float f1 = a * a * a;
-		float f2 = 3 * a * a * b;
-		float f3 = 3 * a * b * b;
-		float f4 = b * b * b;
+		double f1 = a * a * a;
+		double f2 = 3 * a * a * b;
+		double f3 = 3 * a * b * b;
+		double f4 = b * b * b;
 		
-		float nx = (p1.x * f1) + (c1.x * f2) + (c2.x * f3) + (p2.x * f4);
-		float ny = (p1.y * f1) + (c1.y * f2) + (c2.y * f3) + (p2.y * f4);
+		double nx = (p1.x * f1) + (c1.x * f2) + (c2.x * f3) + (p2.x * f4);
+		double ny = (p1.y * f1) + (c1.y * f2) + (c2.y * f3) + (p2.y * f4);
 		
 		return new Vector2f(nx,ny);
 	}
@@ -75,10 +75,10 @@ public class Curve extends Shape {
 	 * @see Shape#createPoints()
 	 */
 	protected void createPoints() {
-		float step = 1.0f / segments;
-		points = new float[(segments+1) * 2];
+		double step = 1.0f / segments;
+		points = new double[(segments+1) * 2];
 		for (int i=0;i<segments+1;i++) {
-			float t = i * step;
+			double t = i * step;
 		
 			Vector2f p = pointAt(t);
 			points[i*2] = p.x;
@@ -90,8 +90,8 @@ public class Curve extends Shape {
 	 * @see Shape#transform(Transform)
 	 */
 	public Shape transform(Transform transform) {
-		float[] pts = new float[8];
-		float[] dest = new float[8];
+		double[] pts = new double[8];
+		double[] dest = new double[8];
 		pts[0] = p1.x; pts[1] = p1.y;
 		pts[2] = c1.x; pts[3] = c1.y;
 		pts[4] = c2.x; pts[5] = c2.y;

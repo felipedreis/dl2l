@@ -7,7 +7,7 @@ package org.newdawn.slick.geom;
  */
 public strictfp class Circle extends Ellipse {
 	/** The radius of the circle */
-	public float radius;
+	public double radius;
 	
 	/**
 	 * Create a new circle based on its radius
@@ -16,7 +16,7 @@ public strictfp class Circle extends Ellipse {
 	 * @param centerPointY The y location of the center of the circle
 	 * @param radius The radius of the circle
 	 */
-	public Circle(float centerPointX, float centerPointY, float radius) {
+	public Circle(double centerPointX, double centerPointY, double radius) {
         this(centerPointX, centerPointY, radius, DEFAULT_SEGMENT_COUNT);
 	}
 
@@ -28,7 +28,7 @@ public strictfp class Circle extends Ellipse {
 	 * @param radius The radius of the circle
 	 * @param segmentCount The number of segments to build the circle out of
 	 */
-	public Circle(float centerPointX, float centerPointY, float radius, int segmentCount) {
+	public Circle(double centerPointX, double centerPointY, double radius, int segmentCount) {
         super(centerPointX, centerPointY, radius, radius, segmentCount);
         this.x = centerPointX - radius;
         this.y = centerPointY - radius;
@@ -41,7 +41,7 @@ public strictfp class Circle extends Ellipse {
 	 * 
 	 * @return The x coordinate of the centre of the circle
 	 */
-	public float getCenterX() {
+	public double getCenterX() {
 		return getX() + radius;
 	}
 	
@@ -50,7 +50,7 @@ public strictfp class Circle extends Ellipse {
 	 * 
 	 * @return The y coordinate of the centre of the circle
 	 */
-	public float getCenterY() {
+	public double getCenterY() {
 		return getY() + radius;
 	}
 
@@ -60,8 +60,8 @@ public strictfp class Circle extends Ellipse {
 	 * @return 2-element array with the center of the circle.
 	 */
 	@Override
-	public float[] getCenter() {
-		return new float[] { getCenterX(), getCenterY() };
+	public double[] getCenter() {
+		return new double[] { getCenterX(), getCenterY() };
 	}
 	
 	/**
@@ -69,7 +69,7 @@ public strictfp class Circle extends Ellipse {
 	 * 
 	 * @param radius The radius of this circle
 	 */
-	public void setRadius(float radius) {
+	public void setRadius(double radius) {
 		if (radius != this.radius) {
 	        pointsDirty = true;
 			this.radius = radius;
@@ -82,7 +82,7 @@ public strictfp class Circle extends Ellipse {
 	 * 
 	 * @return The radius of the circle
 	 */
-	public float getRadius() {
+	public double getRadius() {
 		return radius;
 	}
 	
@@ -95,7 +95,7 @@ public strictfp class Circle extends Ellipse {
 	public boolean intersects(Shape shape) {
         if(shape instanceof Circle) {
             Circle other = (Circle)shape;
-    		float totalRad2 = getRadius() + other.getRadius();
+    		double totalRad2 = getRadius() + other.getRadius();
     		
     		if (Math.abs(other.getCenterX() - getCenterX()) > totalRad2) {
     			return false;
@@ -106,8 +106,8 @@ public strictfp class Circle extends Ellipse {
     		
     		totalRad2 *= totalRad2;
     		
-    		float dx = Math.abs(other.getCenterX() - getCenterX());
-    		float dy = Math.abs(other.getCenterY() - getCenterY());
+    		double dx = Math.abs(other.getCenterX() - getCenterX());
+    		double dy = Math.abs(other.getCenterY() - getCenterY());
     		
     		return totalRad2 >= ((dx*dx) + (dy*dy));
         }
@@ -126,9 +126,9 @@ public strictfp class Circle extends Ellipse {
 	 * @param y The y coorindate of the point to check
 	 * @return True if the point is contained by this circle
 	 */
-    public boolean contains(float x, float y) 
+    public boolean contains(double x, double y) 
     { 
-        float xDelta = x - getCenterX(), yDelta = y - getCenterY();
+        double xDelta = x - getCenterX(), yDelta = y - getCenterY();
         return xDelta * xDelta + yDelta * yDelta < getRadius() * getRadius();
     }
     
@@ -145,7 +145,7 @@ public strictfp class Circle extends Ellipse {
 	 * @see Ellipse#findCenter()
 	 */
     protected void findCenter() {
-        center = new float[2];
+        center = new double[2];
         center[0] = x + radius;
         center[1] = y + radius;
     }
@@ -171,10 +171,10 @@ public strictfp class Circle extends Ellipse {
 			return true;
 		}
 		
-		float x1 = box.getX();
-		float y1 = box.getY();
-		float x2 = box.getX() + box.getWidth();
-		float y2 = box.getY() + box.getHeight();
+		double x1 = box.getX();
+		double y1 = box.getY();
+		double x2 = box.getX() + box.getWidth();
+		double y2 = box.getY() + box.getHeight();
 		
 		Line[] lines = new Line[4];
 		lines[0] = new Line(x1,y1,x2,y1);
@@ -182,12 +182,12 @@ public strictfp class Circle extends Ellipse {
 		lines[2] = new Line(x2,y2,x1,y2);
 		lines[3] = new Line(x1,y2,x1,y1);
 		
-		float r2 = circle.getRadius() * circle.getRadius();
+		double r2 = circle.getRadius() * circle.getRadius();
 		
 		Vector2f pos = new Vector2f(circle.getCenterX(), circle.getCenterY());
 		
 		for (int i=0;i<4;i++) {
-			float dis = lines[i].distanceSquared(pos);
+			double dis = lines[i].distanceSquared(pos);
 			if (dis < r2) {
 				return true;
 			}
@@ -212,8 +212,8 @@ public strictfp class Circle extends Ellipse {
         Vector2f closest; 
         Vector2f segv = lineSegmentEnd.copy().sub(lineSegmentStart); 
         Vector2f ptv = circleCenter.copy().sub(lineSegmentStart); 
-        float segvLength = segv.length(); 
-        float projvl = ptv.dot(segv) / segvLength; 
+        double segvLength = segv.length(); 
+        double projvl = ptv.dot(segv) / segvLength; 
         if (projvl < 0) 
         { 
             closest = lineSegmentStart; 

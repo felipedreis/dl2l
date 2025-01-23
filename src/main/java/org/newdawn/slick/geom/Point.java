@@ -8,15 +8,23 @@ import org.newdawn.slick.geom.Transform;
  * 
  * @author Kova
  */
-public class Point extends Shape 
-{ 
+
+class Point{}
+class PointSlick extends Shape
+{
+    public PointSlick(double[] points){
+        this.x = points[0];
+        this.y = points[1];
+        checkPoints();
+    }
+
 	/**
 	 * Create a new point
 	 * 
 	 * @param x The x coordinate of the point
 	 * @param y The y coordinate of the point
 	 */
-    public Point(float x, float y) 
+    public PointSlick(double x, double y)
     { 
         this.x = x; 
         this.y = y; 
@@ -28,10 +36,10 @@ public class Point extends Shape
      */
     public Shape transform(Transform transform) 
     { 
-        float result[] = new float[points.length]; 
+        double result[] = new double[points.length]; 
         transform.transform(points, 0, result, 0, points.length / 2); 
         
-        return new Point(points[0], points[1]); 
+        return new PointSlick(points[0], points[1]);
     } 
 
     /**
@@ -39,7 +47,7 @@ public class Point extends Shape
      */
     protected void createPoints() 
     { 
-        points = new float[2]; 
+        points = new double[2]; 
         points[0] = getX(); 
         points[1] = getY(); 
         
@@ -57,7 +65,7 @@ public class Point extends Shape
      */
     protected void findCenter() 
     { 
-    	center = new float[2];
+    	center = new double[2];
         center[0] = points[0]; 
         center[1] = points[1]; 
     } 

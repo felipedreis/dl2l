@@ -21,16 +21,16 @@ public class Polygon extends Shape {
      * 
      * @param points An array of points in x, y order.
      */
-    public Polygon(float points[]) {
+    public Polygon(double points[]) {
         int length = points.length;
         
-        this.points = new float[length];
-        maxX = -Float.MIN_VALUE;
-        maxY = -Float.MIN_VALUE;
-        minX = Float.MAX_VALUE;
-        minY = Float.MAX_VALUE;
-        x = Float.MAX_VALUE;
-        y = Float.MAX_VALUE;
+        this.points = new double[length];
+        maxX = -Double.MIN_VALUE;
+        maxY = -Double.MIN_VALUE;
+        minX = Double.MAX_VALUE;
+        minY = Double.MAX_VALUE;
+        x = Double.MAX_VALUE;
+        y = Double.MAX_VALUE;
         
         for(int i=0;i<length;i++) {
             this.points[i] = points[i];
@@ -67,11 +67,11 @@ public class Polygon extends Shape {
      *
      */
     public Polygon(){
-        points = new float[0];
-        maxX = -Float.MIN_VALUE;
-        maxY = -Float.MIN_VALUE;
-        minX = Float.MAX_VALUE;
-        minY = Float.MAX_VALUE;
+        points = new double[0];
+        maxX = -Double.MIN_VALUE;
+        maxY = -Double.MIN_VALUE;
+        minX = Double.MAX_VALUE;
+        minY = Double.MAX_VALUE;
     }
     
     /**
@@ -89,21 +89,21 @@ public class Polygon extends Shape {
      * @param x The x coordinate of the point
      * @param y The y coordinate of the point
      */
-    public void addPoint(float x, float y) {
+    public void addPoint(double x, double y) {
     	if (hasVertex(x,y) && (!allowDups)) {
     		return;
     	}
     	
         ArrayList tempPoints = new ArrayList();
         for(int i=0;i<points.length;i++) {
-            tempPoints.add(new Float(points[i]));
+            tempPoints.add(new Double(points[i]));
         }
-        tempPoints.add(new Float(x));
-        tempPoints.add(new Float(y));
+        tempPoints.add(new Double(x));
+        tempPoints.add(new Double(y));
         int length = tempPoints.size();
-        points = new float[length];
+        points = new double[length];
         for(int i=0;i<length;i++) {
-            points[i] = ((Float)tempPoints.get(i)).floatValue();
+            points[i] = ((Double)tempPoints.get(i)).doubleValue();
         }
         if(x > maxX) {
             maxX = x;
@@ -136,7 +136,7 @@ public class Polygon extends Shape {
         
         Polygon resultPolygon = new Polygon();
         
-        float result[] = new float[points.length];
+        double result[] = new double[points.length];
         transform.transform(points, 0, result, 0, points.length / 2);
         resultPolygon.points = result;
         resultPolygon.findCenter();
@@ -146,18 +146,18 @@ public class Polygon extends Shape {
     }
     
     /**
-     * @see Shape#setX(float)
+     * @see Shape#setX(double)
      */
-    public void setX(float x) {
+    public void setX(double x) {
         super.setX(x);
         
         pointsDirty = false;
     }
     
     /**
-     * @see Shape#setY(float)
+     * @see Shape#setY(double)
      */
-    public void setY(float y) {
+    public void setY(double y) {
         super.setY(y);
         
         pointsDirty = false;
@@ -192,7 +192,7 @@ public class Polygon extends Shape {
 	 * @return A copy of this polygon
 	 */
 	public Polygon copy() {
-		float[] copyPoints = new float[points.length];
+		double[] copyPoints = new double[points.length];
 		System.arraycopy(points, 0, copyPoints, 0, copyPoints.length);
 		
 		return new Polygon(copyPoints);

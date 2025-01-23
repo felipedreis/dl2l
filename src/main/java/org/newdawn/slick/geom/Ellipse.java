@@ -21,11 +21,11 @@ public class Ellipse extends Shape {
     /**
      * horizontal radius
      */
-    private float radius1;
+    private double radius1;
     /**
      * vertical radius
      */
-    private float radius2;
+    private double radius2;
 
     /**
      * Creates a new Ellipse object.
@@ -35,7 +35,7 @@ public class Ellipse extends Shape {
      * @param radius1 horizontal radius
      * @param radius2 vertical radius
      */
-    public Ellipse(float centerPointX, float centerPointY, float radius1, float radius2) {
+    public Ellipse(double centerPointX, double centerPointY, double radius1, double radius2) {
         this(centerPointX, centerPointY, radius1, radius2, DEFAULT_SEGMENT_COUNT);
     }
 
@@ -48,7 +48,7 @@ public class Ellipse extends Shape {
      * @param radius2 vertical radius
      * @param segmentCount how fine to make the ellipse.
      */
-    public Ellipse(float centerPointX, float centerPointY, float radius1, float radius2, int segmentCount) {
+    public Ellipse(double centerPointX, double centerPointY, double radius1, double radius2, int segmentCount) {
         this.x = centerPointX - radius1;
         this.y = centerPointY - radius2;
         this.radius1 = radius1;
@@ -63,7 +63,7 @@ public class Ellipse extends Shape {
      * @param radius1 horizontal radius
      * @param radius2 vertical radius
      */
-    public void setRadii(float radius1, float radius2) {
+    public void setRadii(double radius1, double radius2) {
     	setRadius1(radius1);
     	setRadius2(radius2);
     }
@@ -73,7 +73,7 @@ public class Ellipse extends Shape {
      * 
      * @return The horizontal radius of the ellipse
      */
-    public float getRadius1() {
+    public double getRadius1() {
         return radius1;
     }
 
@@ -82,7 +82,7 @@ public class Ellipse extends Shape {
      * 
      * @param radius1 The horizontal radius to set
      */
-    public void setRadius1(float radius1) {
+    public void setRadius1(double radius1) {
     	if (radius1 != this.radius1) {
 	        this.radius1 = radius1;
 	        pointsDirty = true;
@@ -94,7 +94,7 @@ public class Ellipse extends Shape {
      * 
      * @return The vertical radius of the ellipse
      */
-    public float getRadius2() {
+    public double getRadius2() {
         return radius2;
     }
 
@@ -103,7 +103,7 @@ public class Ellipse extends Shape {
      * 
      * @param radius2 The vertical radius to set
      */
-    public void setRadius2(float radius2) {
+    public void setRadius2(double radius2) {
     	if (radius2 != this.radius2) {
 	        this.radius2 = radius2;
 	        pointsDirty = true;
@@ -122,21 +122,21 @@ public class Ellipse extends Shape {
         minX = Float.MAX_VALUE;
         minY = Float.MAX_VALUE;
 
-        float start = 0;
-        float end = 359;
+        double start = 0;
+        double end = 359;
         
-        float cx = x + radius1;
-        float cy = y + radius2;
+        double cx = x + radius1;
+        double cy = y + radius2;
         
         int step = 360 / segmentCount;
         
-        for (float a=start;a<=end+step;a+=step) {
-            float ang = a;
+        for (double a=start;a<=end+step;a+=step) {
+            double ang = a;
             if (ang > end) {
                 ang = end;
             }
-            float newX = (float) (cx + (FastTrig.cos(Math.toRadians(ang)) * radius1));
-            float newY = (float) (cy + (FastTrig.sin(Math.toRadians(ang)) * radius2));
+            double newX = (double) (cx + (FastTrig.cos(Math.toRadians(ang)) * radius1));
+            double newY = (double) (cy + (FastTrig.sin(Math.toRadians(ang)) * radius2));
 
             if(newX > maxX) {
                 maxX = newX;
@@ -154,9 +154,9 @@ public class Ellipse extends Shape {
             tempPoints.add(new Float(newX));
             tempPoints.add(new Float(newY));
         }
-        points = new float[tempPoints.size()];
+        points = new double[tempPoints.size()];
         for(int i=0;i<points.length;i++) {
-            points[i] = ((Float)tempPoints.get(i)).floatValue();
+            points[i] = ((Float)tempPoints.get(i)).doubleValue();
         }
     }
 
@@ -168,7 +168,7 @@ public class Ellipse extends Shape {
         
         Polygon resultPolygon = new Polygon();
         
-        float result[] = new float[points.length];
+        double result[] = new double[points.length];
         transform.transform(points, 0, result, 0, points.length / 2);
         resultPolygon.points = result;
         resultPolygon.checkPoints();
@@ -180,7 +180,7 @@ public class Ellipse extends Shape {
      * @see Shape#findCenter()
      */
     protected void findCenter() {
-        center = new float[2];
+        center = new double[2];
         center[0] = x + radius1;
         center[1] = y + radius2;
     }

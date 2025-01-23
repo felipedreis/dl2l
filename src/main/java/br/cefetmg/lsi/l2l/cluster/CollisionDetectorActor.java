@@ -7,13 +7,11 @@ import akka.cluster.Member;
 import akka.japi.pf.ReceiveBuilder;
 import akka.util.Timeout;
 import br.cefetmg.lsi.l2l.cluster.settings.Simulation;
+import br.cefetmg.lsi.l2l.common.QuadTree;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.Creature;
 import br.cefetmg.lsi.l2l.creature.CreatureActor;
-import br.cefetmg.lsi.l2l.physics.CreatureGeometry;
-import br.cefetmg.lsi.l2l.physics.CreaturePositioningAttr;
-import br.cefetmg.lsi.l2l.physics.ObjectGeometry;
-import br.cefetmg.lsi.l2l.physics.WorldObjectPositioningAttr;
+import br.cefetmg.lsi.l2l.physics.*;
 import br.cefetmg.lsi.l2l.stimuli.*;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
@@ -21,6 +19,7 @@ import scala.concurrent.duration.Duration;
 
 import java.lang.reflect.Type;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -35,6 +34,8 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
 
     private Map<SequentialId, CreatureGeometry> creatureAttrs;
     private Map<SequentialId, ObjectGeometry> objectAttrs;
+
+    private QuadTree<ObjectGeometry> collisionTree;
 
     private ActorRef gui;
 
@@ -83,14 +84,17 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
 
                     ObjectGeometry geometry = new ObjectGeometry(attr);
                     objectAttrs.put(attr.id, geometry);
+                    collisionTree.insert(geometry);
 
                     updateGui(geometry);
                 })
                 .match(SequentialId.class, id -> {
                     logger.info("A world object or creature (" + id + ") was removed");
 
-                    if(objectAttrs.containsKey(id))
-                        objectAttrs.remove(id);
+                    if(objectAttrs.containsKey(id)) {
+                        ObjectGeometry geometry = objectAttrs.remove(id);
+                        collisionTree.remove(geometry);
+                    }
                     else if(creatureAttrs.containsKey(id))
                         creatureAttrs.remove(id);
 
@@ -128,18 +132,21 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
 
     private void checkCreatureCollisions(CreatureGeometry geom, Creature creature){
         try {
-            if (TypedActor.get(context()).getActorRefFor(creature).isTerminated())
+            if (TypedActor.get(context()).getActorRefFor(creature).isTerminated()) {
                 System.exit(0);
-            /// TODO implement a collision tree
-            for (CreatureGeometry other : creatureAttrs.values()) {
-                if (geom.body.intersects(other.body)) {
-                } else if (geom.body.intersects(other.visionField)) {
-                } else if (geom.body.intersects(other.olfactoryField)) {
-                } else if (geom.visionField.intersects(geom.body)) {
-                }
             }
-
-            objectAttrs.forEach((id, obj) -> {
+            /// TODO implement a collision tree
+           // for (CreatureGeometry other : creatureAttrs.values()) {
+           //     if (geom.body.intersects(other.body)) {
+           //     } else if (geom.body.intersects(other.visionField)) {
+           //     } else if (geom.body.intersects(other.olfactoryField)) {
+           //     } else if (geom.visionField.intersects(geom.body)) {
+           //     }
+           // }
+            long time = System.currentTimeMillis();
+            List<ObjectGeometry> possibleObjectsCollision = collisionTree.query(geom.getBoundingBox());
+            //objectAttrs.forEach((id, obj) -> {
+            possibleObjectsCollision.forEach( obj -> {
                 Stimulus sentStimulus = null;
                 if (geom.body.intersects(obj.shape)) {
                     // TODO rename the TouchStimulus to Mechanical according to Campos (2015) version
@@ -147,19 +154,20 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
                     //creature.body().tell(sentStimulus, self());
                 }
                 if (geom.visionField.intersects(obj.shape)) {
-                    sentStimulus = new LuminousStimulus(id, null, obj.type, obj.point);
+                    sentStimulus = new LuminousStimulus(obj.id, null, obj.type, obj.point);
                     creature.eye().tell(sentStimulus, self());
                 }
                 if (geom.mouth.intersects(obj.shape)) {
-                    sentStimulus = new MechanicalStimulus(id, null, obj.type);
+                    sentStimulus = new MechanicalStimulus(obj.id, null, obj.type);
                     creature.mouth().tell(sentStimulus, self());
                 }
                 if (geom.olfactoryField.intersects(obj.shape)) {
                     // TODO create a nose
-                    sentStimulus = new SmellStimulus(id, null, obj.type, obj.point);
+                    sentStimulus = new SmellStimulus(obj.id, null, obj.type, obj.point);
                     creature.nose().tell(sentStimulus, self());
                 }
             });
+            logger.info("Elapsed time: %d".formatted(System.currentTimeMillis() - time));
         } catch (Exception ex) {
             logger.log(Level.WARNING, ex.getMessage(), ex);
         }

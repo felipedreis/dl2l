@@ -7,9 +7,9 @@ package org.newdawn.slick.geom;
  */
 public class Rectangle extends Shape {
 	/** The width of the box */
-	protected float width;
+	protected double width;
 	/** The height of the box */
-	protected float height;
+	protected double height;
 	
 	/**
 	 * Create a new bounding box
@@ -19,7 +19,7 @@ public class Rectangle extends Shape {
 	 * @param width The width of the box
 	 * @param height The hieght of the box
 	 */
-	public Rectangle(float x, float y, float width, float height) {
+	public Rectangle(double x, double y, double width, double height) {
 		this.x = x;
 		this.y = y;
 		this.width = width;
@@ -36,17 +36,17 @@ public class Rectangle extends Shape {
 	 * @param yp The y coordinate of the point to check
 	 * @return True if the point is within the rectangle
 	 */
-	public boolean contains(float xp, float yp) {
-		if (xp <= getX()) {
+	public boolean contains(double xp, double yp) {
+		if (xp < getX()) {
 			return false;
 		}
-		if (yp <= getY()) {
+		if (yp < getY()) {
 			return false;
 		}
-		if (xp >= maxX) {
+		if (xp > maxX) {
 			return false;
 		}
-		if (yp >= maxY) {
+		if (yp > maxY) {
 			return false;
 		}
 		
@@ -70,7 +70,7 @@ public class Rectangle extends Shape {
 	 * @param width The width to set in this rectangle
 	 * @param height The height to set in this rectangle
 	 */
-	public void setBounds(float x, float y, float width, float height) {
+	public void setBounds(double x, double y, double width, double height) {
 		setX(x);
 		setY(y);
 		setSize(width, height);
@@ -82,7 +82,7 @@ public class Rectangle extends Shape {
 	 * @param width The width to set in this rectangle
 	 * @param height The height to set in this rectangle
 	 */
-	public void setSize(float width, float height) {
+	public void setSize(double width, double height) {
 		setWidth(width);
 		setHeight(height);
 	}
@@ -93,7 +93,7 @@ public class Rectangle extends Shape {
 	 * 
 	 * @return The width of the box
 	 */
-	public float getWidth() {
+	public double getWidth() {
 		return width;
 	}
 	
@@ -102,7 +102,7 @@ public class Rectangle extends Shape {
 	 * 
 	 * @return The height of the box
 	 */
-	public float getHeight() {
+	public double getHeight() {
 		return height;
 	}
 	
@@ -113,7 +113,7 @@ public class Rectangle extends Shape {
 	 * @param h The amount to adjust horizontally
 	 * @param v The amount to ajust vertically
 	 */
-	public void grow(float h, float v) {
+	public void grow(double h, double v) {
 		setX(getX() - h);
 		setY(getY() - v);
 		setWidth(getWidth() + (h*2));
@@ -126,7 +126,7 @@ public class Rectangle extends Shape {
 	 * @param h The scale to apply to the horizontal 
 	 * @param v The scale to appy to the vertical
 	 */
-	public void scaleGrow(float h, float v) {
+	public void scaleGrow(double h, double v) {
 		grow(getWidth() * (h-1), getHeight() * (v-1));
 	}
 	
@@ -135,7 +135,7 @@ public class Rectangle extends Shape {
 	 * 
 	 * @param width The new width of this box
 	 */
-	public void setWidth(float width) {
+	public void setWidth(double width) {
 		if (width != this.width) {
 	        pointsDirty = true;
 			this.width = width;
@@ -148,7 +148,7 @@ public class Rectangle extends Shape {
 	 * 
 	 * @param height The height of this box
 	 */
-	public void setHeight(float height) {
+	public void setHeight(double height) {
 		if (height != this.height) {
 	        pointsDirty = true;
 			this.height = height;
@@ -182,9 +182,9 @@ public class Rectangle extends Shape {
 	}
 
 	protected void createPoints() {
-        float useWidth = width ;
-        float useHeight = height;
-        points = new float[8];
+        double useWidth = width ;
+        double useHeight = height;
+        points = new double[8];
         
         points[0] = x;
         points[1] = y;
@@ -221,7 +221,7 @@ public class Rectangle extends Shape {
 	 * @see Object#toString()
 	 */
 	public String toString() {
-		return "[Rectangle "+width+"x"+height+"]";
+		return "[" + x + "," + y + "," + width + ", " + height+"]";
 	}
 	
 	/**
@@ -240,8 +240,8 @@ public class Rectangle extends Shape {
 	 * @param heightr The height of the rectangle
 	 * @return True if the point is within the rectangle
 	 */
-	public static boolean contains(float xp, float yp, float xr, float yr,
-			float widthr, float heightr) {
+	public static boolean contains(double xp, double yp, double xr, double yr,
+			double widthr, double heightr) {
 		return (xp >= xr) && (yp >= yr) && (xp <= xr + widthr)
 				&& (yp <= yr + heightr);
 	}
@@ -258,7 +258,7 @@ public class Rectangle extends Shape {
         
         Polygon resultPolygon = new Polygon();
         
-        float result[] = new float[points.length];
+        double result[] = new double[points.length];
         transform.transform(points, 0, result, 0, points.length / 2);
         resultPolygon.points = result;
         resultPolygon.findCenter();

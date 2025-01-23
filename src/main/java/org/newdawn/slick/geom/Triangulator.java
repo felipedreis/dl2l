@@ -24,7 +24,7 @@ public interface Triangulator extends Serializable {
 	 * (0 - 2)
 	 * @return The x,y coordinate pair for the point
 	 */
-	public float[] getTrianglePoint(int tri, int i);
+	public double[] getTrianglePoint(int tri, int i);
 	
 	/**
 	 * Add a point that forms part of the outer polygon
@@ -32,7 +32,7 @@ public interface Triangulator extends Serializable {
 	 * @param x The x coordinate of the point
 	 * @param y The y coordiante of the point
 	 */
-	public void addPolyPoint(float x, float y);
+	public void addPolyPoint(double x, double y);
 	
 	/**
 	 * Start a hole in the polygon
