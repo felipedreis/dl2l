@@ -13,6 +13,7 @@ import br.cefetmg.lsi.l2l.creature.Creature;
 import br.cefetmg.lsi.l2l.creature.CreatureActor;
 import br.cefetmg.lsi.l2l.physics.*;
 import br.cefetmg.lsi.l2l.stimuli.*;
+import org.newdawn.slick.geom.Rectangle;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
@@ -45,6 +46,7 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
         this.gui = gui;
         creatureAttrs = new HashMap<>();
         objectAttrs = new HashMap<>();
+        collisionTree = new QuadTree<>(new Rectangle(0, 0, settings.getWorldBoundaries().x, settings.getWorldBoundaries().y));
         this.settings = settings;
     }
 
@@ -144,8 +146,9 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
            //     }
            // }
             long time = System.currentTimeMillis();
+
             List<ObjectGeometry> possibleObjectsCollision = collisionTree.query(geom.getBoundingBox());
-            //objectAttrs.forEach((id, obj) -> {
+
             possibleObjectsCollision.forEach( obj -> {
                 Stimulus sentStimulus = null;
                 if (geom.body.intersects(obj.shape)) {

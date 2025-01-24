@@ -3,7 +3,6 @@ package br.cefetmg.lsi.l2l.cluster;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.TypedActor;
-import akka.actor.UntypedActor;
 import akka.cluster.Cluster;
 
 import static akka.cluster.ClusterEvent.*;
@@ -13,8 +12,6 @@ import akka.japi.pf.ReceiveBuilder;
 import akka.pattern.Patterns;
 import akka.util.Timeout;
 import br.cefetmg.lsi.l2l.analysis.DataAnalyser;
-import br.cefetmg.lsi.l2l.analysis.Routine;
-import br.cefetmg.lsi.l2l.analysis.RoutineCreator;
 import br.cefetmg.lsi.l2l.cluster.settings.Simulation;
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.common.SequentialId;
@@ -25,17 +22,13 @@ import br.cefetmg.lsi.l2l.world.Fruit;
 import br.cefetmg.lsi.l2l.world.FruitType;
 import br.cefetmg.lsi.l2l.world.PositionFactory;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
-import scala.PartialFunction;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
-import scala.runtime.BoxedUnit;
 
 import javax.persistence.EntityManager;
 import javax.persistence.Persistence;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
@@ -104,6 +97,7 @@ public class Holder extends AbstractActor implements Registrable {
                 .match(MemberUp.class, memberUp -> handleNewMember(memberUp.member()))
                 .match(AckReady.class, this::handleReady)
                 .match(CreateWorldObject.class, this::handleCreateWorldObject)
+                .match(CreateWorldObjects.class, this::handleCreateWorldObjects)
                 .match(CreateCreature.class, this::handleCreateCreature)
                 .match(ExternalStimulus.class, this::handleExternalStimulus)
                 .match(SequentialId.class, this::handleRemoveObject)
@@ -129,25 +123,34 @@ public class Holder extends AbstractActor implements Registrable {
         }
     }
 
-    private void handleCreateWorldObject(CreateWorldObject order) {
-        logger.info("Got new creation order for " + order.type);
-        if(order.type instanceof FruitType) {
-            ActorRef worldObject = context().actorOf(
-                    Fruit.props(order.id, order.type, factory.nextPosition(), collisionDetector),
-                    "object-" + order.id.toString());
+    private void handleCreateWorldObjects(CreateWorldObjects order) {
+        logger.info("Got new creation order for " + order.type());
+        order.id().forEach(id -> createWorldObject(order.type(), id));
+    }
 
-            worldObjects.put(order.id, worldObject);
-            worldObjecttypes.put(order.id, order.type);
-            logger.info("Created a new world object with id " + order.id);
+    private void handleCreateWorldObject(CreateWorldObject order) {
+        logger.info("Got new creation order for " + order.type());
+        createWorldObject(order.type(), order.id());
+    }
+
+    private void createWorldObject(WorldObjectType type, SequentialId id) {
+        if(type instanceof FruitType) {
+            ActorRef worldObject = context().actorOf(
+                    Fruit.props(id, type, factory.nextPosition(), collisionDetector),
+                    "object-" + id.toString());
+
+            worldObjects.put(id, worldObject);
+            worldObjecttypes.put(id, type);
+            logger.info("Created a new world object with id " + id);
         }
     }
 
     private void handleCreateCreature(CreateCreature order) {
         Creature creature = TypedActor.get(context()).typedActorOf(
-                CreatureActor.props(order.id, collisionDetector, factory.nextPosition(), worldBoundaries),
-                "creature-" + order.id);
+                CreatureActor.props(order.id(), collisionDetector, factory.nextPosition(), worldBoundaries),
+                "creature-" + order.id());
         creature.init();
-        creatures.put(order.id, creature);
+        creatures.put(order.id(), creature);
         logger.info("Created a new creature");
     }
 

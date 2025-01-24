@@ -4,15 +4,11 @@ import akka.actor.ActorRef;
 import akka.actor.PoisonPill;
 import akka.actor.UntypedActor;
 import akka.cluster.Cluster;
-import akka.cluster.Member;
-import akka.util.Timeout;
 import br.cefetmg.lsi.l2l.cluster.settings.CreatureSetting;
 import br.cefetmg.lsi.l2l.cluster.settings.Simulation;
 import br.cefetmg.lsi.l2l.cluster.settings.WorldObjectSetting;
 import br.cefetmg.lsi.l2l.common.SequentialId;
-import scala.concurrent.Await;
-import scala.concurrent.Future;
-import scala.concurrent.duration.Duration;
+import org.apache.commons.collections4.ListUtils;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -30,6 +26,8 @@ public class SimulationManager extends UntypedActor {
     private Cluster cluster = Cluster.get(context().system());
 
     private Logger logger = Logger.getLogger(SimulationManager.class.getName());
+
+    private static final int TIMEOUT = 60;
 
     private Simulation settings;
 
@@ -66,20 +64,20 @@ public class SimulationManager extends UntypedActor {
             handleRegister((Register) message);
         } else if (message instanceof HolderLookup) {
             HolderLookup lookup = (HolderLookup) message;
-            sender().tell(holders.get((int)lookup.id), self());
+            sender().tell(holders.get((int) lookup.id()), self());
 
-            logger.info("Got a lookup for " + lookup.id);
+            logger.info("Got a lookup for " + lookup.id());
 
         } else if (message instanceof Repose) {
             Repose repose = (Repose) message;
             SequentialId id = Sync.ask(idProvider, new AskForId(), 5);
             holders.get((int)(id.key % maxHolders))
-                    .tell(new CreateWorldObject(repose.objectType, id), self());
+                    .tell(new CreateWorldObject(repose.objectType(), id), self());
 
         } else if (message instanceof AllCreaturesDead) {
             AllCreaturesDead holder = (AllCreaturesDead) message;
-            logger.info("All creatures dead in holder " + holder.id);
-            holdersDone.add(holder.id);
+            logger.info("All creatures dead in holder " + holder.id());
+            holdersDone.add(holder.id());
 
             if (holdersDone.size() == maxHolders)
                 stopSimulation();
@@ -87,7 +85,7 @@ public class SimulationManager extends UntypedActor {
     }
 
     private void handleRegister(Register register) {
-        switch (register.role) {
+        switch (register.role()) {
             case "holder" :
                 ActorRef holder = sender();
 
@@ -132,8 +130,8 @@ public class SimulationManager extends UntypedActor {
         boolean everybodyReady = true;
 
         for(ActorRef holder : holders) {
-            Object x = Sync.ask(holder, new AckReady(), 5);
-            everybodyReady = everybodyReady && ((Ready)x).ready;
+            Object x = Sync.ask(holder, new AckReady(), TIMEOUT);
+            everybodyReady = everybodyReady && ((Ready) x).ready();
         }
 
         if (!everybodyReady)
@@ -142,10 +140,13 @@ public class SimulationManager extends UntypedActor {
         logger.info("Starting all world objects");
 
         for (WorldObjectSetting objectSetting : settings.getWorldObjectSettings()) {
-            List<SequentialId> objectIds = Sync.ask(idProvider, new AskForIds(objectSetting.getQuantity()), 5);
-            for (SequentialId id : objectIds) {
-                ActorRef holder = holders.get((int) (id.key % maxHolders));
-                holder.tell(new CreateWorldObject(objectSetting.getType(), id), self());
+            List<SequentialId> objectIds = Sync.ask(idProvider, new AskForIds(objectSetting.getQuantity()), TIMEOUT);
+
+            List<List<SequentialId>> idsPerHolder = ListUtils.partition(objectIds, holders.size());
+
+            for (int i = 0; i < maxHolders; ++i) {
+                ActorRef holder = holders.get(i);
+                holder.tell(new CreateWorldObjects(objectSetting.getType(), idsPerHolder.get(i).stream().toList()), self());
             }
         }
 
@@ -153,7 +154,7 @@ public class SimulationManager extends UntypedActor {
         logger.info("Starting all creatures");
 
         for (CreatureSetting creatureSetting : settings.getCreatureSettings()) {
-            List<SequentialId> creatureIds = Sync.ask(idProvider, new AskForIds(creatureSetting.getQuantity()), 5);
+            List<SequentialId> creatureIds = Sync.ask(idProvider, new AskForIds(creatureSetting.getQuantity()), TIMEOUT);
             for (SequentialId id : creatureIds) {
                 ActorRef holder = holders.get((int) (id.key % maxHolders));
                 holder.tell(new CreateCreature(id), self());

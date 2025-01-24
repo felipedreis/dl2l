@@ -4,77 +4,37 @@ import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
 import java.io.Serializable;
+import java.util.List;
 
-final class CreateWorldObject implements Serializable {
-
-    public final WorldObjectType type;
-    public final SequentialId id;
-
-
-    CreateWorldObject(WorldObjectType type, SequentialId id) {
-        this.type = type;
-        this.id = id;
-    }
+record CreateWorldObjects(WorldObjectType type, List<SequentialId> id) implements Serializable {
 }
 
-final class CreateCreature implements Serializable {
-    public final SequentialId id;
-
-    CreateCreature(SequentialId id) {
-        this.id = id;
-    }
+record CreateWorldObject(WorldObjectType type, SequentialId id) implements Serializable {
 }
 
-final class HolderLookup implements Serializable {
-    public final long id;
-
-    HolderLookup(long id) {
-        this.id = id;
-    }
+record CreateCreature(SequentialId id) implements Serializable {
 }
 
-final class Register implements Serializable {
-    public final String role;
+record HolderLookup(long id) implements Serializable {
+}
 
-    Register(String role) {
-        this.role = role;
-    }
+record Register(String role) implements Serializable {
 }
 
 final class AskForId implements Serializable {}
 
-final class AskForIds implements Serializable {
-    public final int quantity;
-
-    AskForIds(int quantity) {
-        this.quantity = quantity;
-    }
+record AskForIds(int quantity) implements Serializable {
 }
 
 final class AckReady implements Serializable {}
 
-final class Ready implements  Serializable {
-    public final boolean ready;
-
-    Ready(boolean ready) {
-        this.ready = ready;
-    }
+record Ready(boolean ready) implements Serializable {
 }
 
-final class AllCreaturesDead implements Serializable {
-    public final long id;
-
-    AllCreaturesDead(long id) {
-        this.id = id;
-    }
+record AllCreaturesDead(long id) implements Serializable {
 }
 
 final class Finish implements Serializable{}
 
-final class Repose implements Serializable {
-    public final WorldObjectType objectType;
-
-    public Repose(WorldObjectType objectType) {
-        this.objectType = objectType;
-    }
+record Repose(WorldObjectType objectType) implements Serializable {
 }

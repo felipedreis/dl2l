@@ -2,8 +2,6 @@ package br.cefetmg.lsi.l2l.cluster;
 
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
-import akka.actor.TypedActor;
-import akka.actor.UntypedActor;
 import akka.cluster.Cluster;
 import akka.cluster.ClusterEvent.*;
 import akka.cluster.Member;
@@ -14,12 +12,8 @@ import scala.concurrent.Future;
 import scala.concurrent.duration.FiniteDuration;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
 /**
  * Created by felipe on 27/03/17.
@@ -53,7 +47,7 @@ public class SequentialIdProvider extends AbstractActor implements Registrable {
                     sender().tell(id ,self());
                 })
                 .match(AskForIds.class, (request) -> {
-                    List<SequentialId> ids = provideMany(request.quantity);
+                    List<SequentialId> ids = provideMany(request.quantity());
                     sender().tell(ids, self());
                 })
                 .match(Finish.class, finish -> {
@@ -77,7 +71,7 @@ public class SequentialIdProvider extends AbstractActor implements Registrable {
 
     private SequentialId provide() {
         if(lastKey < 0) {
-            throw new IllegalStateException("Maximum of id\'s provided");
+            throw new IllegalStateException("Maximum of ids provided");
         }
 
         SequentialId id = new SequentialId(lastKey);
