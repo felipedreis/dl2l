@@ -5,10 +5,12 @@
 
 package br.cefetmg.lsi.l2l.creature.bd;
 
+import java.io.Serializable;
+
 /**
  *
  * @author Felipe Duarte dos Reis
  */
-public interface PersistenceState {
+public interface PersistenceState extends Serializable {
 	
 }

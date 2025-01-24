@@ -4,7 +4,6 @@ import br.cefetmg.lsi.l2l.physics.Geometry;
 import org.newdawn.slick.geom.Rectangle;
 
 import java.util.*;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class QuadTree <T extends Geometry>{
@@ -48,7 +47,7 @@ public class QuadTree <T extends Geometry>{
     }
 
     public boolean insert(T obj) {
-        logger.info("Inserting %s in node %s at level %s".formatted(obj, position, level));
+        //logger.info("Inserting %s in node %s at level %s".formatted(obj, position, level));
         if (nodes[0] != null) { // If this node has subnodes
             int index = getIndex(obj);
             if (index != -1 && nodes[index].insert(obj)) {
@@ -61,7 +60,7 @@ public class QuadTree <T extends Geometry>{
         size++;
 
         if (objects.size() > MAX_OBJECTS && level < MAX_LEVELS) {
-            logger.info("splitting node");
+            //logger.info("splitting node");
             if (nodes[0] == null) {
                 subdivide();
             }
