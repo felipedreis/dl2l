@@ -1,0 +1,27 @@
+version: "3.1"
+services:
+  dl2l-manager:
+    image: dl2l
+    container_name: manager
+    environment:
+      ROLE: "manager"
+      SIMULATION: "${SIMULATION}"
+  dl2l-detector:
+    image: dl2l
+    container_name: detector
+    environment:
+      ROLE: "collisionDetector"
+  dl2l-idProvider:
+    image: dl2l
+    container_name: id-provider
+    environment:
+      ROLE: "idProvider"
+  dl2l-holder:
+    image: dl2l
+    container_name: holder
+    environment:
+      ROLE: "holder"
+  dl2l-db:
+    image: postgres
+    container_name: db
+    environment:

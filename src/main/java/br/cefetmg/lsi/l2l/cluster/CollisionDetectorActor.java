@@ -37,12 +37,9 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
 
     private QuadTree<ObjectGeometry> collisionTree;
 
-    private ActorRef gui;
-
     private Simulation settings;
 
-    public CollisionDetectorActor(ActorRef gui, Simulation settings) {
-        this.gui = gui;
+    public CollisionDetectorActor(Simulation settings) {
         creatureAttrs = new HashMap<>();
         objectAttrs = new HashMap<>();
         this.settings = settings;
@@ -76,8 +73,6 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
                     CreatureGeometry geometry = new CreatureGeometry(attr);
                     creatureAttrs.put(attr.creatureId, geometry);
                     checkCreatureCollisions(geometry, creature);
-
-                    updateGui(geometry);
                 })
                 .match(WorldObjectPositioningAttr.class, attr -> {
                     logger.info("Received a world object positioning attribute update");
@@ -85,8 +80,6 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
                     ObjectGeometry geometry = new ObjectGeometry(attr);
                     objectAttrs.put(attr.id, geometry);
                     collisionTree.insert(geometry);
-
-                    updateGui(geometry);
                 })
                 .match(SequentialId.class, id -> {
                     logger.info("A world object or creature (" + id + ") was removed");
@@ -95,10 +88,9 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
                         ObjectGeometry geometry = objectAttrs.remove(id);
                         collisionTree.remove(geometry);
                     }
-                    else if(creatureAttrs.containsKey(id))
+                    else {
                         creatureAttrs.remove(id);
-
-                    updateGui(id);
+                    }
                 })
                 .match(MemberUp.class, memberUp -> {
                     handleNewMember(memberUp.member());
@@ -106,19 +98,12 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
                 .match(Finish.class, finish -> {
                     logger.info("Got stop order from  master");
                     context().stop(self());
-                    if (gui != null)
-                        context().stop(gui);
 
                     context().system().terminate();
-                    updateGui(finish);
                 })
                 .build();
     }
 
-    private void updateGui(Object msg) {
-        if(gui != null)
-            gui.tell(msg, self());
-    }
 
     @Override
     public void handleNewMember(Member member) {
@@ -150,8 +135,8 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
                 Stimulus sentStimulus = null;
                 if (geom.body.intersects(obj.shape)) {
                     // TODO rename the TouchStimulus to Mechanical according to Campos (2015) version
-                    ///sentStimulus = new TouchStimulus(id);
-                    //creature.body().tell(sentStimulus, self());
+                    sentStimulus = new TouchStimulus(obj.id, null, obj.type);
+                    creature.body().tell(sentStimulus, self());
                 }
                 if (geom.visionField.intersects(obj.shape)) {
                     sentStimulus = new LuminousStimulus(obj.id, null, obj.type, obj.point);

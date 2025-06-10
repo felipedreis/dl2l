@@ -7,8 +7,8 @@ COPY simulations ./simulations/
 COPY target/*-wd.jar ./dl2l.jar
 COPY scripts/run-dl2l.sh ./
 
-ENV HOST ""
-ENV PORT ""
+ENV HOST "localhost"
+ENV PORT "2551"
 ENV ROLE ""
 ENV DATA_DIR "/dl2l/data"
 ENV SIMULATION ""

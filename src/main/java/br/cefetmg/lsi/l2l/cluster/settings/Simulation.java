@@ -22,7 +22,6 @@ public class Simulation {
 
     private Point worldBoundaries;
 
-    private boolean noUI;
 
     private boolean reposition;
 
@@ -32,8 +31,6 @@ public class Simulation {
         Config fullConfig = config.withFallback(ConfigFactory.load("simulation"));
 
         Config worldSize = fullConfig.getConfig("simulation.worldSize");
-
-        noUI = fullConfig.getBoolean("simulation.noUI");
 
         worldBoundaries = new Point(worldSize.getDouble("width"), worldSize.getDouble("height"));
 
@@ -103,14 +100,6 @@ public class Simulation {
 
     public Point getWorldBoundaries() {
         return worldBoundaries;
-    }
-
-    public boolean isNoUI() {
-        return noUI;
-    }
-
-    public void setNoUI(boolean noUI) {
-        this.noUI = noUI;
     }
 
     public boolean isReposition() {

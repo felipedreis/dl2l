@@ -1,0 +1,14 @@
+
+
+message StartSimulation {
+}
+
+message StartSimulationResponse {}
+
+message SimulationStatus {
+
+}
+
+service SimulationService {
+  start(StartSimulationRequest ) : StartSimulationResponse;
+}

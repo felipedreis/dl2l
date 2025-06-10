@@ -53,7 +53,6 @@ public class Main {
             String [] roles = commandLine.getOptionValues("roles");
 
             Simulation simulation = new Simulation(ConfigFactory.parseFile(configFile));
-            simulation.setNoUI(true);
 
             String roleParam = roles[0];
 
@@ -109,14 +108,7 @@ public class Main {
     }
 
     private static ActorRef setupCollisionDetector(ActorSystem system, Simulation settings) {
-        ActorRef gui = null;
-        if (!settings.isNoUI()) {
-            gui = system.actorOf(Props.create(GUIActor.class), "gui");
-            logger.info("Started Graphic User Interface");
-        } else {
-            logger.info("The GUI will not be started");
-        }
-        return system.actorOf(Props.create(CollisionDetectorActor.class, gui, settings)
+        return system.actorOf(Props.create(CollisionDetectorActor.class, settings)
                 .withDispatcher("collision-dispatcher"), "collisionDetector");
     }
 
