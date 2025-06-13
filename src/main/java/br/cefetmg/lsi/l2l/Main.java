@@ -1,6 +1,7 @@
 package br.cefetmg.lsi.l2l;
 
 import akka.actor.*;
+import akka.stream.Materializer;
 import br.cefetmg.lsi.l2l.analysis.DataAnalyser;
 import br.cefetmg.lsi.l2l.analysis.extractor.Extractor;
 import br.cefetmg.lsi.l2l.cluster.Holder;
@@ -108,6 +109,8 @@ public class Main {
     }
 
     private static ActorRef setupCollisionDetector(ActorSystem system, Simulation settings) {
+        Materializer materializer = Materializer.matFromSystem(system);
+
         return system.actorOf(Props.create(CollisionDetectorActor.class, settings)
                 .withDispatcher("collision-dispatcher"), "collisionDetector");
     }

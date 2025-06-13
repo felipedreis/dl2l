@@ -1,6 +1,9 @@
-package br.cefetmg.lsi.l2l.gui;
+package br.cefetmg.lsi.l2l.web;
 
 import akka.NotUsed;
+import akka.japi.Pair;
+import akka.stream.ActorMaterializer;
+import akka.stream.OverflowStrategy;
 import akka.stream.javadsl.*;
 import br.cefetmg.lsi.l2l.physics.CreatureGeometry;
 import br.cefetmg.lsi.l2l.physics.ObjectGeometry;
@@ -11,12 +14,12 @@ public class GeometrySourceProvider {
     private final Source<CreatureGeometry, NotUsed> creatureSource;
     private final Source<ObjectGeometry, NotUsed> objectSource;
 
-    public GeometrySourceProvider() {
+    public GeometrySourceProvider(ActorMaterializer materializer) {
         Pair<SourceQueueWithComplete<CreatureGeometry>, Source<CreatureGeometry, NotUsed>> creaturePair = 
-            Source.<CreatureGeometry>queue(1000, OverflowStrategy.dropHead()).preMaterialize(ActorMaterializer.create());
+            Source.<CreatureGeometry>queue(1000, OverflowStrategy.dropHead()).preMaterialize(materializer);
         
-        Pair<SourceQueueWithComplete<ObjectGeometry>, Source<ObjectGeometry, NotUsed>> objectPair = 
-            Source.<ObjectGeometry>queue(1000, OverflowStrategy.dropHead()).preMaterialize(ActorMaterializer.create());
+        Pair<SourceQueueWithComplete<ObjectGeometry>, Source<ObjectGeometry, NotUsed>> objectPair =
+            Source.<ObjectGeometry>queue(1000, OverflowStrategy.dropHead()).preMaterialize(materializer);
 
         this.creatureQueue = creaturePair.first();
         this.objectQueue = objectPair.first();

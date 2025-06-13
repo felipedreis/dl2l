@@ -1,19 +1,5 @@
 package br.cefetmg.lsi.l2l.cluster;
 
-import akka.actor.Cancellable;
-import akka.actor.UntypedActor;
-import br.cefetmg.lsi.l2l.cluster.Finish;
-import br.cefetmg.lsi.l2l.common.SequentialId;
-import br.cefetmg.lsi.l2l.gui.GUIState;
-import br.cefetmg.lsi.l2l.physics.CreatureGeometry;
-import br.cefetmg.lsi.l2l.physics.ObjectGeometry;
-
-import scala.concurrent.duration.Duration;
-
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
-
 /**
  * Created by felipe on 30/01/17.
  * @deprecated
