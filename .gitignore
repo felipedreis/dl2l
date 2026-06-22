@@ -9,8 +9,6 @@ data/
 *.log
 *.pyc
 *.csv
-*.jpg
-*.png
 experiments/
 results/
 .DS_Store
