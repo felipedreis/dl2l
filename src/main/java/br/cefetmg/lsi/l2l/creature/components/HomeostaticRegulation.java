@@ -6,10 +6,12 @@ import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
 import br.cefetmg.lsi.l2l.creature.bd.EmotionalState;
 import br.cefetmg.lsi.l2l.creature.bd.InternalDynamicState;
+import br.cefetmg.lsi.l2l.creature.bd.RegulationBatchStat;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.stimuli.*;
 import br.cefetmg.lsi.l2l.world.Self;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -23,6 +25,10 @@ public class HomeostaticRegulation extends CreatureComponent {
     @Override
     public void onReceive(Object message) {
         List stimuli = (List) message;
+
+        int batchSize = stimuli.size();
+        int regulatingCount = 0, hungerHits = 0, sleepHits = 0, drivesTouchedMask = 0;
+
         for (Object aStimuli : stimuli) {
             Stimulus stimulus = (Stimulus) aStimuli;
 
@@ -60,8 +66,16 @@ public class HomeostaticRegulation extends CreatureComponent {
             InternalDynamicState dynamicState = new InternalDynamicState(before, after, change);
 
             persist(change, dynamicState);
+
+            if (stimulus instanceof NutritiveStimulus)       { regulatingCount++; hungerHits++; drivesTouchedMask |= 1; }
+            else if (stimulus instanceof CholinergicStimulus) { regulatingCount++; sleepHits++; drivesTouchedMask |= 2; }
+            else if (stimulus instanceof AdrenergicStimulus)  { regulatingCount++; drivesTouchedMask |= 1 | 2; }
         }
 
-
+        boolean sameDriveCollision = (hungerHits >= 2) || (sleepHits >= 2);
+        ChangeStimulusState batchChange = new ChangeStimulusStateBuilder(this, this.id)
+                .buildMultipleReceivedOneEmitted(new ArrayList<>(), null);
+        persist(batchChange, new RegulationBatchStat(batchSize, regulatingCount,
+                sameDriveCollision, drivesTouchedMask, batchChange));
     }
 }

@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y netcat-openbsd && rm -rf /var/lib/apt/l
 WORKDIR /dl2l/run
 
 COPY simulations/ ./simulations/
-COPY target/*-wd.jar ./dl2l.jar
+COPY target/l2l-*-wd.jar ./dl2l.jar
 COPY scripts/run-dl2l.sh ./
 
 ENV HOST "localhost"
