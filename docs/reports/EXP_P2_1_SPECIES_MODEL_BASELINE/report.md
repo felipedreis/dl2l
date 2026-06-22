@@ -247,18 +247,45 @@ limited excitation sources at this creature density). The critic therefore faces
 easy task on dim 1 (predict near-constant 0.19) and a harder task on dim 0 (predict
 hunger across a 6.82-unit range).
 
-### 5.4 Training outcome
+### 5.4 Training curves
+
+![Training curves](training_curves.png)
 
 | Metric | Value |
 |---|---|
 | Best validation L\_pred | **0.0625** |
-| Best checkpoint | `checkpoints/best.pt` |
-| Epochs to best | 100 (best at final epoch) |
+| Best checkpoint epoch | **4** (out of 100) |
+| Val L\_pred at epoch 100 | 0.6022 (9.6× degraded from best) |
+| Train L\_pred epoch 4 → 100 | 0.134 → 0.660 |
+| Train L\_sigreg epoch 4 → 100 | 1.041 → 0.417 |
+| Train L\_crit epoch 4 → 100 | 1.451 → 1.102 |
 
-The 0.0625 MSE on next-latent prediction indicates the encoder has learned a space
-where consecutive latents are meaningfully related — the predictor can anticipate the
-latent embedding of the next perceptual state from the current latent and the chosen
-action.
+The most significant finding is that the best validation L_pred is reached at **epoch 4**
+and degrades sharply thereafter, reaching 0.60 by epoch 100 — nearly a 10× increase.
+This is not overfitting in the classical sense (train L_pred also rises); it is
+**gradient interference from SIGReg**.
+
+The dynamics are visible across all three panels:
+
+- **L_pred** (left): Both train and val L_pred drop rapidly in epochs 1–4, then
+  reverse and climb monotonically for the remaining 96 epochs. The early minimum
+  (epoch 4) is when the encoder has learned enough predictive structure but before
+  SIGReg has reshaped the latent distribution.
+
+- **L_sigreg** (centre): Decreases steadily from 1.13 to 0.42 across all 100 epochs.
+  The regulariser is being satisfied — the encoder distribution is converging toward
+  N(0,I). However, the variance-equalisation pressure it applies conflicts with the
+  encoder's need to preserve predictively useful information in specific dimensions.
+  As SIGReg wins, L_pred rises.
+
+- **L_crit** (right): Decreases throughout (1.65 → 1.10), uncorrelated with the
+  L_pred reversal. The critic can improve independently because it receives the
+  encoded `z_t` as input — even as the latent space is reshaped by SIGReg, it adapts
+  its mapping from `z_t` to emotion predictions.
+
+The early-stopping mechanism in `train_species.py` (checkpoint saved on each
+improvement to val L_pred) correctly captures the epoch-4 state. **The exported
+`best.pt` is the epoch-4 snapshot**, not the final weights.
 
 ### 5.5 Latent space diagnostics
 
@@ -312,14 +339,24 @@ BYOL stop-gradient and SIGReg regularisation is sufficient at λ_sigreg = 0.1 to
 maintain a diverse, 11-dimensional latent manifold across 100 epochs on 177K training
 samples.
 
-### 6.2 Predictive quality
+### 6.2 Predictive quality and SIGReg interference
 
-The latent predictor (`L_pred = 0.0625`) has learned a useful next-state model. This
-is the core capability the species model must provide for Phase 5 (sleep consolidation)
-and Phase 6 (planning): given the current encoded state and a proposed action, predict
-where the creature would be in latent space next. The 0.0625 MSE is a reasonable
-baseline; fine-tuning per-creature via the `IndividualAdapter` is expected to reduce
-this further for individual behavioural styles.
+The latent predictor achieves `L_pred = 0.0625` at its best (epoch 4), but then
+degrades to 0.60 by epoch 100. The root cause is **gradient interference between
+L_sigreg and L_pred at λ_sigreg = 0.1**.
+
+SIGReg applies variance-equalisation pressure: it pushes all 64 latent dims toward
+unit variance. The encoder must simultaneously encode predictive structure (which
+benefits from non-uniform variance allocation — some dims carry more information than
+others) and satisfy SIGReg (which wants uniform variance). These objectives conflict,
+and at λ_sigreg = 0.1 the SIGReg pressure dominates after the initial fast learning
+phase.
+
+The exported model (`best.pt` at epoch 4) still provides useful next-state prediction.
+However, the recommended fix for future training runs is to **reduce λ_sigreg from
+0.1 to 0.01**, or to adopt a two-phase schedule: pre-train on L_pred alone for 10–20
+epochs, then introduce SIGReg at low weight. This would allow the encoder to establish
+predictive structure before the regulariser reshapes the latent geometry.
 
 ### 6.3 Emotion prediction baseline
 
@@ -343,9 +380,11 @@ single concatenated `NDArray`.
 
 ## 7. Limitations and future work
 
-- **No training loss curves saved.** The training script prints per-epoch losses to
-  stdout but does not persist them. A future run should log to a CSV or TensorBoard
-  file to allow post-hoc analysis of convergence rate and overfitting.
+- **λ_sigreg = 0.1 is too large.** The training curves show clear gradient interference
+  between L_sigreg and L_pred starting from epoch 4. The best checkpoint is saved
+  extremely early (epoch 4/100), meaning 96% of training time produced no improvement
+  in predictive quality. A future run should sweep λ_sigreg ∈ {0.001, 0.01, 0.05}
+  or adopt a two-phase schedule (L_pred warmup, then SIGReg annealed in).
 
 - **CPU-only training.** Training ran on CPU (88K parameters, 177K samples, 100
   epochs). For larger datasets or more complex architectures, enabling MPS (Apple
