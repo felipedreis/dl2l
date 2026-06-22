@@ -12,49 +12,61 @@ import akka.http.javadsl.server.Route;
 import akka.stream.Materializer;
 import akka.stream.javadsl.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import br.cefetmg.lsi.l2l.physics.CreatureGeometry;
-import br.cefetmg.lsi.l2l.physics.ObjectGeometry;
 
+import java.util.List;
 import java.util.concurrent.CompletionStage;
+import java.util.stream.Collectors;
 
 public class GeometryWebService extends AllDirectives {
     private final ActorSystem system;
     private final Materializer materializer;
 
     private final ObjectMapper objectMapper;
+    private final GeometrySourceProvider provider;
     private final Source<GeometryUpdate, NotUsed> geometrySource;
 
     public GeometryWebService(ActorSystem system,
-                            Materializer materializer,
-                            Source<CreatureGeometry, NotUsed> creatureSource,
-                            Source<ObjectGeometry, NotUsed> objectSource) {
+                              Materializer materializer,
+                              GeometrySourceProvider provider) {
         this.system = system;
         this.materializer = materializer;
         this.objectMapper = new ObjectMapper();
-        Source<GeometryUpdate, NotUsed> creatures = creatureSource.map(GeometryUpdate::fromCreature);
-        Source<GeometryUpdate, NotUsed> objects = objectSource.map(GeometryUpdate::fromObject);
+        this.provider = provider;
 
-        // Merge both sources and map to GeometryUpdate
-        this.geometrySource = creatures.merge(objects);
+        Source<GeometryUpdate, NotUsed> creatures = provider.getCreatureSource().map(GeometryUpdate::fromCreature);
+        Source<GeometryUpdate, NotUsed> objects   = provider.getObjectSource().map(GeometryUpdate::fromObject);
+        Source<GeometryUpdate, NotUsed> removals  = provider.getRemovalSource().map(id -> GeometryUpdate.remove(id.toString()));
+
+        this.geometrySource = creatures.merge(objects).merge(removals);
     }
 
     public Route createRoute() {
-        return path("geometry", () ->
-            handleWebSocketMessages(websocketFlow())
+        return concat(
+            path("geometry", () -> handleWebSocketMessages(websocketFlow())),
+            pathSingleSlash(() -> getFromResource("static/SimulationViewer.html")),
+            path("SimulationRenderer.js", () -> getFromResource("static/SimulationRenderer.js"))
         );
     }
 
     private Flow<Message, Message, NotUsed> websocketFlow() {
+        // Replay current objects immediately for this connection, then continue with live stream.
+        List<Message> snapshot = provider.getObjectSnapshot().stream()
+            .map(obj -> (Message) toMessage(GeometryUpdate.fromObject(obj)))
+            .collect(Collectors.toList());
+
+        Source<Message, NotUsed> snapshotSource = Source.from(snapshot);
+        Source<Message, NotUsed> liveSource = geometrySource.map(this::toMessage);
+
         return Flow.<Message>create()
-            .merge(geometrySource
-                .map(update -> {
-                    try {
-                        return TextMessage.create(objectMapper.writeValueAsString(update));
-                    } catch (Exception e) {
-                        return TextMessage.create("error");
-                    }
-                })
-            );
+            .merge(snapshotSource.concat(liveSource));
+    }
+
+    private Message toMessage(GeometryUpdate update) {
+        try {
+            return TextMessage.create(objectMapper.writeValueAsString(update));
+        } catch (Exception e) {
+            return TextMessage.create("error");
+        }
     }
 
     public CompletionStage<ServerBinding> start(String host, int port) {

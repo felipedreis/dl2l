@@ -19,6 +19,7 @@ public class CreatureGeometry implements Serializable, Geometry {
     public final Circle olfactoryField;
     public final Arc mouth;
     public final Arc visionField;
+    public final double visionFieldPosition;
 
     //public Image bodyTexture;
     //public Image mouthTexture;
@@ -40,16 +41,17 @@ public class CreatureGeometry implements Serializable, Geometry {
                  attr.visionFieldPosition,
                  Constants.DEFAULT_MOUTH_OPENING, 10);
         this.id = attr.bodyId;
+        this.visionFieldPosition = attr.visionFieldPosition;
     }
 
     @Override
     public double getX() {
-        return body.getX();
+        return body.getCenterX();
     }
 
     @Override
     public double getY() {
-        return body.getY();
+        return body.getCenterY();
     }
 
     @Override

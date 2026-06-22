@@ -38,12 +38,17 @@ public class Eye extends CreatureComponent {
 
             if (stimulus instanceof LuminousStimulus) {
                 LuminousStimulus luminous = (LuminousStimulus) stimulus;
+                double angle = creature.getPosition().angleAlpha(luminous.getPoint());
+                double distance = creature.getPosition().distance(luminous.getPoint());
                 VisualStimulus visual = new VisualStimulus(luminous.origin,
                         nextStimulusId(),
                         luminous.getObjectType(),
-                        creature.getPosition().angleAlpha(luminous.getPoint()),
-                        creature.getPosition().distance(luminous.getPoint()),
+                        angle,
+                        distance,
                         creature.getVisionFieldPosition() + creature.getVisionFieldOpening()/2.0);
+
+                logger.fine(String.format("Eye[%s]: saw %s angle=%.3f dist=%.1f",
+                        id, luminous.getObjectType(), angle, distance));
 
                 creature.sensoryCortex().tell(visual, self());
 

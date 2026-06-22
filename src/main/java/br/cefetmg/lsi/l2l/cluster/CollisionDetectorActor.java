@@ -95,6 +95,7 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
                     if(objectAttrs.containsKey(id)) {
                         ObjectGeometry geometry = objectAttrs.remove(id);
                         collisionTree.remove(geometry);
+                        geometrySourceProvider.removeObject(id);
                     }
                     else {
                         creatureAttrs.remove(id);

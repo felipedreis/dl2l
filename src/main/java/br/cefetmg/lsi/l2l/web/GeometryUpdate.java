@@ -15,6 +15,8 @@ public class GeometryUpdate {
     private final double y;
     @JsonProperty("objectType")
     private final String objectType;
+    @JsonProperty("angle")
+    private final Double angle;
 
     public static GeometryUpdate fromCreature(CreatureGeometry geometry) {
         return new GeometryUpdate(
@@ -22,7 +24,8 @@ public class GeometryUpdate {
             geometry.id.toString(),
             geometry.getX(),
             geometry.getY(),
-            null
+            null,
+            geometry.visionFieldPosition
         );
     }
 
@@ -32,15 +35,21 @@ public class GeometryUpdate {
             geometry.id.toString(),
             geometry.getX(),
             geometry.getY(),
-            geometry.type.toString()
+            geometry.type.toString(),
+            null
         );
     }
 
-    private GeometryUpdate(String type, String id, double x, double y, String objectType) {
+    public static GeometryUpdate remove(String id) {
+        return new GeometryUpdate("remove", id, 0, 0, null, null);
+    }
+
+    private GeometryUpdate(String type, String id, double x, double y, String objectType, Double angle) {
         this.type = type;
         this.id = id;
         this.x = x;
         this.y = y;
         this.objectType = objectType;
+        this.angle = angle;
     }
 }

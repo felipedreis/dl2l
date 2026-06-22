@@ -1,6 +1,6 @@
-FROM openjdk:23-jdk AS run
+FROM eclipse-temurin:23-jdk AS run
 
-RUN microdnf install nc
+RUN apt-get update && apt-get install -y netcat-openbsd && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /dl2l/run
 

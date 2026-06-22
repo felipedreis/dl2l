@@ -142,7 +142,8 @@ public class SimulationManager extends UntypedActor {
         for (WorldObjectSetting objectSetting : settings.getWorldObjectSettings()) {
             List<SequentialId> objectIds = Sync.ask(idProvider, new AskForIds(objectSetting.getQuantity()), TIMEOUT);
 
-            List<List<SequentialId>> idsPerHolder = ListUtils.partition(objectIds, holders.size());
+            int chunkSize = (objectIds.size() + holders.size() - 1) / holders.size();
+            List<List<SequentialId>> idsPerHolder = ListUtils.partition(objectIds, chunkSize);
 
             for (int i = 0; i < maxHolders; ++i) {
                 ActorRef holder = holders.get(i);

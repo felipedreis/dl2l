@@ -15,7 +15,6 @@ import br.cefetmg.lsi.l2l.web.GeometryWebService;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 import org.apache.commons.cli.*;
-import sun.misc.Unsafe;
 
 import javax.persistence.EntityManager;
 import javax.persistence.Persistence;
@@ -54,7 +53,9 @@ public class Main {
             System.out.println("Save dir " + saveDir);
 
             File configFile = new File(commandLine.getOptionValue("simulation"));
-            String [] roles = commandLine.getOptionValues("roles");
+            String[] roles = Arrays.stream(commandLine.getOptionValues("roles"))
+                    .flatMap(r -> Arrays.stream(r.split(",")))
+                    .toArray(String[]::new);
 
             Simulation simulation = new Simulation(ConfigFactory.parseFile(configFile));
 
@@ -66,7 +67,6 @@ public class Main {
             Config config = ConfigFactory.parseString("akka.cluster.roles = [" + roleParam + "]")
                     .withFallback(ConfigFactory.load());
 
-            Unsafe
             ActorSystem system = ActorSystem.create("l2l", config);
 
             logger.info("System started at host " + host + ":" + port + " with roles " + Arrays.toString(roles));
@@ -117,8 +117,8 @@ public class Main {
         var collisionDetector = system.actorOf(Props.create(CollisionDetectorActor.class, settings, provider)
                 .withDispatcher("collision-dispatcher"), "collisionDetector");
 
-        var webService = new GeometryWebService(system, materializer, provider.getCreatureSource(), provider.getObjectSource());
-        webService.start("localhost", 8080);
+        var webService = new GeometryWebService(system, materializer, provider);
+        webService.start("0.0.0.0", 8080);
 
         return collisionDetector;
     }

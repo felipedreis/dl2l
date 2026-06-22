@@ -25,7 +25,7 @@ class SimulationViewer {
     }
 
     setupWebSocket() {
-        this.ws = new WebSocket('ws://localhost:8080/geometry');
+        this.ws = new WebSocket('ws://localhost:8090/geometry');
         
         this.ws.onmessage = (event) => {
             if (this.isPaused) return;
@@ -42,11 +42,19 @@ class SimulationViewer {
     }
 
     updateEntity(data) {
+        if (data.type === 'remove') {
+            this.entities.delete(data.id);
+            return;
+        }
+
+        // Simulation uses math coords (origin bottom-left, Y up).
+        // Flip Y so the viewer displays movement correctly relative to the canvas (origin top-left, Y down).
         this.entities.set(data.id, {
             type: data.type,
             x: data.x,
-            y: data.y,
+            y: this.canvas.height - data.y,
             objectType: data.objectType,
+            angle: data.angle,
             lastUpdate: Date.now()
         });
 
@@ -59,11 +67,15 @@ class SimulationViewer {
 
     drawCreature(entity) {
         const ctx = this.ctx;
-        
-        // Draw vision field
+
+        // Draw vision field — angle from server is in math coords (Y up); negate for canvas (Y down)
+        const facing = entity.angle != null ? -entity.angle : 0;
+        const halfCone = Math.PI / 6; // 60° cone
         ctx.beginPath();
         ctx.fillStyle = this.colors.vision;
-        ctx.arc(entity.x, entity.y, 50, 0, Math.PI / 2);
+        ctx.moveTo(entity.x, entity.y);
+        ctx.arc(entity.x, entity.y, 50, facing - halfCone, facing + halfCone);
+        ctx.closePath();
         ctx.fill();
         
         // Draw olfactory field
@@ -103,10 +115,10 @@ class SimulationViewer {
             this.lastFrameTime = timestamp;
             document.getElementById('fps').textContent = Math.round(fps);
 
-            // Remove stale entities (older than 5 seconds)
+            // Remove stale creatures (objects are static and stay until eaten)
             const now = Date.now();
             for (const [id, entity] of this.entities) {
-                if (now - entity.lastUpdate > 5000) {
+                if (entity.type === 'creature' && now - entity.lastUpdate > 5000) {
                     this.entities.delete(id);
                 }
             }
