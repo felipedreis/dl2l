@@ -82,7 +82,10 @@ public class RoutineCreator {
                 new AccEatenNutrientsOverTimeExtractor(em, id),
                 new ProducedStimuliGroupedOverTimeExtractor(em, id),
                 new RegulationBatchHistExtractor(em, id),
-                new RegulationBatchCollisionsExtractor(em, id)
+                new RegulationBatchCollisionsExtractor(em, id),
+                new ChosenActionStateExtractor(em, id),
+                new InternalDynamicStateExtractor(em, id),
+                new TrajectoryPerceptionExtractor(em, id)
         );
         
     }

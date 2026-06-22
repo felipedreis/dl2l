@@ -45,7 +45,14 @@ import br.cefetmg.lsi.l2l.creature.common.ActionType;
 					" from data.chosen_action_state chosen inner join " +
 					" data.change_stimulus_state css on chosen.changestimulusstate_id = css.id where css.key = ? " +
 					" and chosen.action in ('EAT', 'PLAY', 'TOUCH') and " +
-					" chosen.actionSelectionType = ? group by _t order by _t asc")
+					" chosen.actionSelectionType = ? group by _t order by _t asc"),
+		@NamedNativeQuery(name="ChosenActionState.getForTrajectory",
+			query = "SELECT css.key AS creature_key, css.time AS action_time, " +
+					"cas.action AS action_type, cas.actionselectiontype AS selection_type, " +
+					"cas.key AS target_key " +
+					"FROM data.chosen_action_state cas " +
+					"JOIN data.change_stimulus_state css ON cas.changestimulusstate_id = css.id " +
+					"WHERE css.key = ? ORDER BY css.time")
 })
 public class ChosenActionState implements PersistenceState{
 	
