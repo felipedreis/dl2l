@@ -4,7 +4,6 @@ import br.cefetmg.lsi.l2l.analysis.dataset.DataSet;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 
 import javax.persistence.EntityManager;
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,7 +28,7 @@ public class RegulationBatchHistExtractor extends CreatureExtractor {
         for (Object[] row : rows) {
             creatureKeys.add(id.key);
             regulatingCounts.add(((Number) row[0]).intValue());
-            batches.add(((BigInteger) row[1]).longValue());
+            batches.add(((Number) row[1]).longValue());
         }
 
         DataSet ds = new DataSet(n);

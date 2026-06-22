@@ -4,7 +4,6 @@ import br.cefetmg.lsi.l2l.analysis.dataset.DataSet;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 
 import javax.persistence.EntityManager;
-import java.math.BigInteger;
 
 public class RegulationBatchCollisionsExtractor extends CreatureExtractor {
 
@@ -18,7 +17,7 @@ public class RegulationBatchCollisionsExtractor extends CreatureExtractor {
                 .setParameter(1, id.key)
                 .getSingleResult();
 
-        long collisions = ((BigInteger) result).longValue();
+        long collisions = ((Number) result).longValue();
 
         DataSet ds = new DataSet(1);
         ds.addSeries("creatureKey", new Long[]{ id.key });

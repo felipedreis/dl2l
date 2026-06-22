@@ -6,14 +6,14 @@ import javax.persistence.*;
 @Table(name = "regulation_batch_stat", schema = "data")
 @NamedNativeQueries({
     @NamedNativeQuery(name = "RegulationBatchStat.countByRegulatingCount",
-        query = "select rbs.regulating_count as c, count(*) as n " +
+        query = "select rbs.regulatingcount as c, count(*) as n " +
                 "from data.regulation_batch_stat rbs " +
                 "inner join data.change_stimulus_state css on rbs.changestimulusstate_id = css.id " +
-                "where css.key = ? group by rbs.regulating_count order by c"),
+                "where css.key = ? group by rbs.regulatingcount order by c"),
     @NamedNativeQuery(name = "RegulationBatchStat.sameDriveCollisions",
         query = "select count(*) from data.regulation_batch_stat rbs " +
                 "inner join data.change_stimulus_state css on rbs.changestimulusstate_id = css.id " +
-                "where css.key = ? and rbs.same_drive_collision = true")
+                "where css.key = ? and rbs.samedrivecollision = true")
 })
 public class RegulationBatchStat implements PersistenceState {
 
