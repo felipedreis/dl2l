@@ -4,7 +4,6 @@ target/
 data/
 *.iml
 *.jar
-*.pdf
 .idea
 *.aux
 *.log
@@ -14,3 +13,4 @@ data/
 *.png
 experiments/
 results/
+.DS_Store
