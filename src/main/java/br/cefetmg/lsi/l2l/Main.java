@@ -10,9 +10,12 @@ import br.cefetmg.lsi.l2l.cluster.SimulationManager;
 import br.cefetmg.lsi.l2l.cluster.settings.Simulation;
 import br.cefetmg.lsi.l2l.cluster.GUIActor;
 import br.cefetmg.lsi.l2l.cluster.CollisionDetectorActor;
+import br.cefetmg.lsi.l2l.web.GeometrySourceProvider;
+import br.cefetmg.lsi.l2l.web.GeometryWebService;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 import org.apache.commons.cli.*;
+import sun.misc.Unsafe;
 
 import javax.persistence.EntityManager;
 import javax.persistence.Persistence;
@@ -21,6 +24,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -33,7 +37,6 @@ public class Main {
 
 
     public static void main(String [] args) throws InterruptedException {
-
         CommandLineParser parser = new BasicParser();
         try {
             CommandLine commandLine = parser.parse(options, args);
@@ -61,10 +64,9 @@ public class Main {
                 roleParam += (", " + roles[i]);
 
             Config config = ConfigFactory.parseString("akka.cluster.roles = [" + roleParam + "]")
-                    .withFallback(ConfigFactory.parseString("akka.remote.netty.tcp.hostname=\"" + host + "\""))
-                    .withFallback(ConfigFactory.parseString("akka.remote.netty.tcp.port=\"" + port + "\""))
                     .withFallback(ConfigFactory.load());
 
+            Unsafe
             ActorSystem system = ActorSystem.create("l2l", config);
 
             logger.info("System started at host " + host + ":" + port + " with roles " + Arrays.toString(roles));
@@ -110,9 +112,15 @@ public class Main {
 
     private static ActorRef setupCollisionDetector(ActorSystem system, Simulation settings) {
         Materializer materializer = Materializer.matFromSystem(system);
+        GeometrySourceProvider provider = new GeometrySourceProvider(materializer);
 
-        return system.actorOf(Props.create(CollisionDetectorActor.class, settings)
+        var collisionDetector = system.actorOf(Props.create(CollisionDetectorActor.class, settings, provider)
                 .withDispatcher("collision-dispatcher"), "collisionDetector");
+
+        var webService = new GeometryWebService(system, materializer, provider.getCreatureSource(), provider.getObjectSource());
+        webService.start("localhost", 8080);
+
+        return collisionDetector;
     }
 
     private static ActorRef setupIdProvider(ActorSystem system) {

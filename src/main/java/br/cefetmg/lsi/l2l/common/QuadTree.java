@@ -47,7 +47,7 @@ public class QuadTree <T extends Geometry>{
     }
 
     public boolean insert(T obj) {
-        //logger.info("Inserting %s in node %s at level %s".formatted(obj, position, level));
+        logger.fine("Inserting %s in node %s at level %s".formatted(obj, position, level));
         if (nodes[0] != null) { // If this node has subnodes
             int index = getIndex(obj);
             if (index != -1 && nodes[index].insert(obj)) {
@@ -82,6 +82,7 @@ public class QuadTree <T extends Geometry>{
     }
 
     public boolean remove(T obj) {
+        logger.fine("Removing object %s from quadtree".formatted(obj));
         if (objects.contains(obj)) {
             objects.remove(obj);
             size--;

@@ -3,6 +3,7 @@ package br.cefetmg.lsi.l2l.web;
 import akka.NotUsed;
 import akka.japi.Pair;
 import akka.stream.ActorMaterializer;
+import akka.stream.Materializer;
 import akka.stream.OverflowStrategy;
 import akka.stream.javadsl.*;
 import br.cefetmg.lsi.l2l.physics.CreatureGeometry;
@@ -14,7 +15,7 @@ public class GeometrySourceProvider {
     private final Source<CreatureGeometry, NotUsed> creatureSource;
     private final Source<ObjectGeometry, NotUsed> objectSource;
 
-    public GeometrySourceProvider(ActorMaterializer materializer) {
+    public GeometrySourceProvider(Materializer materializer) {
         Pair<SourceQueueWithComplete<CreatureGeometry>, Source<CreatureGeometry, NotUsed>> creaturePair = 
             Source.<CreatureGeometry>queue(1000, OverflowStrategy.dropHead()).preMaterialize(materializer);
         

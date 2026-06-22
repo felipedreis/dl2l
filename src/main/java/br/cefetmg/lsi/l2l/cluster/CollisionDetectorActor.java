@@ -43,11 +43,12 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
 
     private Simulation settings;
 
-    public CollisionDetectorActor(Simulation settings) {
+    public CollisionDetectorActor(Simulation settings, GeometrySourceProvider geometrySourceProvider) {
         creatureAttrs = new HashMap<>();
         objectAttrs = new HashMap<>();
         collisionTree = new QuadTree<>(new Rectangle(0, 0, settings.getWorldBoundaries().x, settings.getWorldBoundaries().y));
         this.settings = settings;
+        this.geometrySourceProvider = geometrySourceProvider;
     }
 
     @Override
