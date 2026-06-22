@@ -14,9 +14,9 @@
 Before training a JEPA world model on creature trajectories, we need to know whether
 the state distribution visited by the reactive (Mode-1) policy is broad enough to
 support generalisation. A model trained on a narrow slice of the state space will
-confidently mispredict anything outside that slice. This experiment characterises the
-distribution along every dimension of the `Perception` vector — the input the world
-model will receive at every decision step.
+confidently mispredict anything outside it. This experiment characterises the distribution
+along every dimension of the `Perception` vector — the input the world model will receive
+at every decision step.
 
 ---
 
@@ -30,20 +30,27 @@ model will receive at every decision step.
    during a single `onReceive` pass, three rows appear. We do not collapse to per-step
    summaries.
 
-3. **`distance` and `angle` are continuous perception inputs; `objectType` is categorical.**
+3. **`distance` and `angle` are the continuous perception inputs; `objectType` is categorical.**
    These are the three dimensions of the `Perception` record
    (`Perception.distance`, `Perception.angle`, `Perception.objectType`). The fourth field
-   `direction` (creature heading) is also stored in `ObjectSeenState` but was not included
-   in this probe — see Section 7.
+   `direction` (creature heading) is stored in `ObjectSeenState` but was not included in
+   this probe — see Section 7.
 
-4. **This simulation has two object types.** `baseline_1node_1creature.conf` configures
-   90 `RED_APPLE` and 90 `GREEN_APPLE` objects — **no `GRAY_APPLE`**. The absence of
-   `GRAY_APPLE` in the data is therefore a property of the simulation config, not a
-   coverage failure of the policy.
+4. **This simulation config has two object types.** `baseline_1node_1creature.conf`
+   configures 90 `RED_APPLE` and 90 `GREEN_APPLE` objects — **no `GRAY_APPLE`**.
+   The absence of `GRAY_APPLE` in the data is therefore a property of the simulation
+   config, not a coverage failure of the policy.
 
-5. **A single 92-minute creature lifetime is sufficient for a first-pass characterisation.**
-   We are not computing population statistics; we are checking for gross gaps (entire
-   dimension ranges never visited).
+5. **The database was clean at the start of this run.** The simulation was run via
+   `docker-compose up` immediately after `docker-compose down`, which removes the
+   PostgreSQL container and its ephemeral storage (no named volume is configured).
+   EclipseLink also runs `drop-and-create-tables` at holder startup. The perception
+   timestamps in the raw CSV (epoch ms 1,782,129,501,898 → 1,782,129,594,044, span ≈
+   92,146 ms) confirm the data is from a single run conducted on 2026-06-22.
+
+   > **Known risk:** if `docker-compose down` is not run between trials, the extractor
+   > accumulates data from all past runs in the same DB, producing a mixed dataset.
+   > See Section 7 for a proposed mitigation.
 
 ---
 
@@ -53,20 +60,18 @@ The Mode-1 reactive policy is a pure forager: it approaches the nearest edible o
 and eats it, otherwise wanders. We expect:
 
 - **Distance:** the creature sees objects across the full visual range, with a concentration
-  around medium distances because objects near the creature are consumed quickly (reducing
-  near counts) and objects at maximum range are transient (few ticks visible). We expect a
-  roughly bell-shaped distribution, not uniform.
-- **Angle:** the creature sees objects in all directions. A small front-sector bias is
-  plausible because APPROACH actions move the creature toward visible objects, bringing
-  frontal objects into the near zone faster. A structurally dead sector (large contiguous
-  gap) would be a risk for the world model.
-- **Object type:** both types should be seen in proportion to their world density (1:1
-  here). Any large imbalance would suggest a preference the world model must learn without
-  adequate negative examples.
-- **PCA intrinsic dimensionality:** encoding two categories with one-hot gives a
-  linearly-dependent fourth feature; we expect 3 effective components covering 100% of
-  variance, with each component carrying roughly equal weight if the three independent
-  dimensions (distance, angle, type) are all informative.
+  around medium distances because objects close to the creature are consumed quickly
+  (reducing near counts) and objects at maximum range are transient. We expect a roughly
+  bell-shaped distribution, not uniform.
+- **Angle:** the creature sees objects in all directions. A small front-sector concentration
+  is plausible (APPROACH brings frontal objects into the near zone faster). A structurally
+  dead sector (large contiguous gap) would be a risk for training.
+- **Object type:** both types should appear in proportion to their world density (1:1 here).
+  Any large imbalance would mean the model trains on too few examples of one type.
+- **PCA intrinsic dimensionality:** one-hot encoding two categories produces a linearly
+  dependent fourth feature; we expect 3 effective components covering 100% of variance,
+  with each component carrying roughly equal weight if all three independent dimensions
+  are informative.
 
 ---
 
@@ -76,20 +81,30 @@ and eats it, otherwise wanders. We expect:
 
 | Parameter | Value |
 |-----------|-------|
-| Simulation | `baseline_1node_1creature.conf` |
+| Simulation config | `baseline_1node_1creature.conf` |
 | Creatures | 1 |
-| World objects | 90 × RED_APPLE, 90 × GREEN_APPLE (total 180) |
-| Creature lifetime | 92.2 minutes |
+| World objects | 90 × RED_APPLE, 90 × GREEN_APPLE (180 total) |
+| Creature lifetime | **92.2 s** (~1.54 simulation minutes) |
 | Total distance traveled | 164,583 world units |
 | Nutrients eaten | 143 |
 | Total perception events logged | 31,836 |
 | Action selections (at end of life) | 136 AFFORDANCE, 123 RANDOM, 0 MEMORY |
 
-The simulation was run via Docker Compose (`docker-compose up`) using the `dl2l:latest`
-image. After the holder container exited with code 0, the data extractor was run from
-within the same Docker network:
+> **Time-unit note.** `lifetimes.csv` is produced by `LifetimesExtractor` which applies
+> `MILLIS_TO_SECONDS (1e-3)`, so the value 92.205 is in **seconds**. The arousal history
+> uses `MILLIS_TO_MINUTES`, so its time axis ends at 1.537 **minutes** = 92.2 s — both
+> consistent. The simulation ran and completed in approximately 92 seconds of wall-clock
+> time.
+
+The simulation was run via Docker Compose. After the holder container exited (code 0),
+the data extractor was run from within the same Docker network using the freshly-built
+jar mounted over the image jar:
 
 ```bash
+# start fresh (removes DB container + data)
+cd docker && docker-compose down && docker-compose up -d
+
+# wait for holder to exit, then extract
 docker run --rm --network docker_dl2l-network --entrypoint java \
   -v <new-jar>:/dl2l/run/dl2l.jar -v /output:/output dl2l \
   -Dconfig.file=/config/docker-config.conf -jar dl2l.jar \
@@ -98,13 +113,14 @@ docker run --rm --network docker_dl2l-network --entrypoint java \
 
 ### 4.2 Analysis
 
-`analysis/coverage_probe.py` was run with `KNOWN_TYPES = {"RED_APPLE", "GREEN_APPLE", "GRAY_APPLE"}` and `wd` pointing at the output directory. It:
+`analysis/coverage_probe.py` was run with:
+- `wd` pointing at the extractor output directory
+- `KNOWN_TYPES = {"RED_APPLE", "GREEN_APPLE", "GRAY_APPLE"}` (all three apple types, to
+  catch types absent from this config)
+- `COVERAGE_THRESHOLD = 0.01` (1%)
 
-1. Loaded and concatenated all `perceptionCoverage.csv` files.
-2. Computed per-dimension descriptive statistics for `distance` and `angle`.
-3. Computed `objectType` counts and fractions; flagged types below 1% as sparse and types in `KNOWN_TYPES` but absent from data as missing.
-4. One-hot encoded `objectType`, standardised all features, and ran PCA on the resulting 4-column matrix.
-5. Generated histogram and scree plots.
+Steps: load and concat CSVs → per-dim descriptive stats → objectType counts with
+absent-type flagging → one-hot encode + standardise + PCA → histogram and scree plots.
 
 ---
 
@@ -112,12 +128,13 @@ docker run --rm --network docker_dl2l-network --entrypoint java \
 
 ### 5.1 Creature summary
 
-The creature survived 92.2 minutes, traveled 164,583 world units, and ate 143 nutrients.
-Final hunger arousal was 7.0 (maximum — the creature died hungry), and sleep arousal was
-0.19 (low — sleep need was not the limiting factor). Action selection was split between
-AFFORDANCE (reactive, 136 choices) and RANDOM (123 choices), with zero MEMORY or
-SHORT_TERM_MEMORY selections — confirming that the memory system is effectively dead in
-the current codebase, as documented in the HLD.
+The creature survived **92.2 seconds**, traveled 164,583 world units, and ate 143
+nutrients. Final hunger arousal reached 7.0 (the observed maximum — the creature died
+hungry), while sleep arousal stayed low at 0.19 (sleep need was not the binding
+constraint). Action selection was split between AFFORDANCE (136 choices, reactive) and
+RANDOM (123 choices), with **zero MEMORY or SHORT_TERM_MEMORY selections** — confirming
+that the memory system is effectively dead in the current codebase, as documented in the
+HLD. This observation is incidental to the coverage probe but serves as a sanity check.
 
 ### 5.2 Distance distribution
 
@@ -135,10 +152,10 @@ the current codebase, as documented in the HLD.
 
 The distribution is **bell-shaped and continuous**, covering the full eye range from
 near-contact (~1.5 units) to the sensor maximum (~950 units). The peak around 300–450
-units is expected: objects at very short range are consumed within a few ticks and
-disappear, while objects at maximum range are at the edge of visibility and appear only
-briefly. The 5th–95th percentile span (97 → 682 units) is wide; there are no dead zones
-in the distance dimension. This range is adequate for training.
+units reflects the balance between consumption dynamics (objects close to the creature
+are eaten quickly and disappear, reducing near-range counts) and sensory geometry
+(objects at maximum range spend fewer ticks inside the field of view). The p5–p95
+span (97 → 682 units) is wide with no dead zones. This range is adequate for training.
 
 ### 5.3 Angle distribution
 
@@ -153,40 +170,38 @@ in the distance dimension. This range is adequate for training.
 
 ![Angle histogram](angle_hist.png)
 
-The distribution **covers the full [−π, +π] range** with no completely dead sector.
+The distribution **covers the full [−π, +π] range** with no completely absent sector.
 However, there is a notable trough around [−2.0, −1.0] rad (the left-rear quadrant,
-roughly 115°–57° behind the creature's left shoulder). Counts in this region are 30–50%
+roughly 115°–57° behind the creature's left shoulder): counts in this region are 30–50%
 lower than the front-facing bins. Two plausible causes:
 
-- The APPROACH action moves the creature toward visible objects, which shifts objects
-  that were left-rear into a front-facing position within a few steps, reducing dwell
-  time in that angular bin.
-- The WANDER / TURN action has a bias toward right turns (this is a known artifact of
-  the `angle` initialization in `FullAppraisal`).
+- The APPROACH action moves the creature toward visible objects, rapidly shifting
+  left-rear objects into a frontal position and reducing dwell time in that angular bin.
+- A possible right-turn bias in the WANDER/TURN action selection.
 
-The gap is a reduced-density region, not an absent one. The world model will see fewer
-training examples for left-rear angles; this is worth monitoring but does not by itself
-require exploratory episodes.
+The gap is a **reduced-density region, not an absent one**. The world model will see
+fewer training examples for left-rear angles; this should be monitored but does not by
+itself require exploratory episodes.
 
 ### 5.4 Object-type breakdown
 
-| Type | Count | Fraction |
-|------|-------|----------|
-| GREEN_APPLE | 18,071 | 56.8% |
-| RED_APPLE | 13,765 | 43.2% |
-| GRAY_APPLE | 0 | 0.0% — **absent from config** |
+| Type | Count | Fraction | Note |
+|------|-------|----------|------|
+| GREEN_APPLE | 18,071 | 56.8% | |
+| RED_APPLE | 13,765 | 43.2% | |
+| GRAY_APPLE | 0 | 0.0% | **absent from config** |
 
 Both types present in the simulation are observed. The 57/43 split is a mild imbalance
-(equal world density, 90 objects each). The difference arises because GREEN_APPLE
-objects happen to be placed closer to the creature's starting region in this random-seed
-run, making them more frequently the nearest target. Over a multi-creature population
-run this imbalance is expected to average out.
+despite equal world density (90 objects each). The difference arises because random
+initial placement placed GREEN_APPLE objects closer to the creature's starting position
+in this run, making them the more frequent nearest target. Over a multi-creature
+population run this imbalance is expected to average out.
 
-`GRAY_APPLE` does not appear because it is not defined in `baseline_1node_1creature.conf`.
-This is a configuration constraint, not a policy coverage failure. If `GRAY_APPLE`
-is included in the production training simulation (e.g., `basic.conf` includes 100,000
-of each type), a separate probe on that config must be run before concluding that
-all three types are covered.
+`GRAY_APPLE` does not appear because it is **not defined** in
+`baseline_1node_1creature.conf`. This is a configuration constraint, not a policy
+coverage failure. If the production training simulation (`basic.conf`, which configures
+100,000 of each of the three apple types) is used for data collection, a separate probe
+on that config must be run before drawing any coverage conclusions for `GRAY_APPLE`.
 
 ### 5.5 PCA — intrinsic dimensionality
 
@@ -199,15 +214,15 @@ all three types are covered.
 
 ![PCA scree plot](pca_scree.png)
 
-**Three components explain 100% of variance.** PC4 is exactly zero because one-hot
-encoding two categories (RED, GREEN) produces a fourth feature that is the linear
-complement of the third (`type_RED = 1 − type_GREEN`). This is expected and harmless;
-the JEPA encoder will learn to compress this redundancy.
+**Three components explain 100% of variance; PC4 is identically zero.** This is expected:
+one-hot encoding two categories (RED, GREEN) produces a fourth feature that is the
+linear complement of the third (`type_RED = 1 − type_GREEN`), contributing zero
+independent information. The effective state space is 3-dimensional.
 
-The three effective components carry roughly equal weight (50% / 26% / 24%), which
-means distance, angle, and object type each contribute meaningfully to the variance
-— none is a noise column. This is a positive signal for training: all input dimensions
-are informative, and the encoder has clear structure to capture in each.
+The three components carry roughly balanced weight (50% / 26% / 24%), meaning distance,
+angle, and object type all contribute meaningfully. None is a noise column. This is a
+positive signal: the JEPA encoder has clear, non-redundant structure to capture in each
+independent dimension.
 
 ---
 
@@ -217,51 +232,57 @@ are informative, and the encoder has clear structure to capture in each.
 
 **Partially yes, with one important qualification.**
 
-For the two types present in `baseline_1node_1creature.conf` (RED and GREEN apple):
+For the two types present in `baseline_1node_1creature.conf`:
 
-- Distance: fully covered, well-spread bell distribution. ✅
-- Angle: fully covered, mild left-rear under-density (not a hard gap). ✅
-- Object type: both types observed; mild 57/43 imbalance. ✅
-- Effective dimensionality: 3 independent components, all informative. ✅
+| Dimension | Coverage verdict |
+|-----------|-----------------|
+| Distance | ✅ Full range, well-spread bell distribution |
+| Angle | ✅ Full range; mild left-rear under-density, not a hard gap |
+| Object type (RED, GREEN) | ✅ Both observed; mild 57/43 imbalance, acceptable |
+| Effective dimensionality | ✅ 3 independent components, all informative |
 
-**The qualification:** `GRAY_APPLE` is absent from this simulation config entirely. If
-the production training simulation (`basic.conf`) includes all three apple types, this
-experiment does not validate coverage for `GRAY_APPLE`. A probe on that config is
-required.
+**The qualification:** this experiment covers only a 2-type simulation. If training data
+is drawn from a 3-type config (e.g., `basic.conf`), `GRAY_APPLE` will be absent and the
+world model will have no training signal for that type. A separate probe on that config
+is required.
 
 ### 6.2 Decision on exploratory episodes (Task 2.1)
 
-> **For `baseline_1node_1creature.conf` training data: no random-policy episodes required.**
-> The reactive policy visits the full distance and angle range. Coverage of the types
-> present in this config is adequate.
+> **For `baseline_1node_1creature.conf` training data: no random-policy episodes
+> required.** The reactive policy visits the full distance and angle range, and both
+> object types present in this config appear adequately.
 >
-> **If training data is drawn from `basic.conf` (which includes `GRAY_APPLE`): run a
-> separate probe first.** The current experiment cannot answer that question.
+> **If training data is drawn from a 3-type config (`basic.conf`): run a separate probe
+> first.** `GRAY_APPLE` coverage cannot be assumed.
 >
-> **The left-rear angle under-density is noted as a known gap.** It is not severe enough
-> to require corrective action now, but it should be revisited if the trained model
-> shows systematically poor predictions for objects approached from the left-rear.
-
-### 6.3 Incidental observation
-
-The action-selection counters at end-of-life (136 AFFORDANCE, 123 RANDOM, 0 MEMORY)
-confirm that the MEMORY and SHORT_TERM_MEMORY selection mechanisms are inert, consistent
-with the HLD's description of `MemorySystemActor` as a stub. This is expected and will
-be addressed in Phase 3 (Task 3.2).
+> **The left-rear angle under-density is noted as a known limitation.** Monitor whether
+> the trained model shows systematically higher prediction error for objects approached
+> from that quadrant; if so, targeted random-policy episodes covering that sector are
+> the corrective action.
 
 ---
 
 ## 7. Limitations and future work
 
-- **Single creature, single run.** Population-level coverage (multiple creatures, random
-  seed variation) would give a more reliable distribution estimate. This probe is a
-  first-pass check, not a definitive characterisation.
-- **`direction` not included.** The creature's heading (`ObjectSeenState.direction`) is
-  a fourth continuous dimension of the full state. It was excluded here; a follow-up
-  probe should include it if the world model takes heading as an input.
-- **Only `baseline_1node_1creature.conf` tested.** The training data for the species model
-  will likely come from a multi-creature multi-run population (Task 2.1). The coverage
-  probe should be re-run on that dataset before committing to training.
+- **Single creature, 92-second run.** Population-level coverage (multiple creatures,
+  varied random seeds, longer runs) would give a more reliable distribution estimate.
+  This probe is a first-pass check, not a definitive characterisation.
+
+- **`direction` not included.** The creature's heading (`ObjectSeenState.direction`) is a
+  fourth continuous dimension of the full perceptual state. It was excluded here; a
+  follow-up probe should include it if the world model takes heading as an input.
+
+- **DB cleanliness depends on manual `docker-compose down` between trials.** There is no
+  mechanism today to separate runs inside the same database. If `down` is skipped, the
+  extractor silently accumulates data from all past runs. Two mitigations are worth
+  considering:
+  - **Trial number column:** add a `trial_id` column (sequence or UUID) written at
+    simulation startup; the extractor filters by it.
+  - **Per-trial PostgreSQL schema:** create a new schema (e.g., `data_trial_42`) per run
+    and set `eclipselink.target-schema` from the simulation config; the extractor
+    targets the latest schema by name convention.
+  The schema approach avoids any JOIN complexity and keeps historical data intact.
+
 - **`KNOWN_TYPES` must be set per config.** The script's `KNOWN_TYPES` constant is
   currently hardcoded to all three apple types. For a `baseline_*` run it should be
-  `{"RED_APPLE", "GREEN_APPLE"}`.
+  `{"RED_APPLE", "GREEN_APPLE"}` to avoid a misleading `GRAY_APPLE ← ABSENT` warning.
