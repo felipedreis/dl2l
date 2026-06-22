@@ -90,6 +90,7 @@ public abstract class CreatureComponent extends UntypedActor {
         }
 
         persistenceBuffer.addAll(Arrays.asList(states));*/
+        logger.fine("persisting states %s".formatted(Arrays.toString(states)));
         em.getTransaction().begin();
         for (PersistenceState state : states) {
             em.persist(state);

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>L2L Simulation Viewer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+            font-family: Arial, sans-serif;
+        }
+        #simulationCanvas {
+            background: #000;
+            border: 1px solid #333;
+        }
+        .stats {
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        .controls {
+            margin-bottom: 10px;
+        }
+        button {
+            background: #333;
+            color: #fff;
+            border: 1px solid #444;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #444;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <button onclick="togglePause()">Pause/Resume</button>
+        <button onclick="clearCanvas()">Clear</button>
+    </div>
+    <canvas id="simulationCanvas" width="800" height="600"></canvas>
+    <div class="stats">
+        <div>Creatures: <span id="creatureCount">0</span></div>
+        <div>Objects: <span id="objectCount">0</span></div>
+        <div>FPS: <span id="fps">0</span></div>
+    </div>
+    <script src="SimulationRenderer.js"></script>
+</body>
+</html>

@@ -26,7 +26,7 @@
     <class>br.cefetmg.lsi.l2l.creature.bd.BehaviouralEfficiencyState</class>
 
     <properties>
-        <property name="javax.persistence.jdbc.url" value="jdbc:postgresql://localhost:5432/l2l"/>
+        <property name="javax.persistence.jdbc.url" value="jdbc:postgresql://dl2l-db:5432/l2l"/>
         <property name="javax.persistence.jdbc.password" value="postgres"/>
         <property name="javax.persistence.jdbc.driver" value="org.postgresql.Driver"/>
         <property name="javax.persistence.jdbc.user" value="postgres"/>

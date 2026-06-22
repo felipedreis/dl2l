@@ -66,7 +66,14 @@ public class FullAppraisal extends CreatureComponent {
                 ShortTermMemory stm = new ShortTermMemory(action.type, action.perception.id, emotional.maxEmotion);
                 memorySystem.addShortTermMemory(stm);
 
+                logger.info(String.format("FullAppraisal[%s]: selected=%s for=%s angle=%.3f dist=%.1f",
+                        id, action.type, action.perception.objectType,
+                        action.perception.angle, action.perception.distance));
+
                 CorticalStimulus cortical = produceCortical(action, emotional.behaviouralEfficiency);
+
+                logger.info(String.format("FullAppraisal[%s]: cortical angle=%.3f speed=%.3f",
+                        id, cortical.angle, cortical.speed));
 
                 creature.effectorCortex().tell(cortical, self());
 
@@ -92,20 +99,28 @@ public class FullAppraisal extends CreatureComponent {
 
         switch (action.type) {
             case AVOID:
-                angle = 45 + perception.angle % 360;
+                // 45° offset from target direction (pass by, not head-on)
+                angle = perception.angle + Math.PI / 4;
                 break;
 
             case ESCAPE:
-                angle = (180 + perception.angle) % 360;
+                // run directly away from threat
+                angle = perception.angle + Math.PI;
                 break;
 
             case APPROACH:
                 angle = perception.angle;
                 break;
 
+            case EAT:
+                speed = 0;
+                angle = perception.angle;
+                break;
+
             case WANDER:
-                angle = ((Constants.MAX_ROTATE_ANGLE * random.nextDouble()  - 2 * Constants.MAX_ROTATE_ANGLE)
-                        + perception.angle) % 360;
+                // symmetric random turn ±MAX_ROTATE_ANGLE degrees around current heading
+                angle = perception.angle
+                        + (2 * random.nextDouble() - 1) * Math.toRadians(Constants.MAX_ROTATE_ANGLE);
                 break;
 
             case SLEEP:

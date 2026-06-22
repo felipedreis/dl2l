@@ -137,6 +137,7 @@ public class CreatureActor implements Creature {
         clock = TypedActor.context().system().scheduler()
                 .schedule(Duration.apply(5, TimeUnit.SECONDS),
                         Duration.apply(1000, TimeUnit.MILLISECONDS), () -> {
+                            logger.info("Clocking");
                             partial.tell("", ActorRef.noSender());
                         }, TypedActor.context().dispatcher());
 
@@ -151,19 +152,10 @@ public class CreatureActor implements Creature {
             TypedActor.context().stop(p.second);
         }
 
-        //CompletionStage t = gracefulStop(bdActor, FiniteDuration.apply(120, "seconds"), PoisonPill.getInstance());
-        //t.toCompletableFuture().thenRun(() -> {
-            em.getTransaction().begin();
-            em.persist(state);
-            em.getTransaction().commit();
-            em.close();
-        //});
-
-        /*try {
-            t.toCompletableFuture().get(120, TimeUnit.SECONDS);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }*/
+        em.getTransaction().begin();
+        em.persist(state);
+        em.getTransaction().commit();
+        em.close();
 
         logger.info("Sending remove order to holder");
         holder().tell(id, TypedActor.context().self());

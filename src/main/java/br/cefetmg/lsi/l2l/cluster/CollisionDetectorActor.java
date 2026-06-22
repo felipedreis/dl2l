@@ -13,6 +13,7 @@ import br.cefetmg.lsi.l2l.creature.Creature;
 import br.cefetmg.lsi.l2l.creature.CreatureActor;
 import br.cefetmg.lsi.l2l.physics.*;
 import br.cefetmg.lsi.l2l.stimuli.*;
+import br.cefetmg.lsi.l2l.web.GeometrySourceProvider;
 import org.newdawn.slick.geom.Rectangle;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
@@ -33,21 +34,21 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
 
     private final Logger logger = Logger.getLogger(CollisionDetectorActor.class.getName());
 
+    private GeometrySourceProvider geometrySourceProvider;
+
     private Map<SequentialId, CreatureGeometry> creatureAttrs;
     private Map<SequentialId, ObjectGeometry> objectAttrs;
 
     private QuadTree<ObjectGeometry> collisionTree;
 
-    private ActorRef gui;
-
     private Simulation settings;
 
-    public CollisionDetectorActor(ActorRef gui, Simulation settings) {
-        this.gui = gui;
+    public CollisionDetectorActor(Simulation settings, GeometrySourceProvider geometrySourceProvider) {
         creatureAttrs = new HashMap<>();
         objectAttrs = new HashMap<>();
         collisionTree = new QuadTree<>(new Rectangle(0, 0, settings.getWorldBoundaries().x, settings.getWorldBoundaries().y));
         this.settings = settings;
+        this.geometrySourceProvider = geometrySourceProvider;
     }
 
     @Override
@@ -78,8 +79,7 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
                     CreatureGeometry geometry = new CreatureGeometry(attr);
                     creatureAttrs.put(attr.creatureId, geometry);
                     checkCreatureCollisions(geometry, creature);
-
-                    updateGui(geometry);
+                    geometrySourceProvider.updateCreature(geometry);
                 })
                 .match(WorldObjectPositioningAttr.class, attr -> {
                     logger.info("Received a world object positioning attribute update");
@@ -87,8 +87,7 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
                     ObjectGeometry geometry = new ObjectGeometry(attr);
                     objectAttrs.put(attr.id, geometry);
                     collisionTree.insert(geometry);
-
-                    updateGui(geometry);
+                    geometrySourceProvider.updateObject(geometry);
                 })
                 .match(SequentialId.class, id -> {
                     logger.info("A world object or creature (" + id + ") was removed");
@@ -96,11 +95,11 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
                     if(objectAttrs.containsKey(id)) {
                         ObjectGeometry geometry = objectAttrs.remove(id);
                         collisionTree.remove(geometry);
+                        geometrySourceProvider.removeObject(id);
                     }
-                    else if(creatureAttrs.containsKey(id))
+                    else {
                         creatureAttrs.remove(id);
-
-                    updateGui(id);
+                    }
                 })
                 .match(MemberUp.class, memberUp -> {
                     handleNewMember(memberUp.member());
@@ -108,19 +107,12 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
                 .match(Finish.class, finish -> {
                     logger.info("Got stop order from  master");
                     context().stop(self());
-                    if (gui != null)
-                        context().stop(gui);
 
                     context().system().terminate();
-                    updateGui(finish);
                 })
                 .build();
     }
 
-    private void updateGui(Object msg) {
-        if(gui != null)
-            gui.tell(msg, self());
-    }
 
     @Override
     public void handleNewMember(Member member) {
@@ -137,14 +129,6 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
             if (TypedActor.get(context()).getActorRefFor(creature).isTerminated()) {
                 System.exit(0);
             }
-            /// TODO implement a collision tree
-           // for (CreatureGeometry other : creatureAttrs.values()) {
-           //     if (geom.body.intersects(other.body)) {
-           //     } else if (geom.body.intersects(other.visionField)) {
-           //     } else if (geom.body.intersects(other.olfactoryField)) {
-           //     } else if (geom.visionField.intersects(geom.body)) {
-           //     }
-           // }
             long time = System.currentTimeMillis();
 
             List<ObjectGeometry> possibleObjectsCollision = collisionTree.query(geom.getBoundingBox());
@@ -153,8 +137,8 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
                 Stimulus sentStimulus = null;
                 if (geom.body.intersects(obj.shape)) {
                     // TODO rename the TouchStimulus to Mechanical according to Campos (2015) version
-                    ///sentStimulus = new TouchStimulus(id);
-                    //creature.body().tell(sentStimulus, self());
+                    sentStimulus = new TouchStimulus(obj.id, null, obj.type);
+                    creature.body().tell(sentStimulus, self());
                 }
                 if (geom.visionField.intersects(obj.shape)) {
                     sentStimulus = new LuminousStimulus(obj.id, null, obj.type, obj.point);

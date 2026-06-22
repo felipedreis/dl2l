@@ -1,6 +1,7 @@
 package br.cefetmg.lsi.l2l;
 
 import akka.actor.*;
+import akka.stream.Materializer;
 import br.cefetmg.lsi.l2l.analysis.DataAnalyser;
 import br.cefetmg.lsi.l2l.analysis.extractor.Extractor;
 import br.cefetmg.lsi.l2l.cluster.Holder;
@@ -9,6 +10,8 @@ import br.cefetmg.lsi.l2l.cluster.SimulationManager;
 import br.cefetmg.lsi.l2l.cluster.settings.Simulation;
 import br.cefetmg.lsi.l2l.cluster.GUIActor;
 import br.cefetmg.lsi.l2l.cluster.CollisionDetectorActor;
+import br.cefetmg.lsi.l2l.web.GeometrySourceProvider;
+import br.cefetmg.lsi.l2l.web.GeometryWebService;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 import org.apache.commons.cli.*;
@@ -20,6 +23,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -32,7 +36,6 @@ public class Main {
 
 
     public static void main(String [] args) throws InterruptedException {
-
         CommandLineParser parser = new BasicParser();
         try {
             CommandLine commandLine = parser.parse(options, args);
@@ -50,10 +53,11 @@ public class Main {
             System.out.println("Save dir " + saveDir);
 
             File configFile = new File(commandLine.getOptionValue("simulation"));
-            String [] roles = commandLine.getOptionValues("roles");
+            String[] roles = Arrays.stream(commandLine.getOptionValues("roles"))
+                    .flatMap(r -> Arrays.stream(r.split(",")))
+                    .toArray(String[]::new);
 
             Simulation simulation = new Simulation(ConfigFactory.parseFile(configFile));
-            simulation.setNoUI(true);
 
             String roleParam = roles[0];
 
@@ -61,8 +65,6 @@ public class Main {
                 roleParam += (", " + roles[i]);
 
             Config config = ConfigFactory.parseString("akka.cluster.roles = [" + roleParam + "]")
-                    .withFallback(ConfigFactory.parseString("akka.remote.netty.tcp.hostname=\"" + host + "\""))
-                    .withFallback(ConfigFactory.parseString("akka.remote.netty.tcp.port=\"" + port + "\""))
                     .withFallback(ConfigFactory.load());
 
             ActorSystem system = ActorSystem.create("l2l", config);
@@ -109,15 +111,16 @@ public class Main {
     }
 
     private static ActorRef setupCollisionDetector(ActorSystem system, Simulation settings) {
-        ActorRef gui = null;
-        if (!settings.isNoUI()) {
-            gui = system.actorOf(Props.create(GUIActor.class), "gui");
-            logger.info("Started Graphic User Interface");
-        } else {
-            logger.info("The GUI will not be started");
-        }
-        return system.actorOf(Props.create(CollisionDetectorActor.class, gui, settings)
+        Materializer materializer = Materializer.matFromSystem(system);
+        GeometrySourceProvider provider = new GeometrySourceProvider(materializer);
+
+        var collisionDetector = system.actorOf(Props.create(CollisionDetectorActor.class, settings, provider)
                 .withDispatcher("collision-dispatcher"), "collisionDetector");
+
+        var webService = new GeometryWebService(system, materializer, provider);
+        webService.start("0.0.0.0", 8080);
+
+        return collisionDetector;
     }
 
     private static ActorRef setupIdProvider(ActorSystem system) {

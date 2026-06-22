@@ -52,6 +52,11 @@ public class Valuation extends CreatureComponent {
 
                 boolean valence = evaluation.arousalVariation < 0;
 
+                logger.info(String.format("Valuation[%s]: action=%s type=%s arousalVariation=%.3f valence=%s memories=%d",
+                        id, evaluation.executedAction, evaluation.type,
+                        evaluation.arousalVariation, valence ? "positive" : "negative",
+                        correspondingMemories.size()));
+
                 operantConditioning.varyProbability(evaluation.type, evaluation.executedAction, 1, valence);
 
                 ChangeStimulusState change = new ChangeStimulusStateBuilder(this, this.id)

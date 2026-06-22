@@ -73,6 +73,11 @@ public class PartialAppraisal extends CreatureComponent {
 
         double behaviouralEfficiency = normalizedBehaviouralEfficiency(maxEmotion.getLevel(), perceptions.size());
 
+        logger.info(String.format("PartialAppraisal[%s]: arousal=%.3f perceptions=%d behaviouralEfficiency=%.3f",
+                id, maxEmotion.getLevel(), perceptions.size(), behaviouralEfficiency));
+        perceptions.forEach(p -> logger.fine(String.format("PartialAppraisal[%s]:   perception type=%s angle=%.3f dist=%.1f",
+                id, p.objectType, p.angle, p.distance)));
+
         EmotionalStimulus emotional = new EmotionalStimulus(this.id, nextStimulusId(), perceptions, maxEmotion, behaviouralEfficiency);
 
         creature.fullAppraisal().tell(emotional, self());

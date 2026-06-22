@@ -45,7 +45,7 @@ public class Point implements Serializable {
      * @return the angle between current point and p in radians
      */
     public double angleAlpha(Point p) {
-        return Math.atan2(y - p.y, x - p.x);
+        return Math.atan2(p.y - y, p.x - x);
     }
 
     @Override
