@@ -80,7 +80,9 @@ public class RoutineCreator {
                 new BehaviouralEfficiencyExtractor(em, id),
                 new ChoicesOverTimeExtractor(em, id),
                 new AccEatenNutrientsOverTimeExtractor(em, id),
-                new ProducedStimuliGroupedOverTimeExtractor(em, id)
+                new ProducedStimuliGroupedOverTimeExtractor(em, id),
+                new RegulationBatchHistExtractor(em, id),
+                new RegulationBatchCollisionsExtractor(em, id)
         );
         
     }
