@@ -12,7 +12,6 @@ Outputs: perception_ranges_report.txt, distance_hist.png,
 
 import os
 import sys
-import glob
 import pandas as pd
 import numpy as np
 import matplotlib
@@ -22,6 +21,11 @@ import matplotlib.pyplot as plt
 wd = "/path/to/simulation/results"   # <-- set this
 
 COVERAGE_THRESHOLD = 0.01   # object types below this fraction flag sparse coverage
+
+# Set to the expected WorldObjectType names for your simulation config.
+# Any type listed here but absent from the data is flagged as missing coverage.
+# Leave empty to skip the absent-type check.
+KNOWN_TYPES = {"RED_APPLE", "GREEN_APPLE", "GRAY_APPLE"}
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -61,6 +65,9 @@ for col in ["distance", "angle"]:
     lines.append(f"  p5={s.quantile(0.05):.4f}  p50={s.quantile(0.50):.4f}  p95={s.quantile(0.95):.4f}")
 
 total = len(df)
+observed_types = set(df["objectType"].unique())
+absent = sorted(KNOWN_TYPES - observed_types) if KNOWN_TYPES else []
+
 lines.append("\nobjectType breakdown:")
 type_counts = df["objectType"].value_counts()
 sparse = []
@@ -69,6 +76,8 @@ for otype, cnt in type_counts.items():
     lines.append(f"  {otype}: {cnt} ({frac*100:.2f}%)")
     if frac < COVERAGE_THRESHOLD:
         sparse.append(otype)
+for otype in absent:
+    lines.append(f"  {otype}: 0 (0.00%)  ← ABSENT")
 
 # ── PCA ──────────────────────────────────────────────────────────────────────
 
@@ -118,11 +127,16 @@ for col, fname in [("distance", "distance_hist.png"), ("angle", "angle_hist.png"
 # ── decision ─────────────────────────────────────────────────────────────────
 
 lines.append("\n=== DECISION ===")
+if absent:
+    lines.append(f"Absent object types (0 observations): {sorted(absent)}")
 if sparse:
-    lines.append(f"Sparse object types (< {COVERAGE_THRESHOLD*100:.0f}%): {sparse}")
+    lines.append(f"Sparse object types (< {COVERAGE_THRESHOLD*100:.0f}%): {sorted(sparse)}")
+if absent or sparse:
     lines.append("RECOMMENDATION: add random-policy episodes to training data (Task 2.1).")
 else:
-    lines.append("All object types adequately covered.")
+    lines.append(f"All {len(observed_types)} observed object type(s) adequately covered.")
+    if not KNOWN_TYPES:
+        lines.append("NOTE: KNOWN_TYPES is empty — absent-type check skipped. Set it to catch unseen types.")
     lines.append("RECOMMENDATION: no random-policy episodes required.")
 
 report = "\n".join(lines)

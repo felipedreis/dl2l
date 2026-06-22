@@ -21,7 +21,7 @@ Add before the class declaration (mirror the pattern in `ChosenActionState.java`
 ```java
 @NamedNativeQueries({
     @NamedNativeQuery(name = "ObjectSeenState.getPerceptionsByCreature",
-        query = "SELECT css.key as creature_key, CAST(oss.type AS VARCHAR) as object_type, " +
+        query = "SELECT css.key as creature_key, oss.type as object_type, " +
                 "oss.distance, oss.angle, css.time " +
                 "FROM data.object_seen_state oss " +
                 "JOIN data.change_stimulus_state css ON oss.changestimulusstate_id = css.id " +
@@ -29,7 +29,7 @@ Add before the class declaration (mirror the pattern in `ChosenActionState.java`
 })
 ```
 
-The `CAST(type AS VARCHAR)` handles the `@Lob`-serialized enum — same DB, same pattern as ChosenActionState native queries that use `css.key = ?` for creature scoping.
+`oss.type` is returned as raw `byte[]` (PostgreSQL bytea → JDBC). The extractor deserializes it with `ObjectInputStream` — see `PerceptionCoverageExtractor.deserializeTypeName`. A `CAST(type AS VARCHAR)` was tried first but produces the PostgreSQL `\x<hex>` textual encoding rather than the enum name.
 
 ### 2. Add `PerceptionCoverageExtractor.java`
 
