@@ -13,7 +13,14 @@ import javax.persistence.*;
                 "oss.distance, oss.angle, css.time " +
                 "FROM data.object_seen_state oss " +
                 "JOIN data.change_stimulus_state css ON oss.changestimulusstate_id = css.id " +
-                "WHERE css.key = ?")
+                "WHERE css.key = ?"),
+    @NamedNativeQuery(name = "ObjectSeenState.getForTrajectory",
+        query = "SELECT css.key AS creature_key, css.time, " +
+                "oss.key AS object_key, oss.type AS object_type, " +
+                "oss.distance, oss.angle, oss.direction " +
+                "FROM data.object_seen_state oss " +
+                "JOIN data.change_stimulus_state css ON oss.changestimulusstate_id = css.id " +
+                "WHERE css.key = ? ORDER BY css.time")
 })
 public class ObjectSeenState implements PersistenceState{
 	@Id 

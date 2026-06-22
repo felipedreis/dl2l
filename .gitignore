@@ -12,3 +12,6 @@ data/
 experiments/
 results/
 .DS_Store
+ml/data/
+ml/checkpoints/
+__pycache__/
