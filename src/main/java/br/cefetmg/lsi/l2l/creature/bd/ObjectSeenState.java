@@ -7,6 +7,14 @@ import javax.persistence.*;
 
 @Entity
 @Table(name="object_seen_state", schema="data")
+@NamedNativeQueries({
+    @NamedNativeQuery(name = "ObjectSeenState.getPerceptionsByCreature",
+        query = "SELECT css.key as creature_key, oss.type as object_type, " +
+                "oss.distance, oss.angle, css.time " +
+                "FROM data.object_seen_state oss " +
+                "JOIN data.change_stimulus_state css ON oss.changestimulusstate_id = css.id " +
+                "WHERE css.key = ?")
+})
 public class ObjectSeenState implements PersistenceState{
 	@Id 
 	@GeneratedValue

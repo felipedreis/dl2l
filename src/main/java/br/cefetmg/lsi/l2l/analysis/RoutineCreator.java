@@ -57,7 +57,8 @@ public class RoutineCreator {
                 new TraveledDistanceExtractor(em, ids),
                 new EatenNutrientsExtractor(em, ids),
                 new TracingExtractor(em, ids),
-                new TotalEnvironmentalStimuliChanged(em, ids)
+                new TotalEnvironmentalStimuliChanged(em, ids),
+                new PerceptionCoverageExtractor(em, ids)
         );
     }
 

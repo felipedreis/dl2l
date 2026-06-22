@@ -97,3 +97,13 @@ All JPA entities are in `creature/bd/` and `common/SequentialId`. EclipseLink is
 ## Data Analysis
 
 Python 2.7 scripts in `analysis/`. After simulation, copy the SLURM output directory back locally, set the `wd` variable in `exp1.py` / `exp2.py` / `exp3.py` / `tracing.py`, and run. Requires `numpy` and `scipy`.
+
+New JEPA-integration analysis scripts (`coverage_probe.py`, `reg_granularity.py`, …) are Python 3 + pandas + sklearn + matplotlib and follow the same `wd` convention. Run them with `python3 analysis/<script>.py`.
+
+## Development cycle
+
+Before implementing a feature:
+1. Read the relevant GitHub issue(s) and the HLD (`docs/hld/`) for design rationale.
+2. Write an implementation plan to `docs/plans/<descriptive-name>.md` (not in `~/.claude/plans/`).
+3. Get the plan approved, then implement.
+4. Verify with `mvn package` (must compile clean) and, where applicable, a simulation run + extractor run.
