@@ -5,6 +5,7 @@
 **Epic:** [#6](https://github.com/felipedreis/dl2l/issues/6), Issues [#22](https://github.com/felipedreis/dl2l/issues/22), [#23](https://github.com/felipedreis/dl2l/issues/23)  
 **Date:** 2026-06-23  
 **Simulation config:** `simulations/exp_p4_1_eligibility_traces.conf` (3 creatures, 180 apples)  
+**Creature lifetimes:** 59 min (creature 182), 92 min (creature 181), 95 min (creature 180)  
 **Analysis script:** `analysis/eligibility_traces.py`
 
 ---
@@ -51,17 +52,17 @@ Phase 4 adds the credit-assignment link that the architecture never represented:
 
 ### 4.1 Engram production
 
-The simulation produced **153,684 engrams** across 3 creatures before the snapshot was taken (creatures still alive; simulation ongoing). The mechanism triggered at every non-zero homeostatic regulation event as intended.
+The simulation produced **577,102 engrams** across 3 creatures over their full lifetimes (59–95 minutes). The mechanism triggered at every non-zero homeostatic regulation event as intended.
 
 | Action type | Engrams | % of total | Avg cycle gap | Avg eligibility | % negative Δ |
 |-------------|---------|------------|---------------|-----------------|--------------|
-| SLEEP       | 60,387  | 39.3%      | 11.65         | 0.3921          | 23.7%        |
-| AVOID       | 31,102  | 20.2%      | 11.87         | 0.3858          | 24.1%        |
-| WANDER      | 30,300  | 19.7%      | 11.23         | 0.4060          | 24.3%        |
-| APPROACH    | 29,719  | 19.3%      | 11.73         | 0.3874          | 24.2%        |
-| EAT         |  2,176  |  1.4%      | 11.77         | 0.3891          | 25.8%        |
+| SLEEP       | 226,685 | 39.3%      | 11.63         | 0.3892          | 23.1%        |
+| AVOID       | 119,159 | 20.6%      | 11.94         | 0.3796          | 23.6%        |
+| APPROACH    | 115,550 | 20.0%      | 11.87         | 0.3810          | 23.4%        |
+| WANDER      | 108,788 | 18.8%      | 11.26         | 0.4018          | 23.6%        |
+| EAT         |   6,920 |  1.2%      | 11.66         | 0.3902          | 24.5%        |
 
-**H1 — PASS.** All five action types appear in the store. SLEEP dominates because the creatures frequently select it as a low-cost action when no food is visible. EAT is rare (~1.4%) because it requires the creature to be at distance 0 from food.
+**H1 — PASS.** All five action types appear in the store. SLEEP dominates because the creatures frequently select it as a low-cost action when no food is visible. EAT is rare (~1.2%) because it requires the creature to be at distance 0 from food.
 
 ![Fig 1 — Engram count by action type per creature](fig1_engram_count_by_action.png)
 
@@ -91,9 +92,9 @@ The histogram of `cycle_gap` shows a broad distribution peaking around 5–15 cy
 
 ### 4.4 Emotion delta and valence
 
-The emotion delta distribution shows a bimodal character: a sharp positive spike (drive increase from AdrenergicStimulus, Δ ≈ +0.0015–0.003) and a spread of negative values (drive reduction from NutritiveStimulus/CholinergicStimulus). Overall, **24% of engrams carry a negative (beneficial) delta** and **76% carry a positive (adverse) delta**, reflecting the ecological reality that the creature is almost always slightly stressed or hungry.
+The emotion delta distribution shows a bimodal character: a sharp positive spike (drive increase from AdrenergicStimulus, Δ ≈ +0.0015–0.003) and a spread of negative values (drive reduction from NutritiveStimulus/CholinergicStimulus). Overall, **23.4% of engrams carry a negative (beneficial) delta** and **76.6% carry a positive (adverse) delta**, reflecting the ecological reality that the creature is almost always slightly stressed or hungry. These proportions are stable across the full simulation lifetime, confirming steady-state behaviour.
 
-EAT engrams have the highest `pct_neg` at **25.8%**, compared to WANDER at 24.3% and SLEEP at 23.7%.
+EAT engrams have the highest `pct_neg` at **24.5%**, compared to WANDER at 23.6% and SLEEP at 23.1%.
 
 **H4 — PASS (marginally).** EAT has a slightly higher beneficial rate than WANDER and SLEEP. The difference is small because:
 1. `NutritiveStimulus` (from eating) produces negative Δhunger — that's the beneficial signal
@@ -146,5 +147,5 @@ With `HALF_LIFE = 5` cycles and the observed inter-regulation gap of ~11 cycles 
 | Criterion | Status |
 |-----------|--------|
 | Delayed reward reinforces still-warm prior action (multi-cycle gap unit test) | **PASS** (unit tests + live simulation) |
-| Engrams appear in store with `(s_t, a_t, Δemotion)` populated | **PASS** (153,684 engrams with all fields) |
+| Engrams appear in store with `(s_t, a_t, Δemotion)` populated | **PASS** (577,102 engrams with all fields) |
 | Fast-path valuation (`OperantConditioning.varyProbability`) unchanged | **PASS** (no changes to Valuation.java or OperantConditioning) |
