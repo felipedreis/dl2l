@@ -40,6 +40,9 @@ public interface Creature {
     OperantConditioning operantConditioning();
     MemorySystem memory();
 
+    // Sleep-gated adapter consolidation
+    ActorRef memoryConsolidator();
+
     // Persistence component
     ActorRef bd();
 

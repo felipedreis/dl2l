@@ -11,6 +11,7 @@ import br.cefetmg.lsi.l2l.creature.common.Perception;
 import br.cefetmg.lsi.l2l.stimuli.AdrenergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.EmotionalStimulus;
 import br.cefetmg.lsi.l2l.stimuli.ProprioceptiveStimulus;
+import br.cefetmg.lsi.l2l.stimuli.AdenosinergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.Stimulus;
 import br.cefetmg.lsi.l2l.world.Self;
 import scala.concurrent.duration.Duration;
@@ -25,6 +26,8 @@ import java.util.stream.Collectors;
  */
 public class PartialAppraisal extends CreatureComponent {
 
+    private final CircadianClock circadian = new CircadianClock();
+
     public PartialAppraisal(SequentialId id) {
         super(id);
     }
@@ -32,7 +35,6 @@ public class PartialAppraisal extends CreatureComponent {
     @Override
     public void preStart() throws Exception {
         super.preStart();
-
     }
 
     @Override
@@ -51,6 +53,10 @@ public class PartialAppraisal extends CreatureComponent {
 
         AdrenergicStimulus adrenergic = new AdrenergicStimulus(this.id, nextStimulusId(), Constants.DELTA);
         creature.homeostatic().tell(adrenergic, self());
+
+        circadian.tick();
+        AdenosinergicStimulus sleepDrive = new AdenosinergicStimulus(this.id, nextStimulusId(), circadian.driveRate());
+        creature.homeostatic().tell(sleepDrive, self());
 
         List<Stimulus> propStimuli = (List) stimuli.stream()
                 .filter(s -> s instanceof ProprioceptiveStimulus)

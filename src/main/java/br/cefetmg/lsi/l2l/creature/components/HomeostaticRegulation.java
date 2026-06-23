@@ -9,7 +9,9 @@ import br.cefetmg.lsi.l2l.creature.bd.InternalDynamicState;
 import br.cefetmg.lsi.l2l.creature.bd.RegulationBatchStat;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
+import br.cefetmg.lsi.l2l.creature.ml.WakeUp;
 import br.cefetmg.lsi.l2l.stimuli.*;
+import br.cefetmg.lsi.l2l.stimuli.AdenosinergicStimulus;
 import br.cefetmg.lsi.l2l.world.Self;
 
 import java.util.ArrayList;
@@ -59,11 +61,20 @@ public class HomeostaticRegulation extends CreatureComponent {
                         stimulus.origin, nutritive.objectType, ActionType.EAT, regulated, -nutritive.nutritiveValue);
 
                 creature.valuation().tell(emitted, self());
+            } if (stimulus instanceof AdenosinergicStimulus) {
+                AdenosinergicStimulus drive = (AdenosinergicStimulus) stimulus;
+                creature.emotions().regulate(Constants.SLEEP, drive.delta);
+                // No EvaluationStimulus: drive accumulation is not a reinforceable event.
             } if (stimulus instanceof CholinergicStimulus) {
                 CholinergicStimulus cholinergic = (CholinergicStimulus) stimulus;
                 Emotion regulated = creature.emotions().regulate(Constants.SLEEP, -cholinergic.delta);
                 emitted = new EvaluationStimulus(stimulus.origin, nextStimulusId(), id, Self.get(), ActionType.SLEEP,
                     regulated, -cholinergic.delta);
+                // Sleep drive satisfied → creature is waking; abort any ongoing consolidation.
+                if (regulated.getLevel() <= 0) {
+                    logger.info(String.format("HomeostaticRegulation[%s]: sleep drive exhausted, sending WakeUp", id));
+                    creature.memoryConsolidator().tell(new WakeUp(), self());
+                }
             }
 
 

@@ -12,6 +12,7 @@ import akka.japi.pf.ReceiveBuilder;
 import akka.pattern.Patterns;
 import akka.util.Timeout;
 import br.cefetmg.lsi.l2l.analysis.DataAnalyser;
+import br.cefetmg.lsi.l2l.creature.ml.MLServiceExtension;
 import br.cefetmg.lsi.l2l.cluster.settings.Simulation;
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.common.SequentialId;
@@ -81,6 +82,9 @@ public class Holder extends AbstractActor implements Registrable {
         super.preStart();
         cluster.subscribe(self(), MemberUp.class);
         logger.setLevel(Level.SEVERE);
+        // Eagerly load the species ML models once for this JVM node.
+        // Fails fast here (before any creature spawns) if the model contract is invalid.
+        MLServiceExtension.of(context().system());
     }
 
     @Override
