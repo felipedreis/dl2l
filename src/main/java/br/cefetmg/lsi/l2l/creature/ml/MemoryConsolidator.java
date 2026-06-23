@@ -5,6 +5,7 @@ import ai.djl.engine.Engine;
 import ai.djl.ndarray.NDArray;
 import ai.djl.ndarray.NDList;
 import ai.djl.ndarray.NDManager;
+import ai.djl.ndarray.index.NDIndex;
 import ai.djl.ndarray.types.Shape;
 import ai.djl.repository.zoo.Criteria;
 import ai.djl.repository.zoo.ModelNotFoundException;
@@ -280,7 +281,9 @@ public class MemoryConsolidator extends UntypedActor {
             float[] actionHot = encodeAction(e.actionType());
             System.arraycopy(percFeats, 0, percData,   i * contract.inputDim,  contract.inputDim);
             System.arraycopy(actionHot, 0, actionData, i * contract.actionDim, contract.actionDim);
-            float delta = (float) e.emotionDelta();
+            // tanh maps emotionDelta to [-1, 1], preventing extreme target values
+            // that cause large loss gradients and eventual parameter explosion.
+            float delta = (float) Math.tanh(e.emotionDelta());
             Arrays.fill(targetData, i * contract.emotionDim, (i + 1) * contract.emotionDim, delta);
             weights[i] = (float) e.eligibility();
         }
@@ -289,6 +292,14 @@ public class MemoryConsolidator extends UntypedActor {
         NDArray actionBatch = mgr.create(actionData, new Shape(n, contract.actionDim));
         NDArray target      = mgr.create(targetData, new Shape(n, contract.emotionDim));
         NDArray weightArr   = mgr.create(weights,    new Shape(n));
+
+        // PyTorch accumulates .grad across backward calls without automatic zeroing.
+        // Without explicit zeroing, gradients grow unboundedly across batches, eventually
+        // causing parameter explosion and NaN loss (observed in EXP-P5-1, creature 180).
+        zeroGradients(encoderTrainer);
+        zeroGradients(adapterTrainer);
+        zeroGradients(predictorTrainer);
+        zeroGradients(criticTrainer);
 
         float lossValue;
         try (GradientCollector gc = Engine.getInstance().newGradientCollector()) {
@@ -332,6 +343,17 @@ public class MemoryConsolidator extends UntypedActor {
             }
         }
         return hot;
+    }
+
+    private static void zeroGradients(Trainer trainer) {
+        trainer.getModel().getBlock().getParameters().forEach(pair -> {
+            try {
+                NDArray arr = pair.getValue().getArray();
+                if (arr.hasGradient()) {
+                    arr.getGradient().set(new NDIndex("..."), 0f);
+                }
+            } catch (Exception ignored) {}
+        });
     }
 
     private static ZooModel<NDList, NDList> loadTrainable(Path modelDir, String name)
