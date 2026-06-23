@@ -10,5 +10,16 @@ public interface MemorySystem {
 
     List<ShortTermMemory> getMemories(SequentialId id);
 
-    List<ShortTermMemory> getRecentEngrams(int windowSize);
+    // Called by FullAppraisal at the start of each onReceive so all components
+    // share the same cognitive-cycle epoch.
+    void tickDecisionCycle();
+
+    long currentDecisionCycle();
+
+    // Returns the newly produced Engrams so callers can persist them.
+    List<Engram> reinforceWarmTraces(double emotionDelta, long currentCycle);
+
+    void addEngram(Engram engram);
+
+    List<Engram> getRecentEngrams(int windowSize);
 }

@@ -25,6 +25,7 @@
     <class>br.cefetmg.lsi.l2l.creature.bd.BodyState</class>
     <class>br.cefetmg.lsi.l2l.creature.bd.BehaviouralEfficiencyState</class>
     <class>br.cefetmg.lsi.l2l.creature.bd.RegulationBatchStat</class>
+    <class>br.cefetmg.lsi.l2l.creature.bd.EngramState</class>
 
     <properties>
         <property name="javax.persistence.jdbc.url" value="jdbc:postgresql://dl2l-db:5432/l2l"/>

@@ -35,4 +35,8 @@ public interface Constants {
     double MAX_AROUSAL_LEVEL = 7;
 
     int COMPLEX_TASK = 2;
+
+    int TRACE_DECAY_HALF_LIFE = 5;
+
+    double MIN_TRACE_ELIGIBILITY = 0.01;
 }

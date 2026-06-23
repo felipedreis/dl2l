@@ -8,6 +8,7 @@ import br.cefetmg.lsi.l2l.creature.bd.EmotionalState;
 import br.cefetmg.lsi.l2l.creature.bd.InternalDynamicState;
 import br.cefetmg.lsi.l2l.creature.bd.RegulationBatchStat;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
+import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.stimuli.*;
 import br.cefetmg.lsi.l2l.world.Self;
 
@@ -18,8 +19,17 @@ import java.util.List;
  * Created by felipe on 02/01/17.
  */
 public class HomeostaticRegulation extends CreatureComponent {
+
+    private MemorySystem memorySystem;
+
     public HomeostaticRegulation(SequentialId id) {
         super(id);
+    }
+
+    @Override
+    public void preStart() throws Exception {
+        super.preStart();
+        memorySystem = creature.memory();
     }
 
     @Override
@@ -60,6 +70,18 @@ public class HomeostaticRegulation extends CreatureComponent {
             EmotionalState after = new EmotionalState();
             after.setHunger(creature.emotions().getLevel(Constants.HUNGER));
             after.setSleep(creature.emotions().getLevel(Constants.SLEEP));
+
+            double delta = (after.getHunger() - before.getHunger())
+                         + (after.getSleep()  - before.getSleep());
+            if (delta != 0.0) {
+                List<br.cefetmg.lsi.l2l.creature.memory.Engram> produced =
+                        memorySystem.reinforceWarmTraces(delta, memorySystem.currentDecisionCycle());
+                for (br.cefetmg.lsi.l2l.creature.memory.Engram e : produced) {
+                    persist(new br.cefetmg.lsi.l2l.creature.bd.EngramState(
+                            id.key, e.actionType(), e.layCycle(), e.reinforcedCycle(),
+                            e.reinforcedCycle() - e.layCycle(), e.eligibility(), e.emotionDelta()));
+                }
+            }
 
             ChangeStimulusState change = new ChangeStimulusStateBuilder(this, this.id)
                     .buildOneReceivedOneEmitted(stimulus, emitted);
