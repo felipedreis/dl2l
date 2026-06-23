@@ -10,5 +10,9 @@ public interface MemorySystem {
 
     List<ShortTermMemory> getMemories(SequentialId id);
 
-    List<ShortTermMemory> getRecentEngrams(int windowSize);
+    void reinforceWarmTraces(double emotionDelta, long currentCycle);
+
+    void addEngram(Engram engram);
+
+    List<Engram> getRecentEngrams(int windowSize);
 }

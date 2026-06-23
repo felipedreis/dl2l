@@ -8,6 +8,7 @@ import br.cefetmg.lsi.l2l.creature.bd.EmotionalState;
 import br.cefetmg.lsi.l2l.creature.bd.InternalDynamicState;
 import br.cefetmg.lsi.l2l.creature.bd.RegulationBatchStat;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
+import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.stimuli.*;
 import br.cefetmg.lsi.l2l.world.Self;
 
@@ -18,14 +19,25 @@ import java.util.List;
  * Created by felipe on 02/01/17.
  */
 public class HomeostaticRegulation extends CreatureComponent {
+
+    private MemorySystem memorySystem;
+    private long cognitiveCycle = 0;
+
     public HomeostaticRegulation(SequentialId id) {
         super(id);
+    }
+
+    @Override
+    public void preStart() throws Exception {
+        super.preStart();
+        memorySystem = creature.memory();
     }
 
     @Override
     public void onReceive(Object message) {
         List stimuli = (List) message;
 
+        cognitiveCycle++;
         int batchSize = stimuli.size();
         int regulatingCount = 0, hungerHits = 0, sleepHits = 0, drivesTouchedMask = 0;
 
@@ -60,6 +72,12 @@ public class HomeostaticRegulation extends CreatureComponent {
             EmotionalState after = new EmotionalState();
             after.setHunger(creature.emotions().getLevel(Constants.HUNGER));
             after.setSleep(creature.emotions().getLevel(Constants.SLEEP));
+
+            double delta = (after.getHunger() - before.getHunger())
+                         + (after.getSleep()  - before.getSleep());
+            if (delta != 0.0) {
+                memorySystem.reinforceWarmTraces(delta, cognitiveCycle);
+            }
 
             ChangeStimulusState change = new ChangeStimulusStateBuilder(this, this.id)
                     .buildOneReceivedOneEmitted(stimulus, emitted);
