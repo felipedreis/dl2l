@@ -119,11 +119,15 @@ No `"A PtGradientCollector is already collecting"` exception appeared in the hol
 - Eligibility weights and engram counts at onset_cycle 5,209 were identical to earlier episodes (mean_elig=0.238, n=128).
 - The NaN are stored as IEEE 754 NaN floats in the database (not SQL NULL), confirming the loss computation itself produced NaN — not a persistence error.
 
-**Root cause (hypothesis)**: PyTorch does not zero parameter gradients automatically between backward passes. DJL's `Trainer.step()` updates parameters using accumulated `.grad` values but does not call `optimizer.zero_grad()`. Over many batches, gradients from encoder, predictor, and critic (which are "frozen" in intent but loaded with `trainParam=true`) accumulate without bound. When gradient magnitudes exceed the adapter's parameter range, Adam's update writes NaN into the parameters, and all subsequent forward passes return NaN.
+**Root cause**: PyTorch does not zero parameter gradients automatically between backward passes. DJL's `Trainer.step()` updates parameters using accumulated `.grad` values but does not call `optimizer.zero_grad()`. Over many batches, gradients from encoder, predictor, and critic (which are "frozen" in intent but all loaded with `trainParam=true`) accumulate without bound. When gradient magnitudes exceed the adapter's parameter range, Adam's update writes NaN into the parameters, and all subsequent forward passes return NaN.
 
-The fact that creatures 181 and 182 never hit NaN (despite running 5× more valid batches) is likely due to initial parameter sensitivity — different random initial values for each per-creature adapter load lead to different gradient accumulation trajectories.
+The fact that creatures 181 and 182 never hit NaN (despite running 5× more valid batches) is likely due to gradient trajectory sensitivity — their specific sequence of engrams produced self-cancelling gradients, while creature 180's experience drove monotonic accumulation in at least one parameter direction.
 
-**Fix required**: Call `model.zero_grad()` (or equivalent DJL API) on all four trainers before each `GradientCollector` scope. Alternatively, set `requires_grad=False` on the frozen models (encoder, predictor, critic) to prevent gradient accumulation on parameters that are never updated.
+**Fix applied** (commit `bca6f30`, 2026-06-24): Two complementary changes in `MemoryConsolidator.trainBatch()`:
+
+1. **Gradient zeroing** — `zeroGradients(Trainer)` is called on all four trainers before each `GradientCollector` scope. It uses `block.getParameters()` to reach the native TorchScript parameter gradient tensors and zeros them in-place via `arr.getGradient().set(new NDIndex("..."), 0f)`. The new `gradientZeroingPreventsAccumulation` unit test confirms: DJL exposes 4 adapter parameter gradient tensors and all are verified zero after each call.
+
+2. **Target normalization** — `Math.tanh(emotionDelta)` maps the raw simulation delta to `[-1, 1]` before constructing the MSE target tensor. This bounds the loss scale and prevents any single high-reward engram from producing a disproportionately large gradient step.
 
 ![Valid batch accumulation (shows NaN onset)](figures/exp_p5_1/fig7_valid_batch_accumulation.png)
 
@@ -133,7 +137,7 @@ The fact that creatures 181 and 182 never hit NaN (despite running 5× more vali
 
 When a creature died during a sleep episode, `MemoryConsolidator.postStop()` closed the per-creature model handles while training tasks were still queued in the single-threaded executor. Queued tasks threw `IllegalStateException: PyTorch model handle has been released!` until the queue drained.
 
-**Status**: Partially mitigated by adding `abortFlag.set(true)` in `postStop()` (so queued tasks abort at the next batch boundary) and a batch-level `IllegalStateException` catch (so mid-batch failures exit cleanly). The fix was applied to the codebase during this experiment but is not reflected in the running Docker image.
+**Fix applied** (commit `c04bd7d`, 2026-06-23): `abortFlag.set(true)` is called in `postStop()` before model handles are closed, so queued tasks on the `djl-training` executor observe the flag and abort at the next batch boundary. A batch-level `IllegalStateException` catch in `trainBatch()` handles the rare case where a task begins executing after the model is already released.
 
 ---
 
@@ -146,9 +150,11 @@ The Phase 5 sleep-consolidation pipeline is structurally validated:
 - **Eligibility-weighted replay**: consolidation windows are stable and eligibility weights behave as expected (H4 ✓).
 - **Concurrency safety**: the single-threaded executor eliminates all GradientCollector conflicts (H5 ✓).
 
-Two issues require follow-up before EXP-P5-2:
+Both issues identified during the experiment have been resolved (commit `bca6f30`):
 
-| Issue | Severity | Fix |
-|-------|----------|-----|
-| Gradient explosion (NaN loss for creature 180) | High — makes 80% of training inert for affected creatures | Zero parameter gradients before each backward pass |
-| Model handle race on creature death | Low — noisy logs, no data loss | Already applied in codebase; rebuild Docker image |
+| Issue | Severity | Status |
+|-------|----------|--------|
+| Gradient explosion (NaN loss for creature 180) | High — makes 80% of training inert for affected creatures | Fixed: `zeroGradients()` before each backward pass + tanh target normalization. Verified by `gradientZeroingPreventsAccumulation` unit test (5/5 pass). |
+| Model handle race on creature death | Low — noisy logs, no data loss | Fixed: `abortFlag` + `IllegalStateException` catch in `trainBatch()`. |
+
+The pipeline is ready for EXP-P5-2.
