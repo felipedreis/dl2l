@@ -15,6 +15,8 @@ import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.creature.common.Perception;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.creature.memory.ShortTermMemory;
+import br.cefetmg.lsi.l2l.creature.bd.SleepEpisodeState;
+import br.cefetmg.lsi.l2l.creature.ml.SleepStarted;
 import br.cefetmg.lsi.l2l.stimuli.CorticalStimulus;
 import br.cefetmg.lsi.l2l.stimuli.EmotionalStimulus;
 import br.cefetmg.lsi.l2l.stimuli.Stimulus;
@@ -36,6 +38,9 @@ public class FullAppraisal extends CreatureComponent {
     private MemorySystem memorySystem;
 
     private long cognitiveCycle = 0;
+    private boolean inSleep = false;
+    private int sleepDwellTicks = 0;
+    private long sleepOnsetCycle = 0;
 
     public FullAppraisal(SequentialId id) {
         super(id);
@@ -56,13 +61,13 @@ public class FullAppraisal extends CreatureComponent {
     @Override
     public void onReceive(Object message) {
         List stimuli = (List) message;
-        cognitiveCycle++;
-        memorySystem.tickDecisionCycle();
 
         for (Object aStimuli : stimuli) {
             Stimulus stimulus = (Stimulus) aStimuli;
 
             if (stimulus instanceof EmotionalStimulus) {
+                cognitiveCycle++;
+                memorySystem.tickDecisionCycle();
                 EmotionalStimulus emotional = (EmotionalStimulus) stimulus;
                 List<Action> possibleActions = definePossibleActions(emotional.getPerceptions());
                 Action action = actionSelection.selectOne(possibleActions, emotional.getMaxEmotion());
@@ -80,6 +85,35 @@ public class FullAppraisal extends CreatureComponent {
 
                 logger.info(String.format("FullAppraisal[%s]: cortical angle=%.3f speed=%.3f",
                         id, cortical.angle, cortical.speed));
+
+                // Anti-micro-nap hysteresis: once asleep, hold SLEEP for at least
+                // MIN_SLEEP_TICKS cognitive cycles before allowing any wake transition.
+                if (inSleep && action.type != ActionType.SLEEP
+                        && sleepDwellTicks < Constants.MIN_SLEEP_TICKS) {
+                    action = new Action(ActionType.SLEEP, action.perception);
+                    cortical = produceCortical(action, emotional.behaviouralEfficiency);
+                }
+
+                // Update sleep state and fire consolidation signals.
+                if (action.type == ActionType.SLEEP) {
+                    if (!inSleep) {
+                        inSleep = true;
+                        sleepDwellTicks = 0;
+                        sleepOnsetCycle = cognitiveCycle;
+                        logger.info(String.format("FullAppraisal[%s]: SLEEP onset at cycle %d", id, cognitiveCycle));
+                        creature.memoryConsolidator().tell(new SleepStarted(cognitiveCycle), self());
+                    } else {
+                        sleepDwellTicks++;
+                    }
+                } else {
+                    if (inSleep) {
+                        logger.info(String.format("FullAppraisal[%s]: WAKE after %d sleep cycles at cycle %d",
+                                id, sleepDwellTicks, cognitiveCycle));
+                        persist(new SleepEpisodeState(id.key, sleepOnsetCycle, cognitiveCycle, sleepDwellTicks));
+                    }
+                    inSleep = false;
+                    sleepDwellTicks = 0;
+                }
 
                 creature.effectorCortex().tell(cortical, self());
 

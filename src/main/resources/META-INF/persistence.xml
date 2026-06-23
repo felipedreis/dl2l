@@ -27,6 +27,11 @@
     <class>br.cefetmg.lsi.l2l.creature.bd.RegulationBatchStat</class>
     <class>br.cefetmg.lsi.l2l.creature.bd.EngramState</class>
 
+    <!-- Phase 5: sleep episode and consolidation metrics -->
+    <class>br.cefetmg.lsi.l2l.creature.bd.SleepEpisodeState</class>
+    <class>br.cefetmg.lsi.l2l.creature.bd.ConsolidationEpisodeStat</class>
+    <class>br.cefetmg.lsi.l2l.creature.bd.ConsolidationBatchStat</class>
+
     <properties>
         <property name="javax.persistence.jdbc.url" value="jdbc:postgresql://dl2l-db:5432/l2l"/>
         <property name="javax.persistence.jdbc.password" value="postgres"/>

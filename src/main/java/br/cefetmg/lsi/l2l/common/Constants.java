@@ -39,4 +39,16 @@ public interface Constants {
     int TRACE_DECAY_HALF_LIFE = 5;
 
     double MIN_TRACE_ELIGIBILITY = 0.01;
+
+    int CONSOLIDATION_WINDOW = 128;
+
+    int CONSOLIDATION_BATCH_SIZE = 16;
+
+    int CIRCADIAN_PERIOD_TICKS = 200;
+
+    double BASE_SLEEP_DRIVE = 1e-3;
+
+    double CIRCADIAN_AMPLITUDE = 5e-4;
+
+    int MIN_SLEEP_TICKS = 10;
 }

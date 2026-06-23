@@ -15,6 +15,8 @@ import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioningActor;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystemActor;
+import br.cefetmg.lsi.l2l.creature.ml.MLServiceExtension;
+import br.cefetmg.lsi.l2l.creature.ml.MemoryConsolidator;
 import br.cefetmg.lsi.l2l.physics.CreaturePositioningAttr;
 import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
@@ -71,6 +73,8 @@ public class CreatureActor implements Creature {
 
     private MemorySystem memory;
 
+    private ActorRef consolidator;
+
     private ActorRef bdActor;
 
     private boolean alive;
@@ -120,6 +124,11 @@ public class CreatureActor implements Creature {
         memory = TypedActor.get(TypedActor.context())
                 .typedActorOf(new TypedProps<>(MemorySystem.class, MemorySystemActor::new), "memorySystem");
 
+        consolidator = context.actorOf(
+                Props.create(MemoryConsolidator.class, () -> new MemoryConsolidator(id.key))
+                        .withDispatcher("wm-dispatcher"),
+                "memoryConsolidator");
+
         //bdActor = context.system().actorOf(Props.create(BDActor.class, em)
         //        .withDispatcher("bd-dispatcher"), "db");
 
@@ -151,6 +160,7 @@ public class CreatureActor implements Creature {
         for (Pair<SequentialId, ActorRef> p : components.values()) {
             TypedActor.context().stop(p.second);
         }
+        TypedActor.context().stop(consolidator);
 
         em.getTransaction().begin();
         em.persist(state);
@@ -234,6 +244,11 @@ public class CreatureActor implements Creature {
     @Override
     public MemorySystem memory() {
         return memory;
+    }
+
+    @Override
+    public ActorRef memoryConsolidator() {
+        return consolidator;
     }
 
     @Override

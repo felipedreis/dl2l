@@ -3,7 +3,9 @@ package br.cefetmg.lsi.l2l.creature.components;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
+import br.cefetmg.lsi.l2l.creature.bd.EngramState;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
+import br.cefetmg.lsi.l2l.creature.memory.Engram;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.creature.memory.ShortTermMemory;
 import br.cefetmg.lsi.l2l.stimuli.EvaluationStimulus;
@@ -56,6 +58,13 @@ public class Valuation extends CreatureComponent {
                         correspondingMemories.size()));
 
                 operantConditioning.varyProbability(evaluation.type, evaluation.executedAction, 1, valence);
+
+                List<Engram> produced = memorySystem.reinforceWarmTraces(
+                        evaluation.arousalVariation, memorySystem.currentDecisionCycle());
+                for (Engram e : produced) {
+                    persist(new EngramState(id.key, e.actionType(), e.layCycle(), e.reinforcedCycle(),
+                            e.reinforcedCycle() - e.layCycle(), e.eligibility(), e.emotionDelta()));
+                }
 
                 ChangeStimulusState change = new ChangeStimulusStateBuilder(this, this.id)
                         .buildOneReceivedOneEmitted(evaluation, null);

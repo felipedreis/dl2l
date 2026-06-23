@@ -86,7 +86,9 @@ public class RoutineCreator {
                 new ChosenActionStateExtractor(em, id),
                 new InternalDynamicStateExtractor(em, id),
                 new TrajectoryPerceptionExtractor(em, id),
-                new EngramStateExtractor(em, id)
+                new EngramStateExtractor(em, id),
+                new SleepEpisodeExtractor(em, id),
+                new ConsolidationBatchExtractor(em, id)
         );
         
     }

@@ -138,6 +138,31 @@
             <artifactId>jackson-databind</artifactId>
             <version>2.15.2</version>
         </dependency>
+
+        <!-- DJL: load species TorchScript models once per JVM node -->
+        <dependency>
+            <groupId>ai.djl</groupId>
+            <artifactId>api</artifactId>
+            <version>0.26.0</version>
+        </dependency>
+        <dependency>
+            <groupId>ai.djl.pytorch</groupId>
+            <artifactId>pytorch-engine</artifactId>
+            <version>0.26.0</version>
+        </dependency>
+        <!--
+          Platform-specific PyTorch native library.
+          For local dev (macOS ARM64): osx-aarch64
+          For Docker (Linux x86_64):   linux-x86_64
+          Swap the classifier or use a Maven profile per deployment target.
+        -->
+        <dependency>
+            <groupId>ai.djl.pytorch</groupId>
+            <artifactId>pytorch-native-cpu</artifactId>
+            <classifier>osx-aarch64</classifier>
+            <version>2.1.1</version>
+            <scope>runtime</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -178,6 +203,8 @@
                                 implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
                             <resource>reference.conf</resource>
                         </transformer>
+                        <transformer
+                                implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                         <transformer
                                 implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                             <manifestEntries>

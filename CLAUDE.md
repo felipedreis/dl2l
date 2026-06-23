@@ -67,6 +67,8 @@ Each creature is an Akka Typed actor (`CreatureActor`) that owns a set of compon
 
 Stimuli (all in `stimuli/`) are the messages between components. Actor messages between cluster nodes are in `cluster/Messages.java`. Messages must be immutable — actor model constraint.
 
+Internal creature components omit the `Actor` suffix in their class names (e.g. `HomeostaticRegulation`, `PartialAppraisal`, `MemoryConsolidator`). The `Actor` suffix is reserved for cluster-level or infrastructure actors (e.g. `CollisionDetectorActor`, `MemorySystemActor`).
+
 ## Configuration
 
 Two layers of config:
@@ -99,6 +101,18 @@ All JPA entities are in `creature/bd/` and `common/SequentialId`. EclipseLink is
 Python 2.7 scripts in `analysis/`. After simulation, copy the SLURM output directory back locally, set the `wd` variable in `exp1.py` / `exp2.py` / `exp3.py` / `tracing.py`, and run. Requires `numpy` and `scipy`.
 
 New JEPA-integration analysis scripts (`coverage_probe.py`, `reg_granularity.py`, …) are Python 3 + pandas + sklearn + matplotlib and follow the same `wd` convention. Run them with `python3 analysis/<script>.py`.
+
+## Akka Actor Anti-Patterns
+
+**Never share object instances directly between actors.** Actors must only communicate with the outside world through message passing. Holding a direct reference to a shared mutable object (e.g. a static singleton, a shared service instance) bypasses Akka's supervision hierarchy, breaks thread-safety guarantees, and is an anti-pattern.
+
+**Akka-idiomatic patterns for per-JVM singletons:**
+
+- **Akka Extension** (`AbstractExtensionId<T>`) — the canonical way to create a resource that is initialized exactly once per `ActorSystem` (= per JVM in DL2L). The extension class holds the heavy resource (e.g. a loaded ML model) and exposes an `ActorRef` to a dedicated service actor. Other actors get the ref via `MyExtension.get(context().system())`. No string-based lookup; lifecycle is tied to the ActorSystem.
+- **Well-known named actor + `actorSelection`** — simpler; start the actor once in `preStart()` via `system.actorOf(props, "serviceName")`, resolve elsewhere via `context().actorSelection("/user/serviceName")`. Already used in this codebase for `manager` and `collisionDetector`.
+- **Akka Cluster Singleton** (`ClusterSingletonManager`) — one actor per *cluster* (not per JVM). Use only when you truly need exactly one instance across all nodes.
+
+The Extension pattern is preferred for ML services because it guarantees one load per JVM node and avoids string-based actor selection.
 
 ## Development cycle
 
