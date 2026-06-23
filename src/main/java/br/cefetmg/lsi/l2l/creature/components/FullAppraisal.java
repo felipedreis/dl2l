@@ -35,6 +35,8 @@ public class FullAppraisal extends CreatureComponent {
 
     private MemorySystem memorySystem;
 
+    private long cognitiveCycle = 0;
+
     public FullAppraisal(SequentialId id) {
         super(id);
     }
@@ -54,6 +56,7 @@ public class FullAppraisal extends CreatureComponent {
     @Override
     public void onReceive(Object message) {
         List stimuli = (List) message;
+        cognitiveCycle++;
 
         for (Object aStimuli : stimuli) {
             Stimulus stimulus = (Stimulus) aStimuli;
@@ -63,7 +66,9 @@ public class FullAppraisal extends CreatureComponent {
                 List<Action> possibleActions = definePossibleActions(emotional.getPerceptions());
                 Action action = actionSelection.selectOne(possibleActions, emotional.getMaxEmotion());
 
-                ShortTermMemory stm = new ShortTermMemory(action.type, action.perception.id, emotional.maxEmotion);
+                ShortTermMemory stm = new ShortTermMemory(
+                        action.type, action.perception.id, emotional.maxEmotion,
+                        action.perception, cognitiveCycle);
                 memorySystem.addShortTermMemory(stm);
 
                 logger.info(String.format("FullAppraisal[%s]: selected=%s for=%s angle=%.3f dist=%.1f",

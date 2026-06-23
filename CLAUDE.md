@@ -103,7 +103,18 @@ New JEPA-integration analysis scripts (`coverage_probe.py`, `reg_granularity.py`
 ## Development cycle
 
 Before implementing a feature:
-1. Read the relevant GitHub issue(s) and the HLD (`docs/hld/`) for design rationale.
-2. Write an implementation plan to `docs/plans/<descriptive-name>.md` (not in `~/.claude/plans/`).
+0. user will prompt you with the issue/epic id in gitlab to start working
+1. You'll read the relevant GitHub issue(s) and the HLD (`docs/hld/`) for design rationale.
+2. Write an implementation plan to `docs/plans/<descriptive-name>.md` (not in `~/.claude/plans/`)
+    Note: this step is mandory, NEVER skip it and start implementing immediatelly
 3. Get the plan approved, then implement.
 4. Verify with `mvn package` (must compile clean) and, where applicable, a simulation run + extractor run.
+5. For testing you should run mini-experiments to verify the HLD hipotesis 
+    a. You should state the hipotesis and assumptions to the user
+    b. You should choose a relevant sample to test the hipotesis 
+    c. Whenever you can determine the size of the sample through an statistical method, do it
+    d. You should create the experiment configuration and run it through docker
+    e. You should collect the data and analyse it with python
+    f. You should finally create a report in docs/reports folder 
+    g. The report should have the following sections: Purpose, Assumptions, Hypothesis, Results and Analysis 
+    h. You should include all the graphs and figures needed in your report 

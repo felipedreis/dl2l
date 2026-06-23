@@ -43,11 +43,9 @@ public class Valuation extends CreatureComponent {
                 EvaluationStimulus evaluation = (EvaluationStimulus) aStimuli;
 
                 List<ShortTermMemory> memories = memorySystem.getMemories(evaluation.objectId);
-                ShortTermMemory mem = new ShortTermMemory(evaluation.executedAction, evaluation.objectId,
-                        evaluation.regulatedEmotion);
 
-                List correspondingMemories = memories.stream()
-                        .filter(mem::equals)
+                List<ShortTermMemory> correspondingMemories = memories.stream()
+                        .filter(m -> m.actionType() == evaluation.executedAction)
                         .collect(Collectors.toList());
 
                 boolean valence = evaluation.arousalVariation < 0;
