@@ -16,6 +16,8 @@ public class MemorySystemActor implements MemorySystem {
     private final HashMap<SequentialId, List<ShortTermMemory>> byId = new HashMap<>();
     private final ArrayDeque<Engram> engrams = new ArrayDeque<>();
 
+    private long decisionCycle = 0;
+
     @Override
     public void addShortTermMemory(ShortTermMemory stm) {
         all.addLast(stm);
@@ -38,18 +40,32 @@ public class MemorySystemActor implements MemorySystem {
     }
 
     @Override
-    public void reinforceWarmTraces(double emotionDelta, long currentCycle) {
+    public void tickDecisionCycle() {
+        decisionCycle++;
+    }
+
+    @Override
+    public long currentDecisionCycle() {
+        return decisionCycle;
+    }
+
+    @Override
+    public List<Engram> reinforceWarmTraces(double emotionDelta, long currentCycle) {
+        List<Engram> produced = new ArrayList<>();
         for (ShortTermMemory trace : all) {
             long gap = currentCycle - trace.cognitiveCycle();
             if (gap < 0) continue;
             double eligibility = Math.exp(-LAMBDA * gap);
             if (eligibility < Constants.MIN_TRACE_ELIGIBILITY) continue;
 
-            addEngram(new Engram(
+            Engram engram = new Engram(
                     trace.actionType(), trace.id(), trace.emotion(),
                     trace.perception(), trace.cognitiveCycle(),
-                    emotionDelta * eligibility, currentCycle));
+                    emotionDelta * eligibility, eligibility, currentCycle);
+            addEngram(engram);
+            produced.add(engram);
         }
+        return produced;
     }
 
     @Override

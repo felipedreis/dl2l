@@ -105,6 +105,7 @@ public class MemorySystemActorTest {
         assertEquals(1L, result.get(0).layCycle());
         assertEquals(3L, result.get(0).reinforcedCycle());
         assertEquals(-0.5 * expectedEligibility, result.get(0).emotionDelta(), 1e-9);
+        assertEquals(expectedEligibility, result.get(0).eligibility(), 1e-9);
     }
 
     @Test

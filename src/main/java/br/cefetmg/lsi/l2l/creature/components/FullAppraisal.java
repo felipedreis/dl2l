@@ -57,6 +57,7 @@ public class FullAppraisal extends CreatureComponent {
     public void onReceive(Object message) {
         List stimuli = (List) message;
         cognitiveCycle++;
+        memorySystem.tickDecisionCycle();
 
         for (Object aStimuli : stimuli) {
             Stimulus stimulus = (Stimulus) aStimuli;

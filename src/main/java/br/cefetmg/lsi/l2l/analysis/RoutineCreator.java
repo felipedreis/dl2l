@@ -85,7 +85,8 @@ public class RoutineCreator {
                 new RegulationBatchCollisionsExtractor(em, id),
                 new ChosenActionStateExtractor(em, id),
                 new InternalDynamicStateExtractor(em, id),
-                new TrajectoryPerceptionExtractor(em, id)
+                new TrajectoryPerceptionExtractor(em, id),
+                new EngramStateExtractor(em, id)
         );
         
     }

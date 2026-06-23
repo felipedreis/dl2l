@@ -21,7 +21,6 @@ import java.util.List;
 public class HomeostaticRegulation extends CreatureComponent {
 
     private MemorySystem memorySystem;
-    private long cognitiveCycle = 0;
 
     public HomeostaticRegulation(SequentialId id) {
         super(id);
@@ -37,7 +36,6 @@ public class HomeostaticRegulation extends CreatureComponent {
     public void onReceive(Object message) {
         List stimuli = (List) message;
 
-        cognitiveCycle++;
         int batchSize = stimuli.size();
         int regulatingCount = 0, hungerHits = 0, sleepHits = 0, drivesTouchedMask = 0;
 
@@ -76,7 +74,13 @@ public class HomeostaticRegulation extends CreatureComponent {
             double delta = (after.getHunger() - before.getHunger())
                          + (after.getSleep()  - before.getSleep());
             if (delta != 0.0) {
-                memorySystem.reinforceWarmTraces(delta, cognitiveCycle);
+                List<br.cefetmg.lsi.l2l.creature.memory.Engram> produced =
+                        memorySystem.reinforceWarmTraces(delta, memorySystem.currentDecisionCycle());
+                for (br.cefetmg.lsi.l2l.creature.memory.Engram e : produced) {
+                    persist(new br.cefetmg.lsi.l2l.creature.bd.EngramState(
+                            id.key, e.actionType(), e.layCycle(), e.reinforcedCycle(),
+                            e.reinforcedCycle() - e.layCycle(), e.eligibility(), e.emotionDelta()));
+                }
             }
 
             ChangeStimulusState change = new ChangeStimulusStateBuilder(this, this.id)

@@ -14,6 +14,7 @@ public record Engram(
         Perception perception,
         long layCycle,
         double emotionDelta,
+        double eligibility,
         long reinforcedCycle
 ) implements Serializable {
 
