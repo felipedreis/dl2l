@@ -21,8 +21,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -70,6 +72,12 @@ public class MLServiceExtension extends AbstractExtensionId<MLServiceExtension.I
         private final ExecutorService trainingExecutor = Executors.newSingleThreadExecutor(
                 r -> { Thread t = new Thread(r, "djl-training"); t.setDaemon(true); return t; });
 
+        // Per-creature adapter registry: each creature gets its own adapter ZooModel
+        // loaded with trainParam=true so MemoryConsolidator can update weights in-place.
+        // WorldModelEngine reads from the same ZooModel during waking (temporal separation).
+        private final ConcurrentHashMap<Long, ZooModel<NDList, NDList>> perCreatureAdapters
+                = new ConcurrentHashMap<>();
+
         Impl(ExtendedActorSystem system) {
             try {
                 modelDir = extractModelsToTemp();
@@ -91,6 +99,10 @@ public class MLServiceExtension extends AbstractExtensionId<MLServiceExtension.I
                     models.encoder().close();
                     models.predictor().close();
                     models.critic().close();
+                    perCreatureAdapters.values().forEach(m -> {
+                        try { m.close(); } catch (Exception ignored) {}
+                    });
+                    perCreatureAdapters.clear();
                     trainingExecutor.shutdownNow();
                 });
 
@@ -113,6 +125,46 @@ public class MLServiceExtension extends AbstractExtensionId<MLServiceExtension.I
 
         public ExecutorService trainingExecutor() {
             return trainingExecutor;
+        }
+
+        /**
+         * Returns the per-creature adapter ZooModel, creating it on first call.
+         * Loaded with trainParam=true so MemoryConsolidator can train through it.
+         * WorldModelEngine opens its own Predictor from this same ZooModel.
+         */
+        public ZooModel<NDList, NDList> getOrCreateAdapter(long creatureKey) {
+            return perCreatureAdapters.computeIfAbsent(creatureKey, k -> {
+                try {
+                    return loadTrainable(modelDir, "species_adapter");
+                } catch (IOException | ModelNotFoundException | MalformedModelException e) {
+                    throw new IllegalStateException(
+                            "Failed to load per-creature adapter for creature " + k, e);
+                }
+            });
+        }
+
+        /** Closes and removes the per-creature adapter. Call from CreatureActor.kill(). */
+        public void releaseAdapter(long creatureKey) {
+            ZooModel<NDList, NDList> model = perCreatureAdapters.remove(creatureKey);
+            if (model != null) {
+                try { model.close(); } catch (Exception e) {
+                    logger.log(Level.WARNING,
+                            "MLServiceExtension: error closing adapter for creature " + creatureKey, e);
+                }
+            }
+        }
+
+        public static ZooModel<NDList, NDList> loadTrainable(Path modelDir, String name)
+                throws IOException, ModelNotFoundException, MalformedModelException {
+            return Criteria.builder()
+                    .setTypes(NDList.class, NDList.class)
+                    .optModelPath(modelDir)
+                    .optModelName(name)
+                    .optEngine("PyTorch")
+                    .optTranslator(new NoopTranslator())
+                    .optOption("trainParam", "true")
+                    .build()
+                    .loadModel();
         }
 
         private static Path extractModelsToTemp() throws IOException {
