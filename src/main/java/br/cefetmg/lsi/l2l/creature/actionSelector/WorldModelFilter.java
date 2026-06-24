@@ -12,7 +12,6 @@ import br.cefetmg.lsi.l2l.world.FruitType;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Mode-2 deliberative action filter.
@@ -69,9 +68,10 @@ public class WorldModelFilter implements ActionFilter {
             scored.add(new ScoredAction(action, engine.aversiveCost(prediction)));
         }
 
-        // Sort ascending: lowest aversive cost is most preferred
+        // Return only the best-predicted action so ActionSelection records WORLD_MODEL
+        // as the deciding filter and RandomFilter is bypassed for this cycle.
         scored.sort(Comparator.comparingDouble(s -> s.cost));
-        return scored.stream().map(s -> s.action).collect(Collectors.toList());
+        return List.of(scored.get(0).action);
     }
 
     @Override
