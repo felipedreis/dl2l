@@ -6,6 +6,10 @@ import br.cefetmg.lsi.l2l.creature.actionSelector.ActionProbabilityFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionSelection;
 import br.cefetmg.lsi.l2l.creature.actionSelector.RandomFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.TargetDistanceFilter;
+import br.cefetmg.lsi.l2l.creature.actionSelector.WorldModelFilter;
+import br.cefetmg.lsi.l2l.creature.ml.MLServiceExtension;
+import br.cefetmg.lsi.l2l.creature.ml.ModelContract;
+import br.cefetmg.lsi.l2l.creature.ml.WorldModelEngine;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
@@ -37,6 +41,8 @@ public class FullAppraisal extends CreatureComponent {
 
     private MemorySystem memorySystem;
 
+    private WorldModelEngine worldModelEngine;
+
     private long cognitiveCycle = 0;
     private boolean inSleep = false;
     private int sleepDwellTicks = 0;
@@ -51,11 +57,22 @@ public class FullAppraisal extends CreatureComponent {
         super.preStart();
         memorySystem = creature.memory();
 
+        MLServiceExtension.Impl mlExt = MLServiceExtension.of(context().system());
+        ModelContract contract = ModelContract.load(mlExt.modelDir());
+        worldModelEngine = new WorldModelEngine(mlExt, id.key);
+
         actionSelection = new ActionSelection(
                 new TargetDistanceFilter(),
                 new ActionProbabilityFilter(creature.operantConditioning()),
+                new WorldModelFilter(worldModelEngine, contract),
                 new RandomFilter()
         );
+    }
+
+    @Override
+    public void postStop() throws Exception {
+        super.postStop();
+        if (worldModelEngine != null) worldModelEngine.close();
     }
 
     @Override
