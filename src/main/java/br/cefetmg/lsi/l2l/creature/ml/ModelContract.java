@@ -23,12 +23,28 @@ public class ModelContract {
     private static final List<String> MODEL_FILES =
             List.of("species_adapter.pt", "species_critic.pt", "species_encoder.pt", "species_predictor.pt");
 
-    @JsonProperty("schema_version") public int schemaVersion;
-    @JsonProperty("input_dim")      public int inputDim;
-    @JsonProperty("latent_dim")     public int latentDim;
-    @JsonProperty("action_dim")     public int actionDim;
-    @JsonProperty("emotion_dim")    public int emotionDim;
-    @JsonProperty("model_hash")     public String modelHash;
+    @JsonProperty("schema_version")           public int schemaVersion;
+    @JsonProperty("input_dim")                public int inputDim;
+    @JsonProperty("latent_dim")               public int latentDim;
+    @JsonProperty("action_dim")               public int actionDim;
+    @JsonProperty("emotion_dim")              public int emotionDim;
+    @JsonProperty("model_hash")               public String modelHash;
+
+    @JsonProperty("emotion_index_order")      public List<String> emotionIndexOrder;
+    @JsonProperty("live_emotion_dims")        public List<Integer> liveEmotionDims;
+    @JsonProperty("action_index_order")       public List<String> actionIndexOrder;
+    @JsonProperty("perception_feature_order") public List<String> perceptionFeatureOrder;
+    @JsonProperty("min_arousal")              public double minArousal;
+    @JsonProperty("max_arousal")              public double maxArousal;
+    @JsonProperty("baseline_pred_error")      public double baselinePredError      = 1.0;
+    @JsonProperty("ood_threshold_multiplier") public double oodThresholdMultiplier = 2.0;
+
+    public int emotionIndexOf(String name) {
+        int idx = emotionIndexOrder.indexOf(name);
+        if (idx < 0) throw new IllegalStateException(
+                "Emotion '" + name + "' not found in model_contract emotion_index_order");
+        return idx;
+    }
 
     public static ModelContract load(Path modelDir) throws IOException {
         ObjectMapper mapper = new ObjectMapper();
