@@ -161,6 +161,7 @@ public class CreatureActor implements Creature {
             TypedActor.context().stop(p.second);
         }
         TypedActor.context().stop(consolidator);
+        MLServiceExtension.of(TypedActor.context().system()).releaseAdapter(id.key);
 
         em.getTransaction().begin();
         em.persist(state);

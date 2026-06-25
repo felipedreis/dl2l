@@ -1,14 +1,11 @@
 package br.cefetmg.lsi.l2l.creature.ml;
 
-import ai.djl.MalformedModelException;
 import ai.djl.engine.Engine;
 import ai.djl.ndarray.NDArray;
 import ai.djl.ndarray.NDList;
 import ai.djl.ndarray.NDManager;
 import ai.djl.ndarray.index.NDIndex;
 import ai.djl.ndarray.types.Shape;
-import ai.djl.repository.zoo.Criteria;
-import ai.djl.repository.zoo.ModelNotFoundException;
 import ai.djl.repository.zoo.ZooModel;
 import ai.djl.training.DefaultTrainingConfig;
 import ai.djl.training.GradientCollector;
@@ -16,7 +13,6 @@ import ai.djl.training.Trainer;
 import ai.djl.training.loss.Loss;
 import ai.djl.training.optimizer.Adam;
 import ai.djl.training.tracker.Tracker;
-import ai.djl.translate.NoopTranslator;
 import akka.actor.ActorRef;
 import akka.actor.TypedActor;
 import akka.actor.TypedProps;
@@ -109,10 +105,10 @@ public class MemoryConsolidator extends UntypedActor {
                         .optLearningRateTracker(Tracker.fixed(0.001f))
                         .build());
 
-        encoderModel   = loadTrainable(mlExt.modelDir(), "species_encoder");
-        adapterModel   = loadTrainable(mlExt.modelDir(), "species_adapter");
-        predictorModel = loadTrainable(mlExt.modelDir(), "species_predictor");
-        criticModel    = loadTrainable(mlExt.modelDir(), "species_critic");
+        encoderModel   = MLServiceExtension.Impl.loadTrainable(mlExt.modelDir(), "species_encoder");
+        adapterModel   = mlExt.getOrCreateAdapter(creatureKey);
+        predictorModel = MLServiceExtension.Impl.loadTrainable(mlExt.modelDir(), "species_predictor");
+        criticModel    = MLServiceExtension.Impl.loadTrainable(mlExt.modelDir(), "species_critic");
 
         encoderTrainer   = encoderModel.newTrainer(config);
         adapterTrainer   = adapterModel.newTrainer(config);
@@ -134,7 +130,7 @@ public class MemoryConsolidator extends UntypedActor {
         closeSilently(predictorTrainer);
         closeSilently(criticTrainer);
         closeSilently(encoderModel);
-        closeSilently(adapterModel);
+        // adapterModel is owned by MLServiceExtension; released via releaseAdapter() in CreatureActor.kill()
         closeSilently(predictorModel);
         closeSilently(criticModel);
         em.close();
@@ -356,18 +352,6 @@ public class MemoryConsolidator extends UntypedActor {
         });
     }
 
-    private static ZooModel<NDList, NDList> loadTrainable(Path modelDir, String name)
-            throws IOException, ModelNotFoundException, MalformedModelException {
-        return Criteria.builder()
-                .setTypes(NDList.class, NDList.class)
-                .optModelPath(modelDir)
-                .optModelName(name)
-                .optEngine("PyTorch")
-                .optTranslator(new NoopTranslator())
-                .optOption("trainParam", "true")
-                .build()
-                .loadModel();
-    }
 
     private record ConsolidationResult(List<ConsolidationBatchStat> batches, ConsolidationEpisodeStat episode) {}
 }

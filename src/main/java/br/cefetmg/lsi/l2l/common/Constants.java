@@ -28,8 +28,15 @@ public interface Constants {
     double FRUIT_RADIUS = 8;
 
 
-    String HUNGER = "hunger";
-    String SLEEP = "sleep";
+    String HUNGER   = "hunger";
+    String SLEEP    = "sleep";
+    String APATHY   = "apathy";
+    String STRESS   = "stress";
+    String PAIN     = "pain";
+    String TEDIUM   = "tedium";
+    String FEAR     = "fear";
+    String CURIOSITY = "curiosity";
+    String FERTILITY = "fertility";
 
     double MIN_AROUSAL_LEVEL = 0.18;
     double MAX_AROUSAL_LEVEL = 7;

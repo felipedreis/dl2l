@@ -15,8 +15,16 @@ public class EmotionalSystemActor implements EmotionalSystem {
 
     public EmotionalSystemActor(){
         simpleEmotions = new ArrayList<>();
-        simpleEmotions.add(new Emotion(Constants.HUNGER));
-        simpleEmotions.add(new Emotion(Constants.SLEEP));
+        // Order must match model_contract.json emotion_index_order (indices 0-8).
+        simpleEmotions.add(new Emotion(Constants.HUNGER));    // 0 — live
+        simpleEmotions.add(new Emotion(Constants.SLEEP));     // 1 — live
+        simpleEmotions.add(new Emotion(Constants.APATHY));    // 2 — placeholder
+        simpleEmotions.add(new Emotion(Constants.STRESS));    // 3 — placeholder
+        simpleEmotions.add(new Emotion(Constants.PAIN));      // 4 — placeholder
+        simpleEmotions.add(new Emotion(Constants.TEDIUM));    // 5 — placeholder
+        simpleEmotions.add(new Emotion(Constants.FEAR));      // 6 — placeholder
+        simpleEmotions.add(new Emotion(Constants.CURIOSITY)); // 7 — placeholder
+        simpleEmotions.add(new Emotion(Constants.FERTILITY)); // 8 — placeholder
     }
 
     @Override
@@ -51,6 +59,9 @@ public class EmotionalSystemActor implements EmotionalSystem {
 
     @Override
     public Emotion getMaxComplexArousal() {
-        throw new IllegalStateException("not implemented yet");
+        return simpleEmotions.stream()
+                .filter(e -> !e.getName().equals(Constants.HUNGER) && !e.getName().equals(Constants.SLEEP))
+                .max(Comparator.comparing(Emotion::getLevel))
+                .orElseGet(this::getMaxArousal);
     }
 }
