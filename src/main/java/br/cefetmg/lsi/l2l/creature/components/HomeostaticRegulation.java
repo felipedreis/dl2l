@@ -78,6 +78,18 @@ public class HomeostaticRegulation extends CreatureComponent {
                             stimulus.origin, noci.objectType, noci.action, regulated, noci.painIntensity);
                     creature.valuation().tell(emitted, self());
                 }
+            } if (stimulus instanceof AnalgesicStimulus) {
+                AnalgesicStimulus analgesic = (AnalgesicStimulus) stimulus;
+                // Clamp so pain never goes below zero.
+                double currentPain = creature.emotions().getLevel(Constants.PAIN);
+                double effectiveDelta = Math.min(analgesic.delta, Math.max(0, currentPain));
+                Emotion regulated = creature.emotions().regulate(Constants.PAIN, -effectiveDelta);
+                // Only reinforce deliberate healing (eating an aloe plant), not passive decay.
+                if (analgesic.action != null) {
+                    emitted = new EvaluationStimulus(stimulus.origin, nextStimulusId(),
+                            stimulus.origin, analgesic.objectType, analgesic.action, regulated, -effectiveDelta);
+                    creature.valuation().tell(emitted, self());
+                }
             } if (stimulus instanceof TediumStimulus) {
                 TediumStimulus tedium = (TediumStimulus) stimulus;
                 Emotion regulated = creature.emotions().regulate(Constants.TEDIUM, tedium.delta);

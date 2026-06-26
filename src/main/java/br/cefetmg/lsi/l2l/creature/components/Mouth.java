@@ -50,6 +50,9 @@ public class Mouth extends CreatureComponent{
             } else if (stimulus instanceof NociceptiveStimulus) {
                 // Active pain response from Plant (creature tried to eat the cactus).
                 creature.homeostatic().tell(stimulus, self());
+            } else if (stimulus instanceof AnalgesicStimulus) {
+                // Healing response from Plant (creature ate an aloe plant).
+                creature.homeostatic().tell(stimulus, self());
             } else if (stimulus instanceof EnergeticStimulus) {
                 EnergeticStimulus energetic = (EnergeticStimulus) stimulus;
                 NutritiveStimulus nutritive = new NutritiveStimulus(energetic.origin, nextStimulusId(),

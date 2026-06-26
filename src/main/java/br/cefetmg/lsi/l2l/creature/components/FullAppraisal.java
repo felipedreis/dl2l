@@ -244,9 +244,14 @@ public class FullAppraisal extends CreatureComponent {
                         actions.add(new Action(ActionType.AVOID, perception));
                         actions.add(new Action(ActionType.SLEEP, perception));
                     } else if (objectType instanceof PlantType) {
+                        PlantType plant = (PlantType) objectType;
                         actions.add(new Action(ActionType.EAT, perception));
                         actions.add(new Action(ActionType.AVOID, perception));
-                        actions.add(new Action(ActionType.ESCAPE, perception));
+                        if (plant.healAmount > 0) {
+                            actions.add(new Action(ActionType.SLEEP, perception));
+                        } else {
+                            actions.add(new Action(ActionType.ESCAPE, perception));
+                        }
                     } else if (objectType instanceof Self) {
                         actions.add(new Action(ActionType.SLEEP, perception));
                         actions.add(new Action(ActionType.WANDER, perception));

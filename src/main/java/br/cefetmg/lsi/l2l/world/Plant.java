@@ -5,6 +5,7 @@ import akka.actor.Props;
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
+import br.cefetmg.lsi.l2l.stimuli.AnalgesicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.DestructiveStimulus;
 import br.cefetmg.lsi.l2l.stimuli.NociceptiveStimulus;
 
@@ -24,11 +25,20 @@ public class Plant extends WorldObject {
     @Override
     public void onReceive(Object message) {
         if (message instanceof DestructiveStimulus) {
-            logger.info("Plant " + id + " was touched by creature — sending pain");
-            sender().tell(
-                new NociceptiveStimulus(id, nextStimulusId(), type.activePain, ActionType.EAT, type),
-                self());
-            // Plant does NOT notify its parent: it is permanent and never removed.
+            if (type.activePain > 0) {
+                logger.info("Plant " + id + " (" + type.name() + ") caused pain on eat");
+                sender().tell(
+                    new NociceptiveStimulus(id, nextStimulusId(), type.activePain, ActionType.EAT, type),
+                    self());
+                // Painful plants (cactus) are permanent — do not self-destruct.
+            } else if (type.healAmount > 0) {
+                logger.info("Plant " + id + " (" + type.name() + ") was eaten for healing");
+                sender().tell(
+                    new AnalgesicStimulus(id, nextStimulusId(), type.healAmount, ActionType.EAT, type),
+                    self());
+                // Healing plants are consumed — notify parent to remove.
+                context().parent().tell(id, self());
+            }
         } else {
             unhandled(message);
         }
