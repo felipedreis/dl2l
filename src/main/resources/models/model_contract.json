@@ -6,7 +6,9 @@
   "emotion_dim": 9,
   "live_emotion_dims": [
     0,
-    1
+    1,
+    4,
+    5
   ],
   "emotion_index_order": [
     "hunger",

@@ -7,6 +7,7 @@ import br.cefetmg.lsi.l2l.creature.bd.MouthInteractionState;
 import br.cefetmg.lsi.l2l.creature.bd.MouthInteractionType;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.stimuli.*;
+import br.cefetmg.lsi.l2l.world.PlantType;
 
 import java.util.List;
 
@@ -39,6 +40,19 @@ public class Mouth extends CreatureComponent{
                 TouchStimulus touchStimulus = new TouchStimulus(mechanical.origin, nextStimulusId(),
                         mechanical.objectType);
                 creature.sensoryCortex().tell(touchStimulus, self());
+
+                if (mechanical.objectType instanceof PlantType) {
+                    PlantType plant = (PlantType) mechanical.objectType;
+                    NociceptiveStimulus pain = new NociceptiveStimulus(
+                            mechanical.origin, nextStimulusId(), plant.passivePain, null, plant);
+                    creature.homeostatic().tell(pain, self());
+                }
+            } else if (stimulus instanceof NociceptiveStimulus) {
+                // Active pain response from Plant (creature tried to eat the cactus).
+                creature.homeostatic().tell(stimulus, self());
+            } else if (stimulus instanceof AnalgesicStimulus) {
+                // Healing response from Plant (creature ate an aloe plant).
+                creature.homeostatic().tell(stimulus, self());
             } else if (stimulus instanceof EnergeticStimulus) {
                 EnergeticStimulus energetic = (EnergeticStimulus) stimulus;
                 NutritiveStimulus nutritive = new NutritiveStimulus(energetic.origin, nextStimulusId(),

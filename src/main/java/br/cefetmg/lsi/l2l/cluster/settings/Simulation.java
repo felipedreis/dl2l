@@ -2,7 +2,9 @@ package br.cefetmg.lsi.l2l.cluster.settings;
 
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.world.FruitType;
+import br.cefetmg.lsi.l2l.world.PlantType;
 import br.cefetmg.lsi.l2l.world.PositionFactory;
+import br.cefetmg.lsi.l2l.world.WorldObjectType;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 
@@ -58,8 +60,7 @@ public class Simulation {
         for(Config worldObjectConfig : fullConfig.getConfigList("simulation.worldObjectSettings")) {
             WorldObjectSetting worldObjectSetting = new WorldObjectSetting();
             worldObjectSetting.setQuantity(worldObjectConfig.getInt("quantity"));
-            /// TODO if a world object is not a fruit (may be a predator, or a toy, or something else) it will crash
-            worldObjectSetting.setType(FruitType.valueOf(worldObjectConfig.getString("objectType")));
+            worldObjectSetting.setType(parseWorldObjectType(worldObjectConfig.getString("objectType")));
             worldObjectSettings.add(worldObjectSetting);
         }
 
@@ -104,5 +105,15 @@ public class Simulation {
 
     public boolean isReposition() {
         return reposition;
+    }
+
+    private static WorldObjectType parseWorldObjectType(String name) {
+        try {
+            return FruitType.valueOf(name);
+        } catch (IllegalArgumentException ignored) {}
+        try {
+            return PlantType.valueOf(name);
+        } catch (IllegalArgumentException ignored) {}
+        throw new IllegalArgumentException("Unknown world object type: " + name);
     }
 }

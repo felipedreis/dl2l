@@ -24,11 +24,14 @@ import br.cefetmg.lsi.l2l.creature.ml.SleepStarted;
 import br.cefetmg.lsi.l2l.stimuli.CorticalStimulus;
 import br.cefetmg.lsi.l2l.stimuli.EmotionalStimulus;
 import br.cefetmg.lsi.l2l.stimuli.Stimulus;
+import br.cefetmg.lsi.l2l.stimuli.TediumStimulus;
 import br.cefetmg.lsi.l2l.world.FruitType;
+import br.cefetmg.lsi.l2l.world.PlantType;
 import br.cefetmg.lsi.l2l.world.Self;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
@@ -97,6 +100,8 @@ public class FullAppraisal extends CreatureComponent {
                 logger.info(String.format("FullAppraisal[%s]: selected=%s for=%s angle=%.3f dist=%.1f",
                         id, action.type, action.perception.objectType,
                         action.perception.angle, action.perception.distance));
+
+                dispatchTediumStimulus(action.type);
 
                 CorticalStimulus cortical = produceCortical(action, emotional.behaviouralEfficiency);
 
@@ -180,6 +185,12 @@ public class FullAppraisal extends CreatureComponent {
                         + (2 * random.nextDouble() - 1) * Math.toRadians(Constants.MAX_ROTATE_ANGLE);
                 break;
 
+            case OBSERVE:
+                speed = 0;
+                focus = Constants.MAX_VISION_FIELD_OPENING;
+                angle = perception.angle;
+                break;
+
             case SLEEP:
                 speed = 0;
                 break;
@@ -189,38 +200,69 @@ public class FullAppraisal extends CreatureComponent {
         return cortical;
     }
 
-    private List<Action> definePossibleActions(List<Perception> perceptions) {
-        List<Action> actions = new ArrayList<>();
+    private void dispatchTediumStimulus(ActionType selectedAction) {
+        if (selectedAction == ActionType.SLEEP) return;
 
-
-        for (Perception perception : perceptions) {
-            if(perception.objectType.isDefined()) {
-                WorldObjectType objectType = perception.objectType.get();
-                /*
-                TODO add a condition to check if the current perception is in the same direction as the creature. If it its, the creature may approach, otherwise one must turn in that angle.
-                 */
-                if (perception.distance > 0) {
-                    if (objectType instanceof FruitType) {
-                        actions.add(new Action(ActionType.APPROACH, perception));
-                        actions.add(new Action(ActionType.AVOID, perception));
-                        actions.add(new Action(ActionType.SLEEP, perception));
-                    }
-                } else if (perception.distance == 0) {
-                    if (objectType instanceof FruitType) {
-                        actions.add(new Action(ActionType.EAT, perception));
-                        actions.add(new Action(ActionType.AVOID, perception));
-                        actions.add(new Action(ActionType.SLEEP, perception));
-                    } else if (objectType instanceof Self) {
-                        actions.add(new Action(ActionType.SLEEP, perception));
-                        actions.add(new Action(ActionType.WANDER, perception));
-                    }
-                }
-            } else {
-                actions.add(new Action(ActionType.SLEEP, perception));
-                actions.add(new Action(ActionType.WANDER, perception));
-            }
+        double delta;
+        if (selectedAction == ActionType.WANDER) {
+            delta = -Constants.TEDIUM_WANDER_RELIEF;
+        } else if (selectedAction == ActionType.OBSERVE) {
+            delta = Constants.TEDIUM_OBSERVE_RATE;
+        } else {
+            delta = Constants.TEDIUM_IDLE_RATE;
         }
 
+        creature.homeostatic().tell(
+                new TediumStimulus(id, nextStimulusId(), delta, selectedAction),
+                self());
+    }
+
+    private List<Action> definePossibleActions(List<Perception> perceptions) {
+        List<Action> actions = new ArrayList<>();
+        for (Perception perception : perceptions) {
+            actions.addAll(actionsForPerception(perception));
+        }
         return actions;
+    }
+
+    private List<Action> actionsForPerception(Perception perception) {
+        if (!perception.objectType.isDefined()) {
+            return Arrays.asList(
+                new Action(ActionType.SLEEP, perception),
+                new Action(ActionType.WANDER, perception),
+                new Action(ActionType.OBSERVE, perception)
+            );
+        }
+        WorldObjectType type = perception.objectType.get();
+        if (type instanceof Self) {
+            return Arrays.asList(
+                new Action(ActionType.SLEEP, perception),
+                new Action(ActionType.WANDER, perception)
+            );
+        }
+        if (perception.distance > 0) {
+            return actionsAtDistance(perception);
+        }
+        return actionsAtContact(perception, type);
+    }
+
+    private List<Action> actionsAtDistance(Perception perception) {
+        return Arrays.asList(
+            new Action(ActionType.APPROACH, perception),
+            new Action(ActionType.AVOID, perception),
+            new Action(ActionType.SLEEP, perception),
+            new Action(ActionType.OBSERVE, perception)
+        );
+    }
+
+    private List<Action> actionsAtContact(Perception perception, WorldObjectType type) {
+        // Painful plants (no heal) trigger escape instead of rest.
+        ActionType restOrEscape = (type instanceof PlantType && ((PlantType) type).healAmount == 0)
+                ? ActionType.ESCAPE : ActionType.SLEEP;
+        return Arrays.asList(
+            new Action(ActionType.EAT, perception),
+            new Action(ActionType.AVOID, perception),
+            new Action(restOrEscape, perception)
+        );
     }
 }

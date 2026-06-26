@@ -38,6 +38,13 @@ public interface Constants {
     String CURIOSITY = "curiosity";
     String FERTILITY = "fertility";
 
+    double TEDIUM_IDLE_RATE     = 2e-2;
+    double TEDIUM_OBSERVE_RATE  = 5e-2;
+    double TEDIUM_WANDER_RELIEF = 5e-2;
+
+    double PAIN_IMMUNE_THRESHOLD = 0.2;
+    double PAIN_IMMUNE_RATE      = 5e-3;
+
     double MIN_AROUSAL_LEVEL = 0.18;
     double MAX_AROUSAL_LEVEL = 7;
 

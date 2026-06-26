@@ -21,6 +21,8 @@ import br.cefetmg.lsi.l2l.creature.CreatureActor;
 import br.cefetmg.lsi.l2l.stimuli.ExternalStimulus;
 import br.cefetmg.lsi.l2l.world.Fruit;
 import br.cefetmg.lsi.l2l.world.FruitType;
+import br.cefetmg.lsi.l2l.world.Plant;
+import br.cefetmg.lsi.l2l.world.PlantType;
 import br.cefetmg.lsi.l2l.world.PositionFactory;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 import scala.concurrent.Await;
@@ -146,6 +148,14 @@ public class Holder extends AbstractActor implements Registrable {
             worldObjects.put(id, worldObject);
             worldObjecttypes.put(id, type);
             logger.info("Created a new world object with id " + id);
+        } else if (type instanceof PlantType) {
+            ActorRef worldObject = context().actorOf(
+                    Plant.props(id, type, factory.nextPosition(), collisionDetector),
+                    "object-" + id.toString());
+
+            worldObjects.put(id, worldObject);
+            worldObjecttypes.put(id, type);
+            logger.info("Created a new plant world object with id " + id);
         }
     }
 
