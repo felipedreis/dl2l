@@ -31,6 +31,7 @@ import br.cefetmg.lsi.l2l.world.Self;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
@@ -218,52 +219,50 @@ public class FullAppraisal extends CreatureComponent {
 
     private List<Action> definePossibleActions(List<Perception> perceptions) {
         List<Action> actions = new ArrayList<>();
-
-
         for (Perception perception : perceptions) {
-            if(perception.objectType.isDefined()) {
-                WorldObjectType objectType = perception.objectType.get();
-                /*
-                TODO add a condition to check if the current perception is in the same direction as the creature. If it its, the creature may approach, otherwise one must turn in that angle.
-                 */
-                if (perception.distance > 0) {
-                    if (objectType instanceof FruitType) {
-                        actions.add(new Action(ActionType.APPROACH, perception));
-                        actions.add(new Action(ActionType.AVOID, perception));
-                        actions.add(new Action(ActionType.SLEEP, perception));
-                        actions.add(new Action(ActionType.OBSERVE, perception));
-                    } else if (objectType instanceof PlantType) {
-                        actions.add(new Action(ActionType.APPROACH, perception));
-                        actions.add(new Action(ActionType.AVOID, perception));
-                        actions.add(new Action(ActionType.SLEEP, perception));
-                        actions.add(new Action(ActionType.OBSERVE, perception));
-                    }
-                } else if (perception.distance == 0) {
-                    if (objectType instanceof FruitType) {
-                        actions.add(new Action(ActionType.EAT, perception));
-                        actions.add(new Action(ActionType.AVOID, perception));
-                        actions.add(new Action(ActionType.SLEEP, perception));
-                    } else if (objectType instanceof PlantType) {
-                        PlantType plant = (PlantType) objectType;
-                        actions.add(new Action(ActionType.EAT, perception));
-                        actions.add(new Action(ActionType.AVOID, perception));
-                        if (plant.healAmount > 0) {
-                            actions.add(new Action(ActionType.SLEEP, perception));
-                        } else {
-                            actions.add(new Action(ActionType.ESCAPE, perception));
-                        }
-                    } else if (objectType instanceof Self) {
-                        actions.add(new Action(ActionType.SLEEP, perception));
-                        actions.add(new Action(ActionType.WANDER, perception));
-                    }
-                }
-            } else {
-                actions.add(new Action(ActionType.SLEEP, perception));
-                actions.add(new Action(ActionType.WANDER, perception));
-                actions.add(new Action(ActionType.OBSERVE, perception));
-            }
+            actions.addAll(actionsForPerception(perception));
         }
-
         return actions;
+    }
+
+    private List<Action> actionsForPerception(Perception perception) {
+        if (!perception.objectType.isDefined()) {
+            return Arrays.asList(
+                new Action(ActionType.SLEEP, perception),
+                new Action(ActionType.WANDER, perception),
+                new Action(ActionType.OBSERVE, perception)
+            );
+        }
+        WorldObjectType type = perception.objectType.get();
+        if (type instanceof Self) {
+            return Arrays.asList(
+                new Action(ActionType.SLEEP, perception),
+                new Action(ActionType.WANDER, perception)
+            );
+        }
+        if (perception.distance > 0) {
+            return actionsAtDistance(perception);
+        }
+        return actionsAtContact(perception, type);
+    }
+
+    private List<Action> actionsAtDistance(Perception perception) {
+        return Arrays.asList(
+            new Action(ActionType.APPROACH, perception),
+            new Action(ActionType.AVOID, perception),
+            new Action(ActionType.SLEEP, perception),
+            new Action(ActionType.OBSERVE, perception)
+        );
+    }
+
+    private List<Action> actionsAtContact(Perception perception, WorldObjectType type) {
+        // Painful plants (no heal) trigger escape instead of rest.
+        ActionType restOrEscape = (type instanceof PlantType && ((PlantType) type).healAmount == 0)
+                ? ActionType.ESCAPE : ActionType.SLEEP;
+        return Arrays.asList(
+            new Action(ActionType.EAT, perception),
+            new Action(ActionType.AVOID, perception),
+            new Action(restOrEscape, perception)
+        );
     }
 }

@@ -9,9 +9,7 @@ import br.cefetmg.lsi.l2l.creature.bd.InternalDynamicState;
 import br.cefetmg.lsi.l2l.creature.bd.RegulationBatchStat;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.creature.ml.WakeUp;
-import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.stimuli.*;
-import br.cefetmg.lsi.l2l.stimuli.AdenosinergicStimulus;
 import br.cefetmg.lsi.l2l.world.Self;
 
 import java.util.ArrayList;
@@ -36,99 +34,112 @@ public class HomeostaticRegulation extends CreatureComponent {
         for (Object aStimuli : stimuli) {
             Stimulus stimulus = (Stimulus) aStimuli;
 
-            EmotionalState before = new EmotionalState();
-            before.setHunger(creature.emotions().getLevel(Constants.HUNGER));
-            before.setSleep(creature.emotions().getLevel(Constants.SLEEP));
-
-            Stimulus emitted = null;
-
-            if (stimulus instanceof AdrenergicStimulus) {
-                AdrenergicStimulus adrenergic = (AdrenergicStimulus) stimulus;
-                creature.emotions().regulateAll(adrenergic.delta);
-            } if (stimulus instanceof NutritiveStimulus) {
-                NutritiveStimulus nutritive = (NutritiveStimulus) stimulus;
-                Emotion regulated = creature.emotions().regulate(Constants.HUNGER, -nutritive.nutritiveValue);
-
-                emitted = new EvaluationStimulus(stimulus.origin, nextStimulusId(),
-                        stimulus.origin, nutritive.objectType, ActionType.EAT, regulated, -nutritive.nutritiveValue);
-
-                creature.valuation().tell(emitted, self());
-            } if (stimulus instanceof AdenosinergicStimulus) {
-                AdenosinergicStimulus drive = (AdenosinergicStimulus) stimulus;
-                creature.emotions().regulate(Constants.SLEEP, drive.delta);
-                // No EvaluationStimulus: drive accumulation is not a reinforceable event.
-            } if (stimulus instanceof CholinergicStimulus) {
-                CholinergicStimulus cholinergic = (CholinergicStimulus) stimulus;
-                Emotion regulated = creature.emotions().regulate(Constants.SLEEP, -cholinergic.delta);
-                emitted = new EvaluationStimulus(stimulus.origin, nextStimulusId(), id, Self.get(), ActionType.SLEEP,
-                    regulated, -cholinergic.delta);
-                creature.valuation().tell(emitted, self());
-                // Sleep drive satisfied → creature is waking; abort any ongoing consolidation.
-                if (regulated.getLevel() <= 0) {
-                    logger.info(String.format("HomeostaticRegulation[%s]: sleep drive exhausted, sending WakeUp", id));
-                    creature.memoryConsolidator().tell(new WakeUp(), self());
-                }
-            } if (stimulus instanceof NociceptiveStimulus) {
-                NociceptiveStimulus noci = (NociceptiveStimulus) stimulus;
-                Emotion regulated = creature.emotions().regulate(Constants.PAIN, noci.painIntensity);
-                // Only send EvaluationStimulus for deliberate actions (active EAT on cactus).
-                // Passive collision pain drives avoidance through arousal alone.
-                if (noci.action != null) {
-                    emitted = new EvaluationStimulus(stimulus.origin, nextStimulusId(),
-                            stimulus.origin, noci.objectType, noci.action, regulated, noci.painIntensity);
-                    creature.valuation().tell(emitted, self());
-                }
-            } if (stimulus instanceof AnalgesicStimulus) {
-                AnalgesicStimulus analgesic = (AnalgesicStimulus) stimulus;
-                // Clamp so pain never goes below zero.
-                double currentPain = creature.emotions().getLevel(Constants.PAIN);
-                double effectiveDelta = Math.min(analgesic.delta, Math.max(0, currentPain));
-                Emotion regulated = creature.emotions().regulate(Constants.PAIN, -effectiveDelta);
-                // Only reinforce deliberate healing (eating an aloe plant), not passive decay.
-                if (analgesic.action != null) {
-                    emitted = new EvaluationStimulus(stimulus.origin, nextStimulusId(),
-                            stimulus.origin, analgesic.objectType, analgesic.action, regulated, -effectiveDelta);
-                    creature.valuation().tell(emitted, self());
-                }
-            } if (stimulus instanceof TediumStimulus) {
-                TediumStimulus tedium = (TediumStimulus) stimulus;
-                Emotion regulated = creature.emotions().regulate(Constants.TEDIUM, tedium.delta);
-                // Reinforce WANDER (tedium falls) and penalise OBSERVE (tedium rises).
-                if (tedium.action == ActionType.WANDER || tedium.action == ActionType.OBSERVE) {
-                    emitted = new EvaluationStimulus(stimulus.origin, nextStimulusId(),
-                            id, Self.get(), tedium.action, regulated, tedium.delta);
-                    creature.valuation().tell(emitted, self());
-                }
-            }
-
-            EmotionalState after = new EmotionalState();
-            after.setHunger(creature.emotions().getLevel(Constants.HUNGER));
-            after.setSleep(creature.emotions().getLevel(Constants.SLEEP));
+            EmotionalState before = emotionalSnapshot();
+            Stimulus emitted = dispatch(stimulus);
+            EmotionalState after = emotionalSnapshot();
 
             ChangeStimulusState change = new ChangeStimulusStateBuilder(this, this.id)
                     .buildOneReceivedOneEmitted(stimulus, emitted);
-            InternalDynamicState dynamicState = new InternalDynamicState(before, after, change);
+            persist(change, new InternalDynamicState(before, after, change));
 
-            persist(change, dynamicState);
-
-            if (stimulus instanceof NutritiveStimulus)       { regulatingCount++; hungerHits++; drivesTouchedMask |= 1; }
+            if (stimulus instanceof NutritiveStimulus)        { regulatingCount++; hungerHits++; drivesTouchedMask |= 1; }
             else if (stimulus instanceof CholinergicStimulus) { regulatingCount++; sleepHits++; drivesTouchedMask |= 2; }
             else if (stimulus instanceof AdrenergicStimulus)  { regulatingCount++; drivesTouchedMask |= 1 | 2; }
         }
 
-        // Immune feedback: pain above threshold triggers proportional decay each batch.
-        double currentPain = creature.emotions().getLevel(Constants.PAIN);
-        if (currentPain > Constants.PAIN_IMMUNE_THRESHOLD) {
-            double immune = Math.min(Constants.PAIN_IMMUNE_RATE, currentPain - Constants.PAIN_IMMUNE_THRESHOLD);
-            creature.emotions().regulate(Constants.PAIN, -immune);
-            logger.fine(String.format("HomeostaticRegulation[%s]: immune pain decay=%.4f remaining=%.3f",
-                    id, immune, creature.emotions().getLevel(Constants.PAIN)));
-        }
+        triggerImmuneResponseIfNeeded();
 
         boolean sameDriveCollision = (hungerHits >= 2) || (sleepHits >= 2);
         ChangeStimulusState batchChange = new ChangeStimulusStateBuilder(this, this.id)
                 .buildMultipleReceivedOneEmitted(new ArrayList<>(), null);
         persist(batchChange, new RegulationBatchStat(batchSize, regulatingCount,
                 sameDriveCollision, drivesTouchedMask, batchChange));
+    }
+
+    private EmotionalState emotionalSnapshot() {
+        EmotionalState s = new EmotionalState();
+        s.setHunger(creature.emotions().getLevel(Constants.HUNGER));
+        s.setSleep(creature.emotions().getLevel(Constants.SLEEP));
+        return s;
+    }
+
+    private Stimulus dispatch(Stimulus stimulus) {
+        if (stimulus instanceof AdrenergicStimulus)    return handleAdrenergic((AdrenergicStimulus) stimulus);
+        if (stimulus instanceof NutritiveStimulus)     return handleNutritive((NutritiveStimulus) stimulus);
+        if (stimulus instanceof AdenosinergicStimulus) return handleAdenosinergic((AdenosinergicStimulus) stimulus);
+        if (stimulus instanceof CholinergicStimulus)   return handleCholinergic((CholinergicStimulus) stimulus);
+        if (stimulus instanceof NociceptiveStimulus)   return handleNociceptive((NociceptiveStimulus) stimulus);
+        if (stimulus instanceof AnalgesicStimulus)     return handleAnalgesic((AnalgesicStimulus) stimulus);
+        if (stimulus instanceof TediumStimulus)        return handleTedium((TediumStimulus) stimulus);
+        return null;
+    }
+
+    private Stimulus handleAdrenergic(AdrenergicStimulus s) {
+        creature.emotions().regulateAll(s.delta);
+        return null;
+    }
+
+    private Stimulus handleNutritive(NutritiveStimulus s) {
+        Emotion regulated = creature.emotions().regulate(Constants.HUNGER, -s.nutritiveValue);
+        Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
+                s.origin, s.objectType, ActionType.EAT, regulated, -s.nutritiveValue);
+        creature.valuation().tell(emitted, self());
+        return emitted;
+    }
+
+    private Stimulus handleAdenosinergic(AdenosinergicStimulus s) {
+        creature.emotions().regulate(Constants.SLEEP, s.delta);
+        return null;
+    }
+
+    private Stimulus handleCholinergic(CholinergicStimulus s) {
+        Emotion regulated = creature.emotions().regulate(Constants.SLEEP, -s.delta);
+        Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(), id, Self.get(),
+                ActionType.SLEEP, regulated, -s.delta);
+        creature.valuation().tell(emitted, self());
+        if (regulated.getLevel() <= 0) {
+            logger.info(String.format("HomeostaticRegulation[%s]: sleep drive exhausted, sending WakeUp", id));
+            creature.memoryConsolidator().tell(new WakeUp(), self());
+        }
+        return emitted;
+    }
+
+    private Stimulus handleNociceptive(NociceptiveStimulus s) {
+        Emotion regulated = creature.emotions().regulate(Constants.PAIN, s.painIntensity);
+        if (s.action == null) return null;
+        Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
+                s.origin, s.objectType, s.action, regulated, s.painIntensity);
+        creature.valuation().tell(emitted, self());
+        return emitted;
+    }
+
+    private Stimulus handleAnalgesic(AnalgesicStimulus s) {
+        double currentPain = creature.emotions().getLevel(Constants.PAIN);
+        double effectiveDelta = Math.min(s.delta, Math.max(0, currentPain));
+        Emotion regulated = creature.emotions().regulate(Constants.PAIN, -effectiveDelta);
+        if (s.action == null) return null;
+        Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
+                s.origin, s.objectType, s.action, regulated, -effectiveDelta);
+        creature.valuation().tell(emitted, self());
+        return emitted;
+    }
+
+    private Stimulus handleTedium(TediumStimulus s) {
+        Emotion regulated = creature.emotions().regulate(Constants.TEDIUM, s.delta);
+        if (s.action != ActionType.WANDER && s.action != ActionType.OBSERVE) return null;
+        Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
+                id, Self.get(), s.action, regulated, s.delta);
+        creature.valuation().tell(emitted, self());
+        return emitted;
+    }
+
+    // When pain exceeds the immune threshold, queue an AnalgesicStimulus back to self so
+    // it is processed in the next batch — avoiding double-reduction within the current one.
+    private void triggerImmuneResponseIfNeeded() {
+        double currentPain = creature.emotions().getLevel(Constants.PAIN);
+        if (currentPain <= Constants.PAIN_IMMUNE_THRESHOLD) return;
+        double immune = Math.min(Constants.PAIN_IMMUNE_RATE, currentPain - Constants.PAIN_IMMUNE_THRESHOLD);
+        logger.fine(String.format("HomeostaticRegulation[%s]: queuing immune pain decay=%.4f", id, immune));
+        self().tell(new AnalgesicStimulus(id, nextStimulusId(), immune, null, null), self());
     }
 }
