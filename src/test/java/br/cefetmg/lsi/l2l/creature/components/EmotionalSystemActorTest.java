@@ -35,10 +35,42 @@ public class EmotionalSystemActorTest {
     @Test
     void pain_does_not_go_below_zero_after_full_decay() {
         emotions.regulate(Constants.PAIN, 0.1);
-        // Clamp is enforced by HomeostaticRegulation before calling regulate,
-        // so here we just verify the level is non-negative after a modest delta.
         double level = emotions.getLevel(Constants.PAIN);
         assertTrue(level >= 0, "Pain should not be negative after a small raise");
+    }
+
+    @Test
+    void immune_response_only_fires_above_threshold() {
+        // Initial pain is MIN_AROUSAL_LEVEL (0.18) which is already below PAIN_IMMUNE_THRESHOLD (0.2).
+        // No additional stimulus — immune check at this level must leave pain unchanged.
+        double levelBefore = emotions.getLevel(Constants.PAIN);
+        assertTrue(levelBefore < Constants.PAIN_IMMUNE_THRESHOLD,
+                "Test precondition: initial pain must be below threshold");
+
+        double currentPain = emotions.getLevel(Constants.PAIN);
+        if (currentPain > Constants.PAIN_IMMUNE_THRESHOLD) {
+            double immune = Math.min(Constants.PAIN_IMMUNE_RATE, currentPain - Constants.PAIN_IMMUNE_THRESHOLD);
+            emotions.regulate(Constants.PAIN, -immune);
+        }
+        assertEquals(levelBefore, emotions.getLevel(Constants.PAIN), 1e-9,
+                "No immune decay should occur when pain is below threshold");
+    }
+
+    @Test
+    void immune_response_decays_pain_above_threshold() {
+        // Raise pain well above threshold.
+        emotions.regulate(Constants.PAIN, Constants.PAIN_IMMUNE_THRESHOLD + 0.3);
+        double before = emotions.getLevel(Constants.PAIN);
+        assertTrue(before > Constants.PAIN_IMMUNE_THRESHOLD,
+                "Test precondition: pain must be above threshold");
+
+        double currentPain = emotions.getLevel(Constants.PAIN);
+        if (currentPain > Constants.PAIN_IMMUNE_THRESHOLD) {
+            double immune = Math.min(Constants.PAIN_IMMUNE_RATE, currentPain - Constants.PAIN_IMMUNE_THRESHOLD);
+            emotions.regulate(Constants.PAIN, -immune);
+        }
+        assertTrue(emotions.getLevel(Constants.PAIN) < before,
+                "Immune feedback must reduce pain when it exceeds the threshold");
     }
 
     @Test

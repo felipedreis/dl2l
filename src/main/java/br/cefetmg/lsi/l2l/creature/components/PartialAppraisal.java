@@ -9,7 +9,6 @@ import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
 import br.cefetmg.lsi.l2l.creature.bd.InternalDynamicState;
 import br.cefetmg.lsi.l2l.creature.common.Perception;
 import br.cefetmg.lsi.l2l.stimuli.AdrenergicStimulus;
-import br.cefetmg.lsi.l2l.stimuli.AnalgesicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.EmotionalStimulus;
 import br.cefetmg.lsi.l2l.stimuli.ProprioceptiveStimulus;
 import br.cefetmg.lsi.l2l.stimuli.AdenosinergicStimulus;
@@ -58,10 +57,6 @@ public class PartialAppraisal extends CreatureComponent {
         circadian.tick();
         AdenosinergicStimulus sleepDrive = new AdenosinergicStimulus(this.id, nextStimulusId(), circadian.driveRate());
         creature.homeostatic().tell(sleepDrive, self());
-
-        // Pain decays passively each cycle (no EvaluationStimulus — passive, not reinforceable).
-        AnalgesicStimulus painDecay = new AnalgesicStimulus(this.id, nextStimulusId(), Constants.PAIN_DECAY_RATE, null, null);
-        creature.homeostatic().tell(painDecay, self());
 
         List<Stimulus> propStimuli = (List) stimuli.stream()
                 .filter(s -> s instanceof ProprioceptiveStimulus)

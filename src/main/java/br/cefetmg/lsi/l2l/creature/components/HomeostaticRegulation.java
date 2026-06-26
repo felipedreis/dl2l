@@ -116,6 +116,15 @@ public class HomeostaticRegulation extends CreatureComponent {
             else if (stimulus instanceof AdrenergicStimulus)  { regulatingCount++; drivesTouchedMask |= 1 | 2; }
         }
 
+        // Immune feedback: pain above threshold triggers proportional decay each batch.
+        double currentPain = creature.emotions().getLevel(Constants.PAIN);
+        if (currentPain > Constants.PAIN_IMMUNE_THRESHOLD) {
+            double immune = Math.min(Constants.PAIN_IMMUNE_RATE, currentPain - Constants.PAIN_IMMUNE_THRESHOLD);
+            creature.emotions().regulate(Constants.PAIN, -immune);
+            logger.fine(String.format("HomeostaticRegulation[%s]: immune pain decay=%.4f remaining=%.3f",
+                    id, immune, creature.emotions().getLevel(Constants.PAIN)));
+        }
+
         boolean sameDriveCollision = (hungerHits >= 2) || (sleepHits >= 2);
         ChangeStimulusState batchChange = new ChangeStimulusStateBuilder(this, this.id)
                 .buildMultipleReceivedOneEmitted(new ArrayList<>(), null);
