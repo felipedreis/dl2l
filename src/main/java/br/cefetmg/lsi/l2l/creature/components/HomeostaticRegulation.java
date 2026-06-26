@@ -9,6 +9,7 @@ import br.cefetmg.lsi.l2l.creature.bd.InternalDynamicState;
 import br.cefetmg.lsi.l2l.creature.bd.RegulationBatchStat;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.creature.ml.WakeUp;
+import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.stimuli.*;
 import br.cefetmg.lsi.l2l.stimuli.AdenosinergicStimulus;
 import br.cefetmg.lsi.l2l.world.Self;
@@ -66,6 +67,25 @@ public class HomeostaticRegulation extends CreatureComponent {
                 if (regulated.getLevel() <= 0) {
                     logger.info(String.format("HomeostaticRegulation[%s]: sleep drive exhausted, sending WakeUp", id));
                     creature.memoryConsolidator().tell(new WakeUp(), self());
+                }
+            } if (stimulus instanceof NociceptiveStimulus) {
+                NociceptiveStimulus noci = (NociceptiveStimulus) stimulus;
+                Emotion regulated = creature.emotions().regulate(Constants.PAIN, noci.painIntensity);
+                // Only send EvaluationStimulus for deliberate actions (active EAT on cactus).
+                // Passive collision pain drives avoidance through arousal alone.
+                if (noci.action != null) {
+                    emitted = new EvaluationStimulus(stimulus.origin, nextStimulusId(),
+                            stimulus.origin, noci.objectType, noci.action, regulated, noci.painIntensity);
+                    creature.valuation().tell(emitted, self());
+                }
+            } if (stimulus instanceof TediumStimulus) {
+                TediumStimulus tedium = (TediumStimulus) stimulus;
+                Emotion regulated = creature.emotions().regulate(Constants.TEDIUM, tedium.delta);
+                // Reinforce WANDER (tedium falls) and penalise OBSERVE (tedium rises).
+                if (tedium.action == ActionType.WANDER || tedium.action == ActionType.OBSERVE) {
+                    emitted = new EvaluationStimulus(stimulus.origin, nextStimulusId(),
+                            id, Self.get(), tedium.action, regulated, tedium.delta);
+                    creature.valuation().tell(emitted, self());
                 }
             }
 

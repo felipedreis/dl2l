@@ -24,7 +24,9 @@ import br.cefetmg.lsi.l2l.creature.ml.SleepStarted;
 import br.cefetmg.lsi.l2l.stimuli.CorticalStimulus;
 import br.cefetmg.lsi.l2l.stimuli.EmotionalStimulus;
 import br.cefetmg.lsi.l2l.stimuli.Stimulus;
+import br.cefetmg.lsi.l2l.stimuli.TediumStimulus;
 import br.cefetmg.lsi.l2l.world.FruitType;
+import br.cefetmg.lsi.l2l.world.PlantType;
 import br.cefetmg.lsi.l2l.world.Self;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
@@ -97,6 +99,8 @@ public class FullAppraisal extends CreatureComponent {
                 logger.info(String.format("FullAppraisal[%s]: selected=%s for=%s angle=%.3f dist=%.1f",
                         id, action.type, action.perception.objectType,
                         action.perception.angle, action.perception.distance));
+
+                dispatchTediumStimulus(action.type);
 
                 CorticalStimulus cortical = produceCortical(action, emotional.behaviouralEfficiency);
 
@@ -180,6 +184,12 @@ public class FullAppraisal extends CreatureComponent {
                         + (2 * random.nextDouble() - 1) * Math.toRadians(Constants.MAX_ROTATE_ANGLE);
                 break;
 
+            case OBSERVE:
+                speed = 0;
+                focus = Constants.MAX_VISION_FIELD_OPENING;
+                angle = perception.angle;
+                break;
+
             case SLEEP:
                 speed = 0;
                 break;
@@ -187,6 +197,23 @@ public class FullAppraisal extends CreatureComponent {
 
         cortical = new CorticalStimulus(this.id, nextStimulusId(), action.type, action.perception.id, angle, focus, speed);
         return cortical;
+    }
+
+    private void dispatchTediumStimulus(ActionType selectedAction) {
+        if (selectedAction == ActionType.SLEEP) return;
+
+        double delta;
+        if (selectedAction == ActionType.WANDER) {
+            delta = -Constants.TEDIUM_WANDER_RELIEF;
+        } else if (selectedAction == ActionType.OBSERVE) {
+            delta = Constants.TEDIUM_OBSERVE_RATE;
+        } else {
+            delta = Constants.TEDIUM_IDLE_RATE;
+        }
+
+        creature.homeostatic().tell(
+                new TediumStimulus(id, nextStimulusId(), delta, selectedAction),
+                self());
     }
 
     private List<Action> definePossibleActions(List<Perception> perceptions) {
@@ -204,12 +231,22 @@ public class FullAppraisal extends CreatureComponent {
                         actions.add(new Action(ActionType.APPROACH, perception));
                         actions.add(new Action(ActionType.AVOID, perception));
                         actions.add(new Action(ActionType.SLEEP, perception));
+                        actions.add(new Action(ActionType.OBSERVE, perception));
+                    } else if (objectType instanceof PlantType) {
+                        actions.add(new Action(ActionType.APPROACH, perception));
+                        actions.add(new Action(ActionType.AVOID, perception));
+                        actions.add(new Action(ActionType.SLEEP, perception));
+                        actions.add(new Action(ActionType.OBSERVE, perception));
                     }
                 } else if (perception.distance == 0) {
                     if (objectType instanceof FruitType) {
                         actions.add(new Action(ActionType.EAT, perception));
                         actions.add(new Action(ActionType.AVOID, perception));
                         actions.add(new Action(ActionType.SLEEP, perception));
+                    } else if (objectType instanceof PlantType) {
+                        actions.add(new Action(ActionType.EAT, perception));
+                        actions.add(new Action(ActionType.AVOID, perception));
+                        actions.add(new Action(ActionType.ESCAPE, perception));
                     } else if (objectType instanceof Self) {
                         actions.add(new Action(ActionType.SLEEP, perception));
                         actions.add(new Action(ActionType.WANDER, perception));
@@ -218,6 +255,7 @@ public class FullAppraisal extends CreatureComponent {
             } else {
                 actions.add(new Action(ActionType.SLEEP, perception));
                 actions.add(new Action(ActionType.WANDER, perception));
+                actions.add(new Action(ActionType.OBSERVE, perception));
             }
         }
 
