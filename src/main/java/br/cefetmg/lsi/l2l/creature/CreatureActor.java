@@ -132,6 +132,8 @@ public class CreatureActor implements Creature {
                     Props.create(MemoryConsolidator.class, () -> new MemoryConsolidator(id.key))
                             .withDispatcher("wm-dispatcher"),
                     "memoryConsolidator");
+        } else {
+            consolidator = context.system().deadLetters();
         }
 
         //bdActor = context.system().actorOf(Props.create(BDActor.class, em)
@@ -165,10 +167,8 @@ public class CreatureActor implements Creature {
         for (Pair<SequentialId, ActorRef> p : components.values()) {
             TypedActor.context().stop(p.second);
         }
-        if (consolidator != null) {
-            TypedActor.context().stop(consolidator);
-            MLServiceExtension.of(TypedActor.context().system()).releaseAdapter(id.key);
-        }
+        TypedActor.context().stop(consolidator);
+        MLServiceExtension.of(TypedActor.context().system()).releaseAdapter(id.key);
 
         em.getTransaction().begin();
         em.persist(state);

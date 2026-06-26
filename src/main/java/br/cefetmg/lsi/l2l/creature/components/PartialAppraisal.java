@@ -27,8 +27,7 @@ import java.util.stream.Collectors;
  */
 public class PartialAppraisal extends CreatureComponent {
 
-    private final CircadianClock circadian = new CircadianClock();
-    private boolean circadianEnabled;
+    private CircadianClock circadian;
 
     public PartialAppraisal(SequentialId id) {
         super(id);
@@ -37,8 +36,9 @@ public class PartialAppraisal extends CreatureComponent {
     @Override
     public void preStart() throws Exception {
         super.preStart();
-        circadianEnabled = SimulationSettingsExtension.of(context().system())
+        boolean circadianEnabled = SimulationSettingsExtension.of(context().system())
                 .learningSettings().isCircadianEnabled();
+        circadian = circadianEnabled ? new ActiveCircadianClock() : new DisabledCircadianClock();
     }
 
     @Override
@@ -58,9 +58,10 @@ public class PartialAppraisal extends CreatureComponent {
         AdrenergicStimulus adrenergic = new AdrenergicStimulus(this.id, nextStimulusId(), Constants.DELTA);
         creature.homeostatic().tell(adrenergic, self());
 
-        if (circadianEnabled) {
-            circadian.tick();
-            AdenosinergicStimulus sleepDrive = new AdenosinergicStimulus(this.id, nextStimulusId(), circadian.driveRate());
+        circadian.tick();
+        double sleepDriveRate = circadian.driveRate();
+        if (sleepDriveRate > 0) {
+            AdenosinergicStimulus sleepDrive = new AdenosinergicStimulus(this.id, nextStimulusId(), sleepDriveRate);
             creature.homeostatic().tell(sleepDrive, self());
         }
 

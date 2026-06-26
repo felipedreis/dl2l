@@ -50,8 +50,6 @@ public class FullAppraisal extends CreatureComponent {
 
     private WorldModelEngine worldModelEngine;
 
-    private boolean consolidationEnabled;
-
     private long cognitiveCycle = 0;
     private boolean inSleep = false;
     private int sleepDwellTicks = 0;
@@ -67,7 +65,6 @@ public class FullAppraisal extends CreatureComponent {
         memorySystem = creature.memory();
 
         LearningSettings learning = SimulationSettingsExtension.of(context().system()).learningSettings();
-        consolidationEnabled = learning.isConsolidationEnabled();
 
         MLServiceExtension.Impl mlExt = MLServiceExtension.of(context().system());
 
@@ -142,9 +139,7 @@ public class FullAppraisal extends CreatureComponent {
                         sleepDwellTicks = 0;
                         sleepOnsetCycle = cognitiveCycle;
                         logger.info(String.format("FullAppraisal[%s]: SLEEP onset at cycle %d", id, cognitiveCycle));
-                        if (consolidationEnabled) {
-                            creature.memoryConsolidator().tell(new SleepStarted(cognitiveCycle), self());
-                        }
+                        creature.memoryConsolidator().tell(new SleepStarted(cognitiveCycle), self());
                     } else {
                         sleepDwellTicks++;
                     }
