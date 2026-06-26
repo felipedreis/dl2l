@@ -1,5 +1,6 @@
 package br.cefetmg.lsi.l2l.creature.components;
 
+import br.cefetmg.lsi.l2l.cluster.SimulationSettingsExtension;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
@@ -20,8 +21,17 @@ import java.util.List;
  */
 public class HomeostaticRegulation extends CreatureComponent {
 
+    private boolean consolidationEnabled;
+
     public HomeostaticRegulation(SequentialId id) {
         super(id);
+    }
+
+    @Override
+    public void preStart() throws Exception {
+        super.preStart();
+        consolidationEnabled = SimulationSettingsExtension.of(context().system())
+                .learningSettings().isConsolidationEnabled();
     }
 
     @Override
@@ -97,7 +107,7 @@ public class HomeostaticRegulation extends CreatureComponent {
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(), id, Self.get(),
                 ActionType.SLEEP, regulated, -s.delta);
         creature.valuation().tell(emitted, self());
-        if (regulated.getLevel() <= 0) {
+        if (regulated.getLevel() <= 0 && consolidationEnabled) {
             logger.info(String.format("HomeostaticRegulation[%s]: sleep drive exhausted, sending WakeUp", id));
             creature.memoryConsolidator().tell(new WakeUp(), self());
         }

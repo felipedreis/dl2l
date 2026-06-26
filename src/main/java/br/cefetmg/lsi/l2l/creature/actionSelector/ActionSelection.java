@@ -27,6 +27,10 @@ public class ActionSelection {
         this.filters = Arrays.asList(filters);
     }
 
+    public ActionSelection(List<ActionFilter> filters) {
+        this.filters = new ArrayList<>(filters);
+    }
+
     public Action selectOne(List<Action> actions, Emotion toRegulate) {
 
         List<Action> filtered = new ArrayList<>(actions);

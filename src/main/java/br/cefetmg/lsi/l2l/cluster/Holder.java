@@ -13,6 +13,7 @@ import akka.pattern.Patterns;
 import akka.util.Timeout;
 import br.cefetmg.lsi.l2l.analysis.DataAnalyser;
 import br.cefetmg.lsi.l2l.creature.ml.MLServiceExtension;
+import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.cluster.settings.Simulation;
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.common.SequentialId;
@@ -65,6 +66,8 @@ public class Holder extends AbstractActor implements Registrable {
 
     private boolean hasReposition;
 
+    private LearningSettings learningSettings;
+
     public Holder(Simulation settings, String saveDir) {
         this.saveDir = saveDir;
 
@@ -77,6 +80,7 @@ public class Holder extends AbstractActor implements Registrable {
         numHolders = settings.getNumHolders();
         worldBoundaries = settings.getWorldBoundaries();
         hasReposition = settings.isReposition();
+        learningSettings = settings.getLearningSettings();
     }
 
     @Override
@@ -84,6 +88,8 @@ public class Holder extends AbstractActor implements Registrable {
         super.preStart();
         cluster.subscribe(self(), MemberUp.class);
         logger.setLevel(Level.SEVERE);
+        // Register learning settings before any creature is spawned so components can read them.
+        SimulationSettingsExtension.of(context().system()).configure(learningSettings);
         // Eagerly load the species ML models once for this JVM node.
         // Fails fast here (before any creature spawns) if the model contract is invalid.
         MLServiceExtension.of(context().system());

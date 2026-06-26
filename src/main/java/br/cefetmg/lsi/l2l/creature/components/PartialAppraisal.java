@@ -3,6 +3,7 @@ package br.cefetmg.lsi.l2l.creature.components;
 import akka.actor.ActorRef;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.SequentialId;
+import br.cefetmg.lsi.l2l.cluster.SimulationSettingsExtension;
 import br.cefetmg.lsi.l2l.creature.bd.BehaviouralEfficiencyState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
@@ -27,6 +28,7 @@ import java.util.stream.Collectors;
 public class PartialAppraisal extends CreatureComponent {
 
     private final CircadianClock circadian = new CircadianClock();
+    private boolean circadianEnabled;
 
     public PartialAppraisal(SequentialId id) {
         super(id);
@@ -35,6 +37,8 @@ public class PartialAppraisal extends CreatureComponent {
     @Override
     public void preStart() throws Exception {
         super.preStart();
+        circadianEnabled = SimulationSettingsExtension.of(context().system())
+                .learningSettings().isCircadianEnabled();
     }
 
     @Override
@@ -54,9 +58,11 @@ public class PartialAppraisal extends CreatureComponent {
         AdrenergicStimulus adrenergic = new AdrenergicStimulus(this.id, nextStimulusId(), Constants.DELTA);
         creature.homeostatic().tell(adrenergic, self());
 
-        circadian.tick();
-        AdenosinergicStimulus sleepDrive = new AdenosinergicStimulus(this.id, nextStimulusId(), circadian.driveRate());
-        creature.homeostatic().tell(sleepDrive, self());
+        if (circadianEnabled) {
+            circadian.tick();
+            AdenosinergicStimulus sleepDrive = new AdenosinergicStimulus(this.id, nextStimulusId(), circadian.driveRate());
+            creature.homeostatic().tell(sleepDrive, self());
+        }
 
         List<Stimulus> propStimuli = (List) stimuli.stream()
                 .filter(s -> s instanceof ProprioceptiveStimulus)

@@ -5,6 +5,7 @@ import akka.actor.*;
 import akka.japi.Creator;
 import br.cefetmg.lsi.l2l.cluster.Sync;
 import br.cefetmg.lsi.l2l.common.Constants;
+import br.cefetmg.lsi.l2l.cluster.SimulationSettingsExtension;
 import br.cefetmg.lsi.l2l.common.Pair;
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.common.SequentialId;
@@ -124,10 +125,14 @@ public class CreatureActor implements Creature {
         memory = TypedActor.get(TypedActor.context())
                 .typedActorOf(new TypedProps<>(MemorySystem.class, MemorySystemActor::new), "memorySystem");
 
-        consolidator = context.actorOf(
-                Props.create(MemoryConsolidator.class, () -> new MemoryConsolidator(id.key))
-                        .withDispatcher("wm-dispatcher"),
-                "memoryConsolidator");
+        boolean consolidationEnabled = SimulationSettingsExtension.of(context.system())
+                .learningSettings().isConsolidationEnabled();
+        if (consolidationEnabled) {
+            consolidator = context.actorOf(
+                    Props.create(MemoryConsolidator.class, () -> new MemoryConsolidator(id.key))
+                            .withDispatcher("wm-dispatcher"),
+                    "memoryConsolidator");
+        }
 
         //bdActor = context.system().actorOf(Props.create(BDActor.class, em)
         //        .withDispatcher("bd-dispatcher"), "db");
@@ -160,8 +165,10 @@ public class CreatureActor implements Creature {
         for (Pair<SequentialId, ActorRef> p : components.values()) {
             TypedActor.context().stop(p.second);
         }
-        TypedActor.context().stop(consolidator);
-        MLServiceExtension.of(TypedActor.context().system()).releaseAdapter(id.key);
+        if (consolidator != null) {
+            TypedActor.context().stop(consolidator);
+            MLServiceExtension.of(TypedActor.context().system()).releaseAdapter(id.key);
+        }
 
         em.getTransaction().begin();
         em.persist(state);
