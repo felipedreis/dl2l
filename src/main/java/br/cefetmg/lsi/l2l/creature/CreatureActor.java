@@ -5,6 +5,8 @@ import akka.actor.*;
 import akka.japi.Creator;
 import br.cefetmg.lsi.l2l.cluster.Sync;
 import br.cefetmg.lsi.l2l.common.Constants;
+import br.cefetmg.lsi.l2l.cluster.SimulationSettingsExtension;
+import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.common.Pair;
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.common.SequentialId;
@@ -40,7 +42,14 @@ public class CreatureActor implements Creature {
     public static TypedProps<CreatureActor> props(SequentialId id, ActorRef collisionDetector, Point position,
                                                   Point worldBoundaries) {
         return new TypedProps<>(Creature.class,
-                (Creator<CreatureActor>) () -> new CreatureActor(id, collisionDetector, position, worldBoundaries)
+                (Creator<CreatureActor>) () -> new CreatureActor(id, collisionDetector, position, worldBoundaries, null)
+        );
+    }
+
+    public static TypedProps<CreatureActor> props(SequentialId id, ActorRef collisionDetector, Point position,
+                                                  Point worldBoundaries, LearningSettings learningSettings) {
+        return new TypedProps<>(Creature.class,
+                (Creator<CreatureActor>) () -> new CreatureActor(id, collisionDetector, position, worldBoundaries, learningSettings)
         );
     }
 
@@ -90,11 +99,16 @@ public class CreatureActor implements Creature {
 
     private Cancellable clock;
 
-    public CreatureActor(SequentialId id, ActorRef collisionDetector, Point position, Point worldBoundaries){
+    // null means "inherit global settings from SimulationSettingsExtension"
+    private final LearningSettings learningSettings;
+
+    public CreatureActor(SequentialId id, ActorRef collisionDetector, Point position, Point worldBoundaries,
+                         LearningSettings learningSettings) {
         this.id = id;
         this.collisionDetector = collisionDetector;
         this.position = position;
         this.worldBoundaries = worldBoundaries;
+        this.learningSettings = learningSettings;
         this.em = Persistence.createEntityManagerFactory("L2LPU").createEntityManager();
     }
 
@@ -124,10 +138,20 @@ public class CreatureActor implements Creature {
         memory = TypedActor.get(TypedActor.context())
                 .typedActorOf(new TypedProps<>(MemorySystem.class, MemorySystemActor::new), "memorySystem");
 
-        consolidator = context.actorOf(
-                Props.create(MemoryConsolidator.class, () -> new MemoryConsolidator(id.key))
-                        .withDispatcher("wm-dispatcher"),
-                "memoryConsolidator");
+        // Resolve effective settings: per-creature override if provided, else global.
+        SimulationSettingsExtension.Impl ext = SimulationSettingsExtension.of(context.system());
+        LearningSettings effective = (learningSettings != null) ? learningSettings : ext.learningSettings();
+        // Register under this creature's key so components can find it via learningSettings(id.key).
+        ext.configure(id.key, effective);
+
+        if (effective.isConsolidationEnabled()) {
+            consolidator = context.actorOf(
+                    Props.create(MemoryConsolidator.class, () -> new MemoryConsolidator(id.key))
+                            .withDispatcher("wm-dispatcher"),
+                    "memoryConsolidator");
+        } else {
+            consolidator = context.system().deadLetters();
+        }
 
         //bdActor = context.system().actorOf(Props.create(BDActor.class, em)
         //        .withDispatcher("bd-dispatcher"), "db");
@@ -162,6 +186,7 @@ public class CreatureActor implements Creature {
         }
         TypedActor.context().stop(consolidator);
         MLServiceExtension.of(TypedActor.context().system()).releaseAdapter(id.key);
+        SimulationSettingsExtension.of(TypedActor.context().system()).releaseCreatureSettings(id.key);
 
         em.getTransaction().begin();
         em.persist(state);

@@ -1,6 +1,7 @@
 package br.cefetmg.lsi.l2l.cluster.settings;
 
 import br.cefetmg.lsi.l2l.common.Point;
+import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
 import br.cefetmg.lsi.l2l.world.FruitType;
 import br.cefetmg.lsi.l2l.world.PlantType;
 import br.cefetmg.lsi.l2l.world.PositionFactory;
@@ -24,8 +25,9 @@ public class Simulation {
 
     private Point worldBoundaries;
 
-
     private boolean reposition;
+
+    private LearningSettings learningSettings;
 
     public Simulation(){}
 
@@ -65,6 +67,31 @@ public class Simulation {
         }
 
         reposition = fullConfig.getBoolean("simulation.reposition");
+
+        learningSettings = parseLearningSettings(fullConfig);
+    }
+
+    private static LearningSettings parseLearningSettings(Config fullConfig) {
+        if (!fullConfig.hasPath("simulation.learningSettings")) {
+            return new LearningSettings();
+        }
+        Config ls = fullConfig.getConfig("simulation.learningSettings");
+
+        boolean circadianEnabled    = !ls.hasPath("circadianEnabled")    || ls.getBoolean("circadianEnabled");
+        boolean consolidationEnabled = !ls.hasPath("consolidationEnabled") || ls.getBoolean("consolidationEnabled");
+
+        List<ActionSelectionType> enabledFilters;
+        if (ls.hasPath("enabledFilters")) {
+            List<String> names = ls.getStringList("enabledFilters");
+            enabledFilters = new ArrayList<>();
+            for (String name : names) {
+                enabledFilters.add(ActionSelectionType.valueOf(name));
+            }
+        } else {
+            enabledFilters = LearningSettings.MASTER_FILTER_ORDER;
+        }
+
+        return new LearningSettings(circadianEnabled, consolidationEnabled, enabledFilters);
     }
 
     public Long getNumHolders() {
@@ -105,6 +132,10 @@ public class Simulation {
 
     public boolean isReposition() {
         return reposition;
+    }
+
+    public LearningSettings getLearningSettings() {
+        return learningSettings;
     }
 
     private static WorldObjectType parseWorldObjectType(String name) {

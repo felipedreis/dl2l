@@ -1,7 +1,10 @@
 package br.cefetmg.lsi.l2l.creature.components;
 
+import br.cefetmg.lsi.l2l.cluster.SimulationSettingsExtension;
+import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.SequentialId;
+import br.cefetmg.lsi.l2l.creature.actionSelector.ActionFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionProbabilityFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionSelection;
 import br.cefetmg.lsi.l2l.creature.actionSelector.RandomFilter;
@@ -34,6 +37,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 
 /**
  * Created by felipe on 02/01/17.
@@ -60,16 +64,28 @@ public class FullAppraisal extends CreatureComponent {
         super.preStart();
         memorySystem = creature.memory();
 
-        MLServiceExtension.Impl mlExt = MLServiceExtension.of(context().system());
-        ModelContract contract = ModelContract.load(mlExt.modelDir());
-        worldModelEngine = new WorldModelEngine(mlExt, id.key);
+        LearningSettings learning = SimulationSettingsExtension.of(context().system()).learningSettings(id.key);
 
-        actionSelection = new ActionSelection(
-                new TargetDistanceFilter(),
-                new ActionProbabilityFilter(creature.operantConditioning()),
-                new WorldModelFilter(worldModelEngine, contract),
-                new RandomFilter()
-        );
+        MLServiceExtension.Impl mlExt = MLServiceExtension.of(context().system());
+
+        ModelContract contract = null;
+        if (learning.isFilterEnabled(ActionSelectionType.WORLD_MODEL)) {
+            contract = ModelContract.load(mlExt.modelDir());
+            worldModelEngine = new WorldModelEngine(mlExt, id.key);
+        }
+
+        List<ActionFilter> filterList = new ArrayList<>();
+        for (ActionSelectionType type : LearningSettings.MASTER_FILTER_ORDER) {
+            if (!learning.isFilterEnabled(type)) continue;
+            switch (type) {
+                case TARGET_DISTANCE -> filterList.add(new TargetDistanceFilter());
+                case AFFORDANCE      -> filterList.add(new ActionProbabilityFilter(creature.operantConditioning()));
+                case WORLD_MODEL     -> filterList.add(new WorldModelFilter(worldModelEngine, contract));
+                case RANDOM          -> filterList.add(new RandomFilter());
+                default              -> logger.warning("FullAppraisal: unknown filter type " + type + ", skipping");
+            }
+        }
+        actionSelection = new ActionSelection(filterList);
     }
 
     @Override
