@@ -2,6 +2,7 @@ package br.cefetmg.lsi.l2l.cluster.settings;
 
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -9,8 +10,9 @@ import java.util.List;
 /**
  * Immutable snapshot of the learning subsystem feature flags loaded from
  * simulation.learningSettings in the simulation config file.
+ * Serializable so it can be carried in cluster messages (e.g. CreateCreature).
  */
-public class LearningSettings {
+public class LearningSettings implements Serializable {
 
     /** Canonical priority order for all known action filters. */
     public static final List<ActionSelectionType> MASTER_FILTER_ORDER = List.of(

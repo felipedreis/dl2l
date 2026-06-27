@@ -37,7 +37,7 @@ public class PartialAppraisal extends CreatureComponent {
     public void preStart() throws Exception {
         super.preStart();
         boolean circadianEnabled = SimulationSettingsExtension.of(context().system())
-                .learningSettings().isCircadianEnabled();
+                .learningSettings(id.key).isCircadianEnabled();
         circadian = circadianEnabled ? new ActiveCircadianClock() : new DisabledCircadianClock();
     }
 

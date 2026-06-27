@@ -1,5 +1,6 @@
 package br.cefetmg.lsi.l2l.cluster;
 
+import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
@@ -12,7 +13,11 @@ record CreateWorldObjects(WorldObjectType type, List<SequentialId> id) implement
 record CreateWorldObject(WorldObjectType type, SequentialId id) implements Serializable {
 }
 
-record CreateCreature(SequentialId id) implements Serializable {
+record CreateCreature(SequentialId id, LearningSettings learningSettings) implements Serializable {
+    /** Convenience constructor — uses the global learning settings (null = fall back to global). */
+    CreateCreature(SequentialId id) {
+        this(id, null);
+    }
 }
 
 record HolderLookup(long id) implements Serializable {

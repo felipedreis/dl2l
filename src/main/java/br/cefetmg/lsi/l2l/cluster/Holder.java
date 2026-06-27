@@ -168,7 +168,8 @@ public class Holder extends AbstractActor implements Registrable {
     private void handleCreateCreature(CreateCreature order) {
         logger.info("Handling new creature creation order %s".formatted(order));
         Creature creature = TypedActor.get(context()).typedActorOf(
-                CreatureActor.props(order.id(), collisionDetector, factory.nextPosition(), worldBoundaries),
+                CreatureActor.props(order.id(), collisionDetector, factory.nextPosition(), worldBoundaries,
+                        order.learningSettings()),
                 "creature-" + order.id());
         creature.init();
         creatures.put(order.id(), creature);

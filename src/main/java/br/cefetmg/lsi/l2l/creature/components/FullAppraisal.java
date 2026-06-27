@@ -64,7 +64,7 @@ public class FullAppraisal extends CreatureComponent {
         super.preStart();
         memorySystem = creature.memory();
 
-        LearningSettings learning = SimulationSettingsExtension.of(context().system()).learningSettings();
+        LearningSettings learning = SimulationSettingsExtension.of(context().system()).learningSettings(id.key);
 
         MLServiceExtension.Impl mlExt = MLServiceExtension.of(context().system());
 
