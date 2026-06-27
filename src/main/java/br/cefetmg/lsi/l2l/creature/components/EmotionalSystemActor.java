@@ -20,8 +20,8 @@ public class EmotionalSystemActor implements EmotionalSystem {
         simpleEmotions.add(new Emotion(Constants.SLEEP));     // 1 — live
         simpleEmotions.add(new Emotion(Constants.APATHY));    // 2 — placeholder
         simpleEmotions.add(new Emotion(Constants.STRESS));    // 3 — placeholder
-        simpleEmotions.add(new Emotion(Constants.PAIN));      // 4 — placeholder
-        simpleEmotions.add(new Emotion(Constants.TEDIUM));    // 5 — placeholder
+        simpleEmotions.add(new Emotion(Constants.PAIN));      // 4 — live (NociceptiveStimulus)
+        simpleEmotions.add(new Emotion(Constants.TEDIUM));    // 5 — live (TediumStimulus)
         simpleEmotions.add(new Emotion(Constants.FEAR));      // 6 — placeholder
         simpleEmotions.add(new Emotion(Constants.CURIOSITY)); // 7 — placeholder
         simpleEmotions.add(new Emotion(Constants.FERTILITY)); // 8 — placeholder
