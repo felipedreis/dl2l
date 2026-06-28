@@ -138,20 +138,20 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
                 if (geom.body.intersects(obj.shape)) {
                     // TODO rename the TouchStimulus to Mechanical according to Campos (2015) version
                     sentStimulus = new TouchStimulus(obj.id, null, obj.type);
-                    creature.body().tell(sentStimulus, self());
+                    creature.body().tell(sentStimulus);
                 }
                 if (geom.visionField.intersects(obj.shape)) {
                     sentStimulus = new LuminousStimulus(obj.id, null, obj.type, obj.point);
-                    creature.eye().tell(sentStimulus, self());
+                    creature.eye().tell(sentStimulus);
                 }
                 if (geom.mouth.intersects(obj.shape)) {
                     sentStimulus = new MechanicalStimulus(obj.id, null, obj.type);
-                    creature.mouth().tell(sentStimulus, self());
+                    creature.mouth().tell(sentStimulus);
                 }
                 if (geom.olfactoryField.intersects(obj.shape)) {
                     // TODO create a nose
                     sentStimulus = new SmellStimulus(obj.id, null, obj.type, obj.point);
-                    creature.nose().tell(sentStimulus, self());
+                    creature.nose().tell(sentStimulus);
                 }
             });
             logger.info("Elapsed time: %d".formatted(System.currentTimeMillis() - time));

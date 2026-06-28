@@ -34,7 +34,7 @@ public class Nose extends CreatureComponent {
                 OlfactoryStimulus olfactory = new OlfactoryStimulus(smell.origin, nextStimulusId(), smell.objectType,
                         creaturePosition.distance(smell.point), creaturePosition.angleAlpha(smell.point));
 
-                creature.sensoryCortex().tell(olfactory, self());
+                creature.sensoryCortex().tell(olfactory);
                 ChangeStimulusState change = new ChangeStimulusStateBuilder(this, id)
                         .buildOneReceivedOneEmitted(smell, olfactory);
                 ObjectSmeltState smelt = new ObjectSmeltState(smell.origin, smell.objectType);

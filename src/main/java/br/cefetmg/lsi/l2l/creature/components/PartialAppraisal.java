@@ -1,13 +1,11 @@
 package br.cefetmg.lsi.l2l.creature.components;
 
-import akka.actor.ActorRef;
+import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.SequentialId;
-import br.cefetmg.lsi.l2l.cluster.SimulationSettingsExtension;
 import br.cefetmg.lsi.l2l.creature.bd.BehaviouralEfficiencyState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
-import br.cefetmg.lsi.l2l.creature.bd.InternalDynamicState;
 import br.cefetmg.lsi.l2l.creature.common.Perception;
 import br.cefetmg.lsi.l2l.stimuli.AdrenergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.EmotionalStimulus;
@@ -15,11 +13,9 @@ import br.cefetmg.lsi.l2l.stimuli.ProprioceptiveStimulus;
 import br.cefetmg.lsi.l2l.stimuli.AdenosinergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.Stimulus;
 import br.cefetmg.lsi.l2l.world.Self;
-import scala.concurrent.duration.Duration;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -27,18 +23,18 @@ import java.util.stream.Collectors;
  */
 public class PartialAppraisal extends CreatureComponent {
 
+    private final LearningSettings learningSettings;
     private CircadianClock circadian;
 
-    public PartialAppraisal(SequentialId id) {
+    public PartialAppraisal(SequentialId id, LearningSettings learningSettings) {
         super(id);
+        this.learningSettings = learningSettings;
     }
 
     @Override
     public void preStart() throws Exception {
         super.preStart();
-        boolean circadianEnabled = SimulationSettingsExtension.of(context().system())
-                .learningSettings(id.key).isCircadianEnabled();
-        circadian = circadianEnabled ? new ActiveCircadianClock() : new DisabledCircadianClock();
+        circadian = learningSettings.isCircadianEnabled() ? new ActiveCircadianClock() : new DisabledCircadianClock();
     }
 
     @Override
@@ -56,13 +52,13 @@ public class PartialAppraisal extends CreatureComponent {
             creature.kill();
 
         AdrenergicStimulus adrenergic = new AdrenergicStimulus(this.id, nextStimulusId(), Constants.DELTA);
-        creature.homeostatic().tell(adrenergic, self());
+        creature.homeostatic().tell(adrenergic);
 
         circadian.tick();
         double sleepDriveRate = circadian.driveRate();
         if (sleepDriveRate > 0) {
             AdenosinergicStimulus sleepDrive = new AdenosinergicStimulus(this.id, nextStimulusId(), sleepDriveRate);
-            creature.homeostatic().tell(sleepDrive, self());
+            creature.homeostatic().tell(sleepDrive);
         }
 
         List<Stimulus> propStimuli = (List) stimuli.stream()
@@ -93,7 +89,7 @@ public class PartialAppraisal extends CreatureComponent {
 
         EmotionalStimulus emotional = new EmotionalStimulus(this.id, nextStimulusId(), perceptions, maxEmotion, behaviouralEfficiency);
 
-        creature.fullAppraisal().tell(emotional, self());
+        creature.fullAppraisal().tell(emotional);
 
 
         ChangeStimulusState changeEmotional = new ChangeStimulusStateBuilder(this, id)

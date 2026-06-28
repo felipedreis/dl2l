@@ -3,14 +3,12 @@ package br.cefetmg.lsi.l2l.creature;
 import akka.actor.*;
 
 import akka.japi.Creator;
-import br.cefetmg.lsi.l2l.cluster.Sync;
-import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.cluster.SimulationSettingsExtension;
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
+import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.Pair;
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.common.SequentialId;
-import br.cefetmg.lsi.l2l.creature.bd.BDActor;
 import br.cefetmg.lsi.l2l.creature.bd.CreatureState;
 import br.cefetmg.lsi.l2l.creature.components.*;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
@@ -20,18 +18,13 @@ import br.cefetmg.lsi.l2l.creature.memory.MemorySystemActor;
 import br.cefetmg.lsi.l2l.creature.ml.MLServiceExtension;
 import br.cefetmg.lsi.l2l.creature.ml.MemoryConsolidator;
 import br.cefetmg.lsi.l2l.physics.CreaturePositioningAttr;
-import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
-import scala.concurrent.duration.FiniteDuration;
 
 import javax.persistence.EntityManager;
 import javax.persistence.Persistence;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.CompletionStage;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.logging.Logger;
 
 /**
@@ -53,7 +46,7 @@ public class CreatureActor implements Creature {
         );
     }
 
-    private static final Class [] componentTypes =  new Class  [] {
+    private static final Class[] componentTypes = new Class[] {
             Eye.class,
             Body.class,
             Mouth.class,
@@ -140,7 +133,7 @@ public class CreatureActor implements Creature {
 
         // Resolve effective settings: per-creature override if provided, else global.
         SimulationSettingsExtension.Impl ext = SimulationSettingsExtension.of(context.system());
-        LearningSettings effective = (learningSettings != null) ? learningSettings : ext.learningSettings();
+        final LearningSettings effective = (learningSettings != null) ? learningSettings : ext.learningSettings();
         // Register under this creature's key so components can find it via learningSettings(id.key).
         ext.configure(id.key, effective);
 
@@ -156,13 +149,17 @@ public class CreatureActor implements Creature {
         //bdActor = context.system().actorOf(Props.create(BDActor.class, em)
         //        .withDispatcher("bd-dispatcher"), "db");
 
-        SequentialId componentId = id;
+        final MLServiceExtension.Impl mlExt = MLServiceExtension.of(context.system());
 
+        SequentialId componentId = id;
         for (Class componentType : componentTypes) {
             componentId = componentId.next();
-            ActorRef component = context.actorOf(Props.create(componentType, componentId)
-                    .withDispatcher("component-dispatcher"), componentType.getSimpleName().toLowerCase());
-            components.put(componentType, new Pair<>(componentId, component) );
+            final SequentialId cid = componentId;
+            Creator<ComponentActor> creator = () -> new ComponentActor(buildComponent(componentType, cid, effective, mlExt));
+            ActorRef component = context.actorOf(
+                    Props.create(ComponentActor.class, creator).withDispatcher("component-dispatcher"),
+                    componentType.getSimpleName().toLowerCase());
+            components.put(componentType, new Pair<>(cid, component));
         }
 
         final ActorRef partial = components.get(PartialAppraisal.class).second;
@@ -175,6 +172,21 @@ public class CreatureActor implements Creature {
                         }, TypedActor.context().dispatcher());
 
         collisionDetector.tell(getPositioningAttr(), ActorRef.noSender());
+    }
+
+    private CreatureComponent buildComponent(Class componentType, SequentialId componentId,
+                                             LearningSettings effective, MLServiceExtension.Impl mlExt) {
+        if (componentType == Eye.class)                  return new Eye(componentId);
+        if (componentType == Body.class)                 return new Body(componentId);
+        if (componentType == Mouth.class)                return new Mouth(componentId);
+        if (componentType == Nose.class)                 return new Nose(componentId);
+        if (componentType == SensoryCortex.class)        return new SensoryCortex(componentId);
+        if (componentType == EffectorCortex.class)       return new EffectorCortex(componentId);
+        if (componentType == PartialAppraisal.class)     return new PartialAppraisal(componentId, effective);
+        if (componentType == FullAppraisal.class)        return new FullAppraisal(componentId, effective, mlExt);
+        if (componentType == HomeostaticRegulation.class) return new HomeostaticRegulation(componentId);
+        if (componentType == Valuation.class)            return new Valuation(componentId);
+        throw new IllegalArgumentException("Unknown component type: " + componentType);
     }
 
     public void kill() {
@@ -194,13 +206,17 @@ public class CreatureActor implements Creature {
         em.close();
 
         logger.info("Sending remove order to holder");
-        holder().tell(id, TypedActor.context().self());
+        holderActorRef().tell(id, TypedActor.context().self());
         logger.info("Creature " + id + " killed");
     }
 
-    @Override
-    public ActorRef holder() {
+    private ActorRef holderActorRef() {
         return TypedActor.context().parent();
+    }
+
+    @Override
+    public ComponentRef holder() {
+        return new AkkaComponentRef(holderActorRef());
     }
 
     private CreaturePositioningAttr getPositioningAttr() {
@@ -219,43 +235,20 @@ public class CreatureActor implements Creature {
         collisionDetector.tell(getPositioningAttr(), self);
     }
 
-    public ActorRef eye() {
-        return components.get(Eye.class).second;
+    private ComponentRef refOf(Class componentClass) {
+        return new AkkaComponentRef(components.get(componentClass).second);
     }
 
-    public ActorRef body() {
-        return components.get(Body.class).second;
-    }
-
-    public ActorRef mouth() {
-        return components.get(Mouth.class).second;
-    }
-
-    public ActorRef nose() { return components.get(Nose.class).second; }
-
-    public ActorRef sensoryCortex() {
-        return components.get(SensoryCortex.class).second;
-    }
-
-    public ActorRef effectorCortex() {
-        return components.get(EffectorCortex.class).second;
-    }
-
-    public ActorRef partialAppraisal() {
-        return components.get(PartialAppraisal.class).second;
-    }
-
-    public ActorRef fullAppraisal() {
-        return components.get(FullAppraisal.class).second;
-    }
-
-    public ActorRef homeostatic() {
-        return components.get(HomeostaticRegulation.class).second;
-    }
-
-    public ActorRef valuation() {
-        return components.get(Valuation.class).second;
-    }
+    public ComponentRef eye()             { return refOf(Eye.class); }
+    public ComponentRef body()            { return refOf(Body.class); }
+    public ComponentRef mouth()           { return refOf(Mouth.class); }
+    public ComponentRef nose()            { return refOf(Nose.class); }
+    public ComponentRef sensoryCortex()   { return refOf(SensoryCortex.class); }
+    public ComponentRef effectorCortex()  { return refOf(EffectorCortex.class); }
+    public ComponentRef partialAppraisal(){ return refOf(PartialAppraisal.class); }
+    public ComponentRef fullAppraisal()   { return refOf(FullAppraisal.class); }
+    public ComponentRef homeostatic()     { return refOf(HomeostaticRegulation.class); }
+    public ComponentRef valuation()       { return refOf(Valuation.class); }
 
     @Override
     public EmotionalSystem emotions() {
@@ -273,13 +266,13 @@ public class CreatureActor implements Creature {
     }
 
     @Override
-    public ActorRef memoryConsolidator() {
-        return consolidator;
+    public ComponentRef memoryConsolidator() {
+        return new AkkaComponentRef(consolidator);
     }
 
     @Override
-    public ActorRef bd(){
-        return bdActor;
+    public ComponentRef bd() {
+        return new AkkaComponentRef(bdActor != null ? bdActor : TypedActor.context().system().deadLetters());
     }
 
     public Point getPosition() {

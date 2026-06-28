@@ -32,33 +32,33 @@ public class Mouth extends CreatureComponent{
 
                 if(somatic.actionType == ActionType.EAT || somatic.actionType == ActionType.PLAY) {
                     DestructiveStimulus destructive = new DestructiveStimulus(id, somatic.target, nextStimulusId());
-                    creature.holder().tell(destructive, self());
+                    creature.holder().tell(destructive);
                 }
 
             } else if(stimulus instanceof MechanicalStimulus) {
                 MechanicalStimulus mechanical = (MechanicalStimulus) stimulus;
                 TouchStimulus touchStimulus = new TouchStimulus(mechanical.origin, nextStimulusId(),
                         mechanical.objectType);
-                creature.sensoryCortex().tell(touchStimulus, self());
+                creature.sensoryCortex().tell(touchStimulus);
 
                 if (mechanical.objectType instanceof PlantType) {
                     PlantType plant = (PlantType) mechanical.objectType;
                     NociceptiveStimulus pain = new NociceptiveStimulus(
                             mechanical.origin, nextStimulusId(), plant.passivePain, null, plant);
-                    creature.homeostatic().tell(pain, self());
+                    creature.homeostatic().tell(pain);
                 }
             } else if (stimulus instanceof NociceptiveStimulus) {
                 // Active pain response from Plant (creature tried to eat the cactus).
-                creature.homeostatic().tell(stimulus, self());
+                creature.homeostatic().tell(stimulus);
             } else if (stimulus instanceof AnalgesicStimulus) {
                 // Healing response from Plant (creature ate an aloe plant).
-                creature.homeostatic().tell(stimulus, self());
+                creature.homeostatic().tell(stimulus);
             } else if (stimulus instanceof EnergeticStimulus) {
                 EnergeticStimulus energetic = (EnergeticStimulus) stimulus;
                 NutritiveStimulus nutritive = new NutritiveStimulus(energetic.origin, nextStimulusId(),
                         energetic.objectType, energetic.nutritiveValue);
 
-                creature.homeostatic().tell(nutritive, self());
+                creature.homeostatic().tell(nutritive);
 
                 ChangeStimulusState change = new ChangeStimulusStateBuilder(this, id)
                         .buildOneReceivedOneEmitted(energetic, nutritive);

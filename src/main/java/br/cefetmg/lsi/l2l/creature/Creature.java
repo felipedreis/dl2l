@@ -1,6 +1,5 @@
 package br.cefetmg.lsi.l2l.creature;
 
-import akka.actor.ActorRef;
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.creature.components.EmotionalSystem;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
@@ -13,27 +12,28 @@ public interface Creature {
     void init();
 
     /**
-     * It shall return an ActorRef to the current holder that represents a world's portion in a cluster node.
-     * When a creature component
-     * @return  ActorRef parent
+     * It shall return a {@link ComponentRef} to the current holder that represents a
+     * world's portion in a cluster node. When a creature component needs to send a
+     * message to the outside world (e.g. a {@code DestructiveStimulus}) it routes it
+     * through here.
      */
-    ActorRef holder();
+    ComponentRef holder();
 
     /// Somatic system components
-    ActorRef eye();
-    ActorRef body();
-    ActorRef mouth();
-    ActorRef nose();
+    ComponentRef eye();
+    ComponentRef body();
+    ComponentRef mouth();
+    ComponentRef nose();
 
     /// Sensory-motor cortex components
-    ActorRef sensoryCortex();
-    ActorRef effectorCortex();
+    ComponentRef sensoryCortex();
+    ComponentRef effectorCortex();
 
     /// Emotional-cognitive components components
-    ActorRef partialAppraisal();
-    ActorRef fullAppraisal();
-    ActorRef homeostatic();
-    ActorRef valuation();
+    ComponentRef partialAppraisal();
+    ComponentRef fullAppraisal();
+    ComponentRef homeostatic();
+    ComponentRef valuation();
 
     EmotionalSystem emotions();
 
@@ -41,10 +41,10 @@ public interface Creature {
     MemorySystem memory();
 
     // Sleep-gated adapter consolidation
-    ActorRef memoryConsolidator();
+    ComponentRef memoryConsolidator();
 
     // Persistence component
-    ActorRef bd();
+    ComponentRef bd();
 
 
     void kill();

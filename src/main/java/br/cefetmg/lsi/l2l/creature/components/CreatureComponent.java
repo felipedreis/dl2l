@@ -1,28 +1,25 @@
 package br.cefetmg.lsi.l2l.creature.components;
 
-import akka.actor.ActorRef;
-import akka.actor.TypedActor;
-import akka.actor.TypedProps;
-import akka.actor.UntypedActor;
 import br.cefetmg.lsi.l2l.common.SequentialId;
+import br.cefetmg.lsi.l2l.creature.ComponentRef;
 import br.cefetmg.lsi.l2l.creature.Creature;
-import br.cefetmg.lsi.l2l.creature.CreatureActor;
-import br.cefetmg.lsi.l2l.creature.bd.BodyState;
 import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
+import br.cefetmg.lsi.l2l.creature.bd.Persister;
 
-import javax.persistence.EntityManager;
-import javax.persistence.Persistence;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.logging.Logger;
 
 /**
- * Created by felipe on 02/01/17.
+ * Base class for all creature components. Used to extend {@code akka.actor.UntypedActor}
+ * directly; that coupling has been moved out to {@link ComponentActor}. Subclasses
+ * implement {@link #onReceive(List)} which is invoked with a list of stimuli batched
+ * by the dispatcher (either {@code ComponentMailbox} in production or
+ * {@code BatchingDispatcher} in tests).
+ *
+ * Constructed via reflection / {@code Props}, then wired via {@link #init} before any
+ * message is delivered.
  */
-public abstract class CreatureComponent extends UntypedActor {
-
-    private static final int PERSISTENCE_BUFFER_LIMIT = 100000;
+public abstract class CreatureComponent {
 
     protected SequentialId id;
 
@@ -32,77 +29,67 @@ public abstract class CreatureComponent extends UntypedActor {
 
     private SequentialId nextStimulusId;
 
-    private ActorRef bd;
+    private Persister persister;
 
-    private final EntityManager em;
-
-    private final List<PersistenceState> persistenceBuffer;
+    private ComponentRef selfRef;
 
     public CreatureComponent(SequentialId id) {
         this.id = id;
         this.nextStimulusId = new SequentialId(id.sequential);
-        logger = Logger.getLogger(this.getClass().getName());
-
-        em = Persistence.createEntityManagerFactory("L2LPU")
-                .createEntityManager();
-
-        persistenceBuffer = new ArrayList<>();
+        this.logger = Logger.getLogger(this.getClass().getName());
     }
 
-    @Override
+    /**
+     * Called by the runtime adapter ({@link ComponentActor} in production, the test
+     * harness in tests) before any message is delivered. Subclasses may override
+     * {@link #preStart()} for extra wiring.
+     */
+    public final void init(Creature creature, Persister persister, ComponentRef selfRef) {
+        this.creature = creature;
+        this.persister = persister;
+        this.selfRef = selfRef;
+        try {
+            preStart();
+        } catch (Exception e) {
+            throw new RuntimeException("preStart failed for " + getClass().getSimpleName(), e);
+        }
+    }
+
+    /** Override to run extra setup once {@link #creature} and {@link #persister} are wired. */
     public void preStart() throws Exception {
-        super.preStart();
-        creature = TypedActor.get(context().system()).typedActorOf(
-                new TypedProps<>(Creature.class, CreatureActor.class), context().parent());
-        //bd = creature.bd();
+        // default: no-op
     }
 
-    @Override
+    /** Override to release resources when the component is torn down. */
     public void postStop() throws Exception {
-        super.postStop();
-        if (!persistenceBuffer.isEmpty()) {
-            synchronized (em) {
-                em.getTransaction().begin();
-                persistenceBuffer.parallelStream().forEach(em::persist);
-                em.getTransaction().commit();
-            }
-
-        }
+        // default: no-op
     }
 
-    void persist(PersistenceState ... states) {
-        /*if (persistenceBuffer.size() > PERSISTENCE_BUFFER_LIMIT) {
-            final List<PersistenceState> toPersist = new ArrayList<>(persistenceBuffer);
-            final String className = this.getClass().getSimpleName();
-            persistenceBuffer.clear();
+    /** Subclasses implement the batch handler. */
+    public abstract void onReceive(Object message);
 
-            Runnable persistTask = () -> {
-                logger.info("Persisting " + toPersist.size() + " states of " + className);
-                synchronized (em) {
-                    em.getTransaction().begin();
-                    toPersist.parallelStream().forEach(em::persist);
-                    em.getTransaction().commit();
-                    em.clear();
-                }
-            };
-
-            context().dispatcher().execute(persistTask);
-        }
-
-        persistenceBuffer.addAll(Arrays.asList(states));*/
-        logger.fine("persisting states %s".formatted(Arrays.toString(states)));
-        em.getTransaction().begin();
-        for (PersistenceState state : states) {
-            em.persist(state);
-        }
-        em.getTransaction().commit();
-        em.clear();
+    protected final void persist(PersistenceState... states) {
+        if (persister == null) return;
+        logger.fine(() -> "persisting " + states.length + " state(s)");
+        persister.persist(states);
     }
 
-    SequentialId nextStimulusId() {
+    /**
+     * A {@link ComponentRef} that points back at this component. Used by components
+     * that need to enqueue messages onto themselves (e.g. {@code HomeostaticRegulation}
+     * scheduling an analgesic response).
+     */
+    protected final ComponentRef self() {
+        return selfRef;
+    }
+
+    public final SequentialId id() {
+        return id;
+    }
+
+    protected final SequentialId nextStimulusId() {
         SequentialId id = nextStimulusId;
         nextStimulusId = nextStimulusId.next();
-
         return id;
     }
 }
