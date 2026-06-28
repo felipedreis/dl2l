@@ -23,8 +23,10 @@ import scala.concurrent.duration.Duration;
 import javax.persistence.EntityManager;
 import javax.persistence.Persistence;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.logging.Logger;
 
 /**
@@ -46,18 +48,6 @@ public class CreatureActor implements Creature {
         );
     }
 
-    private static final Class[] componentTypes = new Class[] {
-            Eye.class,
-            Body.class,
-            Mouth.class,
-            Nose.class,
-            SensoryCortex.class,
-            EffectorCortex.class,
-            PartialAppraisal.class,
-            FullAppraisal.class,
-            HomeostaticRegulation.class,
-            Valuation.class,
-    };
 
     private final Logger logger = Logger.getLogger(CreatureActor.class.getName());
 
@@ -152,10 +142,12 @@ public class CreatureActor implements Creature {
         final MLServiceExtension.Impl mlExt = MLServiceExtension.of(context.system());
 
         SequentialId componentId = id;
-        for (Class componentType : componentTypes) {
+        for (Map.Entry<Class<?>, Function<SequentialId, CreatureComponent>> entry : componentFactories(effective, mlExt).entrySet()) {
             componentId = componentId.next();
             final SequentialId cid = componentId;
-            Creator<ComponentActor> creator = () -> new ComponentActor(buildComponent(componentType, cid, effective, mlExt));
+            final Class<?> componentType = entry.getKey();
+            final Function<SequentialId, CreatureComponent> factory = entry.getValue();
+            Creator<ComponentActor> creator = () -> new ComponentActor(factory.apply(cid));
             ActorRef component = context.actorOf(
                     Props.create(ComponentActor.class, creator).withDispatcher("component-dispatcher"),
                     componentType.getSimpleName().toLowerCase());
@@ -174,19 +166,20 @@ public class CreatureActor implements Creature {
         collisionDetector.tell(getPositioningAttr(), ActorRef.noSender());
     }
 
-    private CreatureComponent buildComponent(Class componentType, SequentialId componentId,
-                                             LearningSettings effective, MLServiceExtension.Impl mlExt) {
-        if (componentType == Eye.class)                  return new Eye(componentId);
-        if (componentType == Body.class)                 return new Body(componentId);
-        if (componentType == Mouth.class)                return new Mouth(componentId);
-        if (componentType == Nose.class)                 return new Nose(componentId);
-        if (componentType == SensoryCortex.class)        return new SensoryCortex(componentId);
-        if (componentType == EffectorCortex.class)       return new EffectorCortex(componentId);
-        if (componentType == PartialAppraisal.class)     return new PartialAppraisal(componentId, effective);
-        if (componentType == FullAppraisal.class)        return new FullAppraisal(componentId, effective, mlExt);
-        if (componentType == HomeostaticRegulation.class) return new HomeostaticRegulation(componentId);
-        if (componentType == Valuation.class)            return new Valuation(componentId);
-        throw new IllegalArgumentException("Unknown component type: " + componentType);
+    private LinkedHashMap<Class<?>, Function<SequentialId, CreatureComponent>> componentFactories(
+            LearningSettings effective, MLServiceExtension.Impl mlExt) {
+        LinkedHashMap<Class<?>, Function<SequentialId, CreatureComponent>> factories = new LinkedHashMap<>();
+        factories.put(Eye.class,                   Eye::new);
+        factories.put(Body.class,                  Body::new);
+        factories.put(Mouth.class,                 Mouth::new);
+        factories.put(Nose.class,                  Nose::new);
+        factories.put(SensoryCortex.class,         SensoryCortex::new);
+        factories.put(EffectorCortex.class,        EffectorCortex::new);
+        factories.put(PartialAppraisal.class,      id -> new PartialAppraisal(id, effective));
+        factories.put(FullAppraisal.class,         id -> new FullAppraisal(id, effective, mlExt));
+        factories.put(HomeostaticRegulation.class, HomeostaticRegulation::new);
+        factories.put(Valuation.class,             Valuation::new);
+        return factories;
     }
 
     public void kill() {

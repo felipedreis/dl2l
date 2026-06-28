@@ -18,6 +18,7 @@ import br.cefetmg.lsi.l2l.stimuli.ProprioceptiveStimulus;
 import br.cefetmg.lsi.l2l.stimuli.SomaticStimulus;
 import br.cefetmg.lsi.l2l.stimuli.VisualStimulus;
 import br.cefetmg.lsi.l2l.creature.ml.SleepStarted;
+import br.cefetmg.lsi.l2l.creature.components.Mouth;
 import br.cefetmg.lsi.l2l.world.FruitType;
 import br.cefetmg.lsi.l2l.world.PlantType;
 import org.junit.jupiter.api.Test;
@@ -129,7 +130,7 @@ class TestingCreatureTest {
         EnergeticStimulus energetic = new EnergeticStimulus(
                 new SequentialId(50L), new SequentialId(52L),
                 FruitType.RED_APPLE.caloricValue, FruitType.RED_APPLE);
-        h.inject(br.cefetmg.lsi.l2l.creature.components.Mouth.class, energetic);
+        h.inject(Mouth.class, energetic);
 
         double hungerAfter = h.creature().emotions().getLevel(Constants.HUNGER);
         assertTrue(hungerAfter < hungerBefore,
