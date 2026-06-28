@@ -9,9 +9,9 @@ data/
 *.log
 *.pyc
 *.csv
-experiments/
 results/
 .DS_Store
 ml/data/
 ml/checkpoints/
 __pycache__/
+.flattened-pom.xml

@@ -1,0 +1,70 @@
+# DL2L Experiment Manifest
+#
+# Each experiment is run `trials` times; results are averaged for the report.
+# Override per-experiment fields to tune resource usage for a specific sim.
+#
+# Partition name: adjust `defaults.partition` to match `sinfo` output on your Pi cluster.
+
+defaults:
+  partition: rpi
+  time: "06:00:00"
+  cpus_per_task: 4
+  mem: 6G
+  trials: 3
+
+experiments:
+  - id: baseline_1node_5creature
+    description: "1-node, 5-creature baseline — establishes the nominal behavioural efficiency floor"
+    simulation: simulations/baseline_1node_5creature.conf
+    layout: single_node
+    trials: 5
+    analysis:
+      - script: analysis/avgBehaviouralEfficiency.py
+      - script: analysis/avgAccumulatedNutrients.py
+      - script: analysis/avgExchangedStimuli.py
+    metrics:
+      - name: avg_behavioural_efficiency
+        source: behavioural_efficiency.csv
+        column: efficiency
+        aggregate: mean
+        higher_is_better: true
+      - name: avg_accumulated_nutrients
+        source: nutrients.csv
+        column: total
+        aggregate: mean
+        higher_is_better: true
+      - name: avg_exchanged_stimuli
+        source: exchanged_stimuli.csv
+        column: count
+        aggregate: mean
+        higher_is_better: true
+
+  - id: exp_p5_sleep_consolidation
+    description: "Phase 5: sleep consolidation effect on memory retention"
+    simulation: simulations/exp_p5_1_sleep_consolidation.conf
+    layout: single_node
+    trials: 3
+    time: "04:00:00"
+    analysis:
+      - script: analysis/exp_p5_1_analysis.py
+    metrics:
+      - name: p5_consolidation_score
+        source: p5_summary.csv
+        column: score
+        aggregate: mean
+        higher_is_better: true
+
+  - id: exp_p6_mode2_selection
+    description: "Phase 6: mode-2 action selection accuracy"
+    simulation: simulations/exp_p6_1_mode2_selection.conf
+    layout: single_node
+    trials: 3
+    time: "04:00:00"
+    analysis:
+      - script: analysis/exp_p6_1_analysis.py
+    metrics:
+      - name: p6_selection_accuracy
+        source: p6_summary.csv
+        column: accuracy
+        aggregate: mean
+        higher_is_better: true
