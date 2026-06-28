@@ -1,0 +1,52 @@
+name: Experiments
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to test (e.g. v2.1.0 or latest)"
+        required: true
+
+# Serialize experiment runs so two releases don't race for Slurm capacity.
+concurrency:
+  group: experiments
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: [self-hosted, linux, ARM64, raspberry-pi, slurm]
+    timeout-minutes: 720
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    env:
+      VERSION: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install analysis dependencies
+        run: pip install -r experiments/requirements.txt --quiet
+
+      - name: Wait for image to be available in GHCR
+        run: bash experiments/wait-for-image.sh "ghcr.io/${{ github.repository }}:${VERSION}"
+
+      - name: Run experiments and generate report
+        run: python3 experiments/orchestrator.py --manifest experiments/manifest.yml --version "${VERSION}"
+
+      - name: Open report PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash experiments/open-report-pr.sh "${VERSION}"

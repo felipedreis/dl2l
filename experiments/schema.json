@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DL2L Experiment Manifest",
+  "type": "object",
+  "required": ["defaults", "experiments"],
+  "additionalProperties": false,
+  "properties": {
+    "defaults": {
+      "type": "object",
+      "required": ["partition", "time", "cpus_per_task", "mem", "trials"],
+      "additionalProperties": false,
+      "properties": {
+        "partition": { "type": "string" },
+        "time": { "type": "string", "pattern": "^\\d{2}:\\d{2}:\\d{2}$" },
+        "cpus_per_task": { "type": "integer", "minimum": 1 },
+        "mem": { "type": "string" },
+        "trials": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "experiments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "simulation", "layout", "analysis", "metrics"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+          "description": { "type": "string" },
+          "simulation": { "type": "string" },
+          "layout": { "type": "string", "enum": ["single_node"] },
+          "trials": { "type": "integer", "minimum": 1 },
+          "time": { "type": "string", "pattern": "^\\d{2}:\\d{2}:\\d{2}$" },
+          "cpus_per_task": { "type": "integer", "minimum": 1 },
+          "mem": { "type": "string" },
+          "partition": { "type": "string" },
+          "analysis": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["script"],
+              "additionalProperties": false,
+              "properties": {
+                "script": { "type": "string" }
+              }
+            }
+          },
+          "metrics": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["name", "source", "column", "aggregate", "higher_is_better"],
+              "additionalProperties": false,
+              "properties": {
+                "name": { "type": "string" },
+                "source": { "type": "string" },
+                "column": { "type": "string" },
+                "aggregate": { "type": "string", "enum": ["mean", "median", "std"] },
+                "higher_is_better": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

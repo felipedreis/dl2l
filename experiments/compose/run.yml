@@ -1,0 +1,110 @@
+# Experiment compose file. Called by experiments/job.sh with:
+#   IMAGE=<ghcr tag>  SIM_CONF=<path>  DATA_DIR=<output path>
+# Docker Compose project name is set to dl2l-<SLURM_JOB_ID> by job.sh
+# to allow concurrent trials on the same node.
+version: "3.8"
+
+x-dl2l-base: &dl2l-base
+  image: ${IMAGE}
+  networks:
+    - dl2l-exp-net
+  volumes:
+    - type: bind
+      source: ${CONFIG_FILE:-/srv/dl2l/config/docker-config.conf}
+      target: /config/docker-config.conf
+      read_only: true
+
+services:
+  dl2l-db:
+    image: postgres:15
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: l2l
+      POSTGRES_INITDB_ARGS: "--auth-host=md5"
+    networks:
+      - dl2l-exp-net
+    volumes:
+      - type: bind
+        source: ${REPO_ROOT:-/srv/dl2l/repo}/config/init-db.sql
+        target: /docker-entrypoint-initdb.d/init-db.sql
+        read_only: true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  dl2l-manager:
+    <<: *dl2l-base
+    depends_on:
+      dl2l-db:
+        condition: service_healthy
+    environment:
+      ROLE: "manager,idProvider"
+      SIMULATION: ${SIM_CONF}
+      HOST: dl2l-manager
+      PORT: 2551
+      JAVA_OPTS: "-Xmx512m"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "dl2l-manager", "2551"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  dl2l-detector:
+    <<: *dl2l-base
+    depends_on:
+      dl2l-manager:
+        condition: service_healthy
+    environment:
+      ROLE: "collisionDetector"
+      SIMULATION: ${SIM_CONF}
+      HOST: dl2l-detector
+      PORT: 2551
+      JAVA_OPTS: "-Xmx512m"
+
+  dl2l-holder:
+    <<: *dl2l-base
+    depends_on:
+      dl2l-manager:
+        condition: service_healthy
+      dl2l-detector:
+        condition: service_started
+    environment:
+      ROLE: "holder"
+      SIMULATION: ${SIM_CONF}
+      HOST: dl2l-holder
+      PORT: 2551
+      JAVA_OPTS: "-Xmx3g"
+    volumes:
+      - type: bind
+        source: ${CONFIG_FILE:-/srv/dl2l/config/docker-config.conf}
+        target: /config/docker-config.conf
+        read_only: true
+      - type: bind
+        source: ${DATA_DIR}
+        target: /dl2l/data
+
+  dl2l-extractor:
+    <<: *dl2l-base
+    profiles: ["extractor"]
+    depends_on:
+      - dl2l-holder
+    entrypoint: java
+    command: >
+      -Dconfig.file=/config/docker-config.conf
+      -jar /dl2l/run/dl2l.jar
+      --host localhost --port 2551 --roles holder
+      --extractor --save /output
+    volumes:
+      - type: bind
+        source: ${CONFIG_FILE:-/srv/dl2l/config/docker-config.conf}
+        target: /config/docker-config.conf
+        read_only: true
+      - type: bind
+        source: ${DATA_DIR}
+        target: /output
+
+networks:
+  dl2l-exp-net:
+    driver: bridge
