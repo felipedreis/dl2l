@@ -1,17 +1,10 @@
 package br.cefetmg.lsi.l2l.creature.components;
 
-import akka.actor.Actor;
-import akka.actor.Props;
-import akka.actor.TypedActor;
-import akka.japi.Creator;
-import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.SequentialId;
-import br.cefetmg.lsi.l2l.creature.Creature;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
 import br.cefetmg.lsi.l2l.creature.bd.EyeState;
 import br.cefetmg.lsi.l2l.creature.bd.ObjectSeenState;
-import br.cefetmg.lsi.l2l.physics.ObjectGeometry;
 import br.cefetmg.lsi.l2l.stimuli.FocusStimulus;
 import br.cefetmg.lsi.l2l.stimuli.LuminousStimulus;
 import br.cefetmg.lsi.l2l.stimuli.Stimulus;
@@ -50,7 +43,7 @@ public class Eye extends CreatureComponent {
                 logger.fine(String.format("Eye[%s]: saw %s angle=%.3f dist=%.1f",
                         id, luminous.getObjectType(), angle, distance));
 
-                creature.sensoryCortex().tell(visual, self());
+                creature.sensoryCortex().tell(visual);
 
                 change = new ChangeStimulusStateBuilder(this, this.id)
                         .buildOneReceivedOneEmitted(luminous, visual);

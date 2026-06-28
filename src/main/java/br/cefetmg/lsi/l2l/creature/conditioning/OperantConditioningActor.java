@@ -2,6 +2,7 @@ package br.cefetmg.lsi.l2l.creature.conditioning;
 
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.world.FruitType;
+import br.cefetmg.lsi.l2l.world.PlantType;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
 import java.util.ArrayList;
@@ -17,17 +18,19 @@ public class OperantConditioningActor implements OperantConditioning {
 
     public OperantConditioningActor() {
         experiences = new ArrayList<>();
-        experiences.add(new ProbabilityBasedExperience(FruitType.GRAY_APPLE));
-        experiences.add(new ProbabilityBasedExperience(FruitType.RED_APPLE));
-        experiences.add(new ProbabilityBasedExperience(FruitType.GREEN_APPLE));
+        for (FruitType type : FruitType.values())
+            experiences.add(new ProbabilityBasedExperience(type));
+        for (PlantType type : PlantType.values())
+            experiences.add(new ProbabilityBasedExperience(type));
     }
 
     @Override
     public void varyProbability(WorldObjectType target, ActionType action, double delta, boolean valence) {
-        ProbabilityBasedExperience experience = experiences.stream()
+        Optional<ProbabilityBasedExperience> found = experiences.stream()
                 .filter(e -> e.target.equals(target))
-                .findAny()
-                .orElseThrow(IllegalArgumentException::new);
+                .findAny();
+        if (found.isEmpty()) return;
+        ProbabilityBasedExperience experience = found.get();
 
         ActionProbability actionProbability = experience.actionsProbability
                 .stream()

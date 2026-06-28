@@ -83,7 +83,7 @@ public class HomeostaticRegulation extends CreatureComponent {
         Emotion regulated = creature.emotions().regulate(Constants.HUNGER, -s.nutritiveValue);
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
                 s.origin, s.objectType, ActionType.EAT, regulated, -s.nutritiveValue);
-        creature.valuation().tell(emitted, self());
+        creature.valuation().tell(emitted);
         return emitted;
     }
 
@@ -96,10 +96,10 @@ public class HomeostaticRegulation extends CreatureComponent {
         Emotion regulated = creature.emotions().regulate(Constants.SLEEP, -s.delta);
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(), id, Self.get(),
                 ActionType.SLEEP, regulated, -s.delta);
-        creature.valuation().tell(emitted, self());
+        creature.valuation().tell(emitted);
         if (regulated.getLevel() <= 0) {
             logger.info(String.format("HomeostaticRegulation[%s]: sleep drive exhausted, sending WakeUp", id));
-            creature.memoryConsolidator().tell(new WakeUp(), self());
+            creature.memoryConsolidator().tell(new WakeUp());
         }
         return emitted;
     }
@@ -109,7 +109,7 @@ public class HomeostaticRegulation extends CreatureComponent {
         if (s.action == null) return null;
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
                 s.origin, s.objectType, s.action, regulated, s.painIntensity);
-        creature.valuation().tell(emitted, self());
+        creature.valuation().tell(emitted);
         return emitted;
     }
 
@@ -120,7 +120,7 @@ public class HomeostaticRegulation extends CreatureComponent {
         if (s.action == null) return null;
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
                 s.origin, s.objectType, s.action, regulated, -effectiveDelta);
-        creature.valuation().tell(emitted, self());
+        creature.valuation().tell(emitted);
         return emitted;
     }
 
@@ -129,7 +129,7 @@ public class HomeostaticRegulation extends CreatureComponent {
         if (s.action != ActionType.WANDER && s.action != ActionType.OBSERVE) return null;
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
                 id, Self.get(), s.action, regulated, s.delta);
-        creature.valuation().tell(emitted, self());
+        creature.valuation().tell(emitted);
         return emitted;
     }
 
@@ -140,6 +140,6 @@ public class HomeostaticRegulation extends CreatureComponent {
         if (currentPain <= Constants.PAIN_IMMUNE_THRESHOLD) return;
         double immune = Math.min(Constants.PAIN_IMMUNE_RATE, currentPain - Constants.PAIN_IMMUNE_THRESHOLD);
         logger.fine(String.format("HomeostaticRegulation[%s]: queuing immune pain decay=%.4f", id, immune));
-        self().tell(new AnalgesicStimulus(id, nextStimulusId(), immune, null, null), self());
+        self().tell(new AnalgesicStimulus(id, nextStimulusId(), immune, null, null));
     }
 }

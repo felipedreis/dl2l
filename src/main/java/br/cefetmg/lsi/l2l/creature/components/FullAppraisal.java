@@ -1,6 +1,5 @@
 package br.cefetmg.lsi.l2l.creature.components;
 
-import br.cefetmg.lsi.l2l.cluster.SimulationSettingsExtension;
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.SequentialId;
@@ -28,7 +27,6 @@ import br.cefetmg.lsi.l2l.stimuli.CorticalStimulus;
 import br.cefetmg.lsi.l2l.stimuli.EmotionalStimulus;
 import br.cefetmg.lsi.l2l.stimuli.Stimulus;
 import br.cefetmg.lsi.l2l.stimuli.TediumStimulus;
-import br.cefetmg.lsi.l2l.world.FruitType;
 import br.cefetmg.lsi.l2l.world.PlantType;
 import br.cefetmg.lsi.l2l.world.Self;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
@@ -37,12 +35,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
-import java.util.Set;
 
 /**
  * Created by felipe on 02/01/17.
  */
 public class FullAppraisal extends CreatureComponent {
+
+    private final LearningSettings learningSettings;
+    private final MLServiceExtension.Impl mlExt;
 
     private ActionSelection actionSelection;
 
@@ -55,8 +55,10 @@ public class FullAppraisal extends CreatureComponent {
     private int sleepDwellTicks = 0;
     private long sleepOnsetCycle = 0;
 
-    public FullAppraisal(SequentialId id) {
+    public FullAppraisal(SequentialId id, LearningSettings learningSettings, MLServiceExtension.Impl mlExt) {
         super(id);
+        this.learningSettings = learningSettings;
+        this.mlExt = mlExt;
     }
 
     @Override
@@ -64,23 +66,24 @@ public class FullAppraisal extends CreatureComponent {
         super.preStart();
         memorySystem = creature.memory();
 
-        LearningSettings learning = SimulationSettingsExtension.of(context().system()).learningSettings(id.key);
-
-        MLServiceExtension.Impl mlExt = MLServiceExtension.of(context().system());
-
+        // When mlExt is null (e.g. TestingCreature), the WORLD_MODEL filter is silently
+        // disabled regardless of LearningSettings. Other filters still respect settings.
+        boolean worldModelAvailable = mlExt != null && learningSettings.isFilterEnabled(ActionSelectionType.WORLD_MODEL);
         ModelContract contract = null;
-        if (learning.isFilterEnabled(ActionSelectionType.WORLD_MODEL)) {
+        if (worldModelAvailable) {
             contract = ModelContract.load(mlExt.modelDir());
             worldModelEngine = new WorldModelEngine(mlExt, id.key);
         }
 
         List<ActionFilter> filterList = new ArrayList<>();
         for (ActionSelectionType type : LearningSettings.MASTER_FILTER_ORDER) {
-            if (!learning.isFilterEnabled(type)) continue;
+            if (!learningSettings.isFilterEnabled(type)) continue;
             switch (type) {
                 case TARGET_DISTANCE -> filterList.add(new TargetDistanceFilter());
                 case AFFORDANCE      -> filterList.add(new ActionProbabilityFilter(creature.operantConditioning()));
-                case WORLD_MODEL     -> filterList.add(new WorldModelFilter(worldModelEngine, contract));
+                case WORLD_MODEL     -> {
+                    if (worldModelAvailable) filterList.add(new WorldModelFilter(worldModelEngine, contract));
+                }
                 case RANDOM          -> filterList.add(new RandomFilter());
                 default              -> logger.warning("FullAppraisal: unknown filter type " + type + ", skipping");
             }
@@ -139,7 +142,7 @@ public class FullAppraisal extends CreatureComponent {
                         sleepDwellTicks = 0;
                         sleepOnsetCycle = cognitiveCycle;
                         logger.info(String.format("FullAppraisal[%s]: SLEEP onset at cycle %d", id, cognitiveCycle));
-                        creature.memoryConsolidator().tell(new SleepStarted(cognitiveCycle), self());
+                        creature.memoryConsolidator().tell(new SleepStarted(cognitiveCycle));
                     } else {
                         sleepDwellTicks++;
                     }
@@ -153,7 +156,7 @@ public class FullAppraisal extends CreatureComponent {
                     sleepDwellTicks = 0;
                 }
 
-                creature.effectorCortex().tell(cortical, self());
+                creature.effectorCortex().tell(cortical);
 
                 ChangeStimulusState change = new ChangeStimulusStateBuilder(this, id)
                         .buildOneReceivedOneEmitted(emotional, cortical);
@@ -229,8 +232,7 @@ public class FullAppraisal extends CreatureComponent {
         }
 
         creature.homeostatic().tell(
-                new TediumStimulus(id, nextStimulusId(), delta, selectedAction),
-                self());
+                new TediumStimulus(id, nextStimulusId(), delta, selectedAction));
     }
 
     private List<Action> definePossibleActions(List<Perception> perceptions) {

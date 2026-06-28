@@ -30,14 +30,14 @@ public class EffectorCortex extends CreatureComponent {
                 if(cortical.action == ActionType.PLAY || cortical.action == ActionType.EAT) {
                     somatic = new SomaticStimulus(id, cortical.target, nextStimulusId(),
                             cortical.action);
-                    creature.mouth().tell(somatic, self());
+                    creature.mouth().tell(somatic);
                 }
 
                 MuscularStimulus muscular = new MuscularStimulus(id, nextStimulusId(), cortical.speed, cortical.angle);
                 FocusStimulus focus = new FocusStimulus(id, nextStimulusId(), cortical.focus, cortical.angle);
 
-                creature.body().tell(muscular, self());
-                creature.eye().tell(focus, self());
+                creature.body().tell(muscular);
+                creature.eye().tell(focus);
 
                 ChangeStimulusState change = new ChangeStimulusStateBuilder(this, id)
                         .buildOneReceivedMultipleEmitted(cortical, Arrays.asList(somatic, muscular, focus));

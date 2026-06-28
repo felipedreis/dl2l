@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '23'
+          distribution: temurin
+          cache: maven
+
+      - name: Run tests
+        # ConsolidationPipelineTest downloads PyTorch native libs at runtime and requires
+        # network access to the DJL model hub; excluded here to keep CI hermetic.
+        run: |
+          mvn test \
+            -Dtest='!ConsolidationPipelineTest' \
+            --no-transfer-progress

@@ -29,7 +29,7 @@ public class SensoryCortex extends CreatureComponent {
                 proprioceptive = new ProprioceptiveStimulus(visual.origin, nextStimulusId(), visual.emitter,
                         visual.origin, InteractionState.SEEING, visual.distance, visual.angle);
 
-                creature.partialAppraisal().tell(proprioceptive, self());
+                creature.partialAppraisal().tell(proprioceptive);
 
                 ChangeStimulusState change = new ChangeStimulusStateBuilder(this, id)
                         .buildOneReceivedOneEmitted(visual, proprioceptive);
@@ -41,7 +41,7 @@ public class SensoryCortex extends CreatureComponent {
                 proprioceptive = new ProprioceptiveStimulus(touch.origin, nextStimulusId(), touch.emitter,
                         touch.origin, InteractionState.TOUCHING, 0, 0);
 
-                creature.partialAppraisal().tell(proprioceptive, self());
+                creature.partialAppraisal().tell(proprioceptive);
 
                 ChangeStimulusState change = new ChangeStimulusStateBuilder(this, id)
                         .buildOneReceivedOneEmitted(touch, proprioceptive);
@@ -51,7 +51,7 @@ public class SensoryCortex extends CreatureComponent {
 
                 proprioceptive = new ProprioceptiveStimulus(olfactory.origin, nextStimulusId(), olfactory.objectType,
                         olfactory.origin, InteractionState.SMELLING, olfactory.distance, olfactory.angle);
-                creature.partialAppraisal().tell(proprioceptive, self());
+                creature.partialAppraisal().tell(proprioceptive);
 
                 ChangeStimulusState change = new ChangeStimulusStateBuilder(this, id)
                         .buildOneReceivedOneEmitted(olfactory, proprioceptive);
