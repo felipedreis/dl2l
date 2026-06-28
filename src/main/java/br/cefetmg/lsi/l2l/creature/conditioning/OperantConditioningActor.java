@@ -24,10 +24,11 @@ public class OperantConditioningActor implements OperantConditioning {
 
     @Override
     public void varyProbability(WorldObjectType target, ActionType action, double delta, boolean valence) {
-        ProbabilityBasedExperience experience = experiences.stream()
+        Optional<ProbabilityBasedExperience> found = experiences.stream()
                 .filter(e -> e.target.equals(target))
-                .findAny()
-                .orElseThrow(IllegalArgumentException::new);
+                .findAny();
+        if (found.isEmpty()) return;
+        ProbabilityBasedExperience experience = found.get();
 
         ActionProbability actionProbability = experience.actionsProbability
                 .stream()
