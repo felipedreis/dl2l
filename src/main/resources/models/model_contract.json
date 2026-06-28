@@ -44,6 +44,6 @@
   "max_arousal": 7.0,
   "baseline_pred_error": 1.0,
   "ood_threshold_multiplier": 2.0,
-  "model_hash": "b3c61a3c410bdeddbb3b5bc8e8c78e13c43bf430900486625b4745e3e83d199d",
+  "model_hash": "56138b682d2031d00878f1a77c9aca0783040932363eb532aac3d80f57b55223",
   "trained_on": "2026-06-22"
 }

@@ -222,6 +222,31 @@ public class ConsolidationPipelineTest {
     }
 
     /**
+     * Identity init (issue #43): a freshly loaded species_adapter.pt must
+     * output ~0 for any input, so the additive composition
+     * predictor(z, a) + adapter(predictor(z, a)) equals the species
+     * Predictor alone before sleep consolidation runs. Prevents the
+     * milestone-6 lifetime regression where random adapter weights
+     * corrupted the inference chain on every creature's first life-tick.
+     */
+    @Test
+    void adapterStartsAsIdentity() throws Exception {
+        int n = 8;
+        try (ZooModel<NDList, NDList> ada = loadTrainable("species_adapter");
+             Trainer trainer = ada.newTrainer(adapterConfig());
+             NDManager mgr = NDManager.newBaseManager()) {
+
+            NDArray z      = mgr.randomNormal(new Shape(n, contract.latentDim));
+            NDArray out    = trainer.forward(new NDList(z)).singletonOrThrow();
+            float   maxAbs = out.abs().max().getFloat();
+
+            assertTrue(maxAbs < 1e-5f,
+                    "adapter must output ~0 at construction, got max|out|=" + maxAbs);
+            log.info("adapterStartsAsIdentity: max|out|=" + maxAbs);
+        }
+    }
+
+    /**
      * Full prediction-error chain: one batch.
      * Verifies loss is finite and adapter parameters change after step().
      */
