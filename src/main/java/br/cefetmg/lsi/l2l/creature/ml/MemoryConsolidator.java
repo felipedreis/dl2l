@@ -325,17 +325,21 @@ public class MemoryConsolidator extends UntypedActor {
             NDArray z        = encoderTrainer.forward(new NDList(percInput)).singletonOrThrow();
             NDArray adaptedZ = adapterTrainer.forward(new NDList(z)).singletonOrThrow();
 
+            NDArray zInternal = null;
             NDArray predictorInput;
             if (internalEncoderTrainer != null && internalData != null) {
-                NDArray htBatch   = mgr.create(internalData, new Shape(n, contract.internalStateDim));
-                NDArray zInternal = internalEncoderTrainer.forward(new NDList(htBatch)).singletonOrThrow();
-                predictorInput    = NDArrays.concat(new NDList(adaptedZ, zInternal), -1);
+                NDArray htBatch = mgr.create(internalData, new Shape(n, contract.internalStateDim));
+                zInternal       = internalEncoderTrainer.forward(new NDList(htBatch)).singletonOrThrow();
+                predictorInput  = NDArrays.concat(new NDList(adaptedZ, zInternal), -1);
             } else {
                 predictorInput = adaptedZ;
             }
 
-            NDArray nextZ     = predictorTrainer.forward(new NDList(predictorInput, actionBatch)).singletonOrThrow();
-            NDArray predDelta = criticTrainer.forward(new NDList(nextZ, actionBatch)).singletonOrThrow();
+            NDArray nextZ       = predictorTrainer.forward(new NDList(predictorInput, actionBatch)).singletonOrThrow();
+            NDArray criticInput = (zInternal != null)
+                    ? NDArrays.concat(new NDList(nextZ, zInternal), -1)
+                    : nextZ;
+            NDArray predDelta   = criticTrainer.forward(new NDList(criticInput, actionBatch)).singletonOrThrow();
 
             NDArray rawLoss      = adapterTrainer.getLoss().evaluate(new NDList(target), new NDList(predDelta));
             NDArray weightedLoss = rawLoss.mul(weightArr.mean());
