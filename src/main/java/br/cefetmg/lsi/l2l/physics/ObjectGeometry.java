@@ -4,9 +4,11 @@ import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.common.ResourceLoader;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.world.FruitType;
+import br.cefetmg.lsi.l2l.world.PlantType;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 //import org.newdawn.slick.Image;
 import org.newdawn.slick.geom.Circle;
+import org.newdawn.slick.geom.Polygon;
 import org.newdawn.slick.geom.Rectangle;
 import org.newdawn.slick.geom.Shape;
 
@@ -29,10 +31,10 @@ public class ObjectGeometry implements Geometry {
         this.point = attr.position;
         this.type = attr.type;
 
-        if (type instanceof FruitType) {
-            FruitType fruitType = (FruitType) type;
+        if (type instanceof FruitType fruitType) {
             this.shape = new Circle((float) point.x, (float) point.y, (float) fruitType.radius);
-
+        } else if (type instanceof PlantType plantType) {
+            this.shape = plantTriangle(point.x, point.y, plantType.radius, plantType == PlantType.CACTUS);
         } else {
             //texture = null;
             shape = null;
@@ -60,7 +62,22 @@ public class ObjectGeometry implements Geometry {
     public Rectangle getBoundingBox() {
         if (type instanceof FruitType fruitType)
             return new Rectangle(point.x - fruitType.radius, point.y - fruitType.radius, fruitType.radius*2, fruitType.radius*2);
+        else if (type instanceof PlantType plantType)
+            return new Rectangle(point.x - plantType.radius, point.y - plantType.radius, plantType.radius*2, plantType.radius*2);
         else return null;
+    }
+
+    // Equilateral triangle inscribed in a circle of the given radius.
+    // pointingUp=true → CACTUS (▲), pointingUp=false → ALOE (▽).
+    private static Polygon plantTriangle(double cx, double cy, double r, boolean pointingUp) {
+        double baseAngle = pointingUp ? -Math.PI / 2 : Math.PI / 2;
+        double[] pts = new double[6];
+        for (int i = 0; i < 3; i++) {
+            double a = baseAngle + i * 2 * Math.PI / 3;
+            pts[i * 2]     = cx + r * Math.cos(a);
+            pts[i * 2 + 1] = cy + r * Math.sin(a);
+        }
+        return new Polygon(pts);
     }
 
     @Override
