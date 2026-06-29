@@ -60,6 +60,8 @@ public class HomeostaticRegulation extends CreatureComponent {
         EmotionalState s = new EmotionalState();
         s.setHunger(creature.emotions().getLevel(Constants.HUNGER));
         s.setSleep(creature.emotions().getLevel(Constants.SLEEP));
+        s.setPain(creature.emotions().getLevel(Constants.PAIN));
+        s.setTedium(creature.emotions().getLevel(Constants.TEDIUM));
         return s;
     }
 
