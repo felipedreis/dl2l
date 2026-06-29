@@ -6,7 +6,9 @@
   "emotion_dim": 9,
   "live_emotion_dims": [
     0,
-    1
+    1,
+    4,
+    5
   ],
   "emotion_index_order": [
     "hunger",
@@ -44,7 +46,7 @@
   "min_arousal": 0.18,
   "max_arousal": 7.0,
   "has_internal_encoder": true,
-  "model_hash": "4cacff970ff6cea506c9f144c48ea57d25712de061bd3549aedfd047ade650c5",
+  "model_hash": "a78058ca70d6af863525788decf6480fbedc39a6abb234316d6678578e1c5d1c",
   "trained_on": "2026-06-29",
   "internal_state_feature_order": [
     "ht_hunger",
