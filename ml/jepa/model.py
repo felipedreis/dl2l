@@ -93,6 +93,13 @@ class IndividualAdapter(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden, latent_dim),
         )
+        # Identity init (LoRA / ControlNet / Houlsby pattern): zero the output
+        # projection so adapter(z) == 0 at start, making
+        # predictor(z, a) + adapter(predictor(z, a)) == predictor(z, a).
+        # The first Linear keeps its default Kaiming init so gradients still
+        # flow back through it during sleep consolidation.
+        nn.init.zeros_(self.net[-1].weight)
+        nn.init.zeros_(self.net[-1].bias)
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:
         return self.net(z)
