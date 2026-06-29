@@ -109,11 +109,12 @@ public class WorldModelEngine implements AutoCloseable {
             NDArray latent  = encoderPredictor.predict(new NDList(perc)).singletonOrThrow();
             NDArray adapted = adapterPredictor.predict(new NDList(latent)).singletonOrThrow();
 
+            NDArray zInternal = null;
             NDArray predictorInput;
             if (internalEncoderPredictor != null && internalState != null) {
-                NDArray ht       = mgr.create(internalState);
-                NDArray zInternal = internalEncoderPredictor.predict(new NDList(ht)).singletonOrThrow();
-                predictorInput   = NDArrays.concat(new NDList(adapted, zInternal), -1);
+                NDArray ht    = mgr.create(internalState);
+                zInternal     = internalEncoderPredictor.predict(new NDList(ht)).singletonOrThrow();
+                predictorInput = NDArrays.concat(new NDList(adapted, zInternal), -1);
             } else {
                 predictorInput = adapted;
             }
@@ -121,8 +122,13 @@ public class WorldModelEngine implements AutoCloseable {
             NDArray actionHot  = mgr.create(encodeAction(actionType));
             NDArray nextLatent = predictorPredictor.predict(
                                      new NDList(predictorInput, actionHot)).singletonOrThrow();
+            // Dual-encoder: Critic takes concat(z_next, z_internal) so it can
+            // condition action value on the creature's internal homeostatic state.
+            NDArray criticInput = (zInternal != null)
+                    ? NDArrays.concat(new NDList(nextLatent, zInternal), -1)
+                    : nextLatent;
             float[] deltas     = criticPredictor.predict(
-                                     new NDList(nextLatent, actionHot))
+                                     new NDList(criticInput, actionHot))
                                      .singletonOrThrow().toFloatArray();
             return buildState(deltas);
         } catch (TranslateException e) {

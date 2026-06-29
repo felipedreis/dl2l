@@ -197,11 +197,13 @@ class DualSpeciesModel(nn.Module):
         self.internal_encoder = InternalEncoder(internal_state_dim, internal_latent_dim)
         combined_latent_dim   = latent_dim + internal_latent_dim
         # Predictor takes concat(z_world, z_internal) as input but outputs
-        # a pure world-latent (latent_dim) so L_pred and the Critic stay
-        # in the same 64-dim space as the single-encoder model.
+        # a pure world-latent (latent_dim) so L_pred stays in the 64-dim space.
         self.predictor        = Predictor(latent_dim, action_dim, hidden,
                                           in_latent_dim=combined_latent_dim)
-        self.critic           = Critic(latent_dim, action_dim, emotion_dim,
+        # Critic takes concat(z_next, z_internal) so it can condition action
+        # value on the creature's internal state (hunger, sleep…) and break
+        # the SLEEP bias caused by being blind to homeostatic urgency.
+        self.critic           = Critic(combined_latent_dim, action_dim, emotion_dim,
                                        min_arousal, max_arousal, hidden)
 
     def forward(
@@ -219,5 +221,5 @@ class DualSpeciesModel(nn.Module):
         z_internal = self.internal_encoder(h_t)
         z_combined = torch.cat([z_world, z_internal], dim=-1)
         z_next     = self.predictor(z_combined, a_t)
-        emotion    = self.critic(z_next, a_t)
+        emotion    = self.critic(torch.cat([z_next, z_internal], dim=-1), a_t)
         return z_world, z_next, emotion
