@@ -9,12 +9,16 @@
 # Usage: ./scripts/run_exp51.sh [N_TRAIN_TRIALS]  (default 3)
 set -e
 
+DC="docker compose"
 TRIALS=${1:-3}
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 COMPOSE_DIR="$ROOT_DIR/docker"
 JAR="$ROOT_DIR/target/l2l-2.0.0-SNAPSHOT-wd.jar"
 CONFIG_FILE="$ROOT_DIR/config/docker-config.conf"
 NETWORK="docker_dl2l-network"
+
+TRAIN_COMPOSE="docker-compose-train-p7.yml"
+VAL_COMPOSE="docker-compose-exp-51-val.yml"
 
 RAW_P8_DIR="$ROOT_DIR/ml/data/raw_p8"
 ML_DATA_P8="$ROOT_DIR/ml/data_p8"
@@ -43,12 +47,12 @@ for i in $(seq 1 "$TRIALS"); do
 
     echo ""
     echo "--- Training trial $i / $TRIALS ---"
-    (cd "$COMPOSE_DIR" && docker-compose -f docker-compose-train-p7.yml down -v --remove-orphans 2>/dev/null || true)
+    (cd "$COMPOSE_DIR" && $DC -f "$TRAIN_COMPOSE" down -v --remove-orphans 2>/dev/null || true)
 
     echo "  Starting training simulation..."
-    (cd "$COMPOSE_DIR" && docker-compose -f docker-compose-train-p7.yml up -d)
+    (cd "$COMPOSE_DIR" && $DC -f "$TRAIN_COMPOSE" up -d)
 
-    HOLDER_ID=$(cd "$COMPOSE_DIR" && docker-compose -f docker-compose-train-p7.yml ps -q dl2l-holder)
+    HOLDER_ID=$(cd "$COMPOSE_DIR" && $DC -f "$TRAIN_COMPOSE" ps -q dl2l-holder)
     echo "  Holder: $HOLDER_ID — waiting for simulation to finish..."
     docker wait "$HOLDER_ID"
     echo "  Simulation finished."
@@ -66,7 +70,7 @@ for i in $(seq 1 "$TRIALS"); do
         --host localhost --port 2551 --roles holder --extractor --save /output
 
     echo "  Trial $i complete ($(ls "$TRIAL_DIR" | wc -l) creature dirs)."
-    (cd "$COMPOSE_DIR" && docker-compose -f docker-compose-train-p7.yml down -v)
+    (cd "$COMPOSE_DIR" && $DC -f "$TRAIN_COMPOSE" down -v)
 done
 
 echo ""
@@ -107,11 +111,11 @@ echo ""
 echo ">>> PHASE 3: Validation experiment <<<"
 mkdir -p "$VAL_DIR"
 
-(cd "$COMPOSE_DIR" && docker-compose -f docker-compose-exp-51-val.yml down -v --remove-orphans 2>/dev/null || true)
+(cd "$COMPOSE_DIR" && $DC -f "$VAL_COMPOSE" down -v --remove-orphans 2>/dev/null || true)
 echo "  Starting validation simulation..."
-(cd "$COMPOSE_DIR" && docker-compose -f docker-compose-exp-51-val.yml up -d)
+(cd "$COMPOSE_DIR" && $DC -f "$VAL_COMPOSE" up -d)
 
-HOLDER_ID=$(cd "$COMPOSE_DIR" && docker-compose -f docker-compose-exp-51-val.yml ps -q dl2l-holder)
+HOLDER_ID=$(cd "$COMPOSE_DIR" && $DC -f "$VAL_COMPOSE" ps -q dl2l-holder)
 echo "  Holder: $HOLDER_ID — waiting for validation to finish..."
 docker wait "$HOLDER_ID"
 echo "  Validation simulation finished."
@@ -128,7 +132,7 @@ docker run --rm \
     -jar dl2l.jar \
     --host localhost --port 2551 --roles holder --extractor --save /output
 
-(cd "$COMPOSE_DIR" && docker-compose -f docker-compose-exp-51-val.yml down -v)
+(cd "$COMPOSE_DIR" && $DC -f "$VAL_COMPOSE" down -v)
 echo "  Validation data extracted."
 
 echo ""
