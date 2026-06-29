@@ -53,10 +53,15 @@ import static org.junit.jupiter.api.Assertions.*;
 public class ConsolidationPipelineTest {
 
     private static final Logger log = Logger.getLogger(ConsolidationPipelineTest.class.getName());
-    private static final List<String> MODEL_FILES = List.of(
+    private static final List<String> MODEL_FILES_SINGLE = List.of(
+            "model_contract.json",
+            "species_encoder.pt", "species_predictor.pt",
+            "species_critic.pt", "species_adapter.pt");
+    private static final List<String> MODEL_FILES_DUAL = List.of(
+            "model_contract.json",
             "species_encoder.pt", "species_predictor.pt",
             "species_critic.pt", "species_adapter.pt",
-            "model_contract.json");
+            "species_internal_encoder.pt");
 
     private static Path modelDir;
     private static ModelContract contract;
@@ -64,7 +69,22 @@ public class ConsolidationPipelineTest {
     @BeforeAll
     static void extractModels() throws Exception {
         modelDir = Files.createTempDirectory("dl2l-test-models-");
-        for (String f : MODEL_FILES) {
+        // Two-step extraction: read contract first to discover hasDualEncoder,
+        // then extract the appropriate set of .pt files, then validate hash.
+        try (InputStream is = ConsolidationPipelineTest.class
+                .getResourceAsStream("/models/model_contract.json")) {
+            assertNotNull(is, "Missing classpath resource: /models/model_contract.json");
+            Files.copy(is, modelDir.resolve("model_contract.json"), StandardCopyOption.REPLACE_EXISTING);
+        }
+        com.fasterxml.jackson.databind.ObjectMapper mapper =
+                new com.fasterxml.jackson.databind.ObjectMapper();
+        ModelContract preview;
+        try (InputStream is = java.nio.file.Files.newInputStream(modelDir.resolve("model_contract.json"))) {
+            preview = mapper.readValue(is, ModelContract.class);
+        }
+        List<String> filesToExtract = preview.hasDualEncoder ? MODEL_FILES_DUAL : MODEL_FILES_SINGLE;
+        for (String f : filesToExtract) {
+            if (f.equals("model_contract.json")) continue; // already extracted
             try (InputStream is = ConsolidationPipelineTest.class
                     .getResourceAsStream("/models/" + f)) {
                 assertNotNull(is, "Missing classpath resource: /models/" + f);
@@ -75,7 +95,8 @@ public class ConsolidationPipelineTest {
         log.info("Models extracted — latent_dim=" + contract.latentDim
                 + " input_dim=" + contract.inputDim
                 + " action_dim=" + contract.actionDim
-                + " emotion_dim=" + contract.emotionDim);
+                + " emotion_dim=" + contract.emotionDim
+                + " hasDualEncoder=" + contract.hasDualEncoder);
     }
 
     // -----------------------------------------------------------------------
@@ -135,8 +156,13 @@ public class ConsolidationPipelineTest {
         });
     }
 
-    /** Run one forward+backward batch through the full chain; return loss. */
+    /** Run one forward+backward batch through the full chain; return loss.
+     *
+     * intEncT is non-null only when contract.hasDualEncoder. In that case
+     * z_internal (frozen) is concatenated with adaptedZ before the Predictor.
+     */
     private float runBatch(Trainer encT, Trainer adaT, Trainer predT, Trainer critT,
+                           Trainer intEncT,
                            List<Engram> batch, NDManager mgr) {
         int n = batch.size();
         float[] percData   = new float[n * contract.inputDim];
@@ -168,9 +194,20 @@ public class ConsolidationPipelineTest {
 
         float lossValue;
         try (GradientCollector gc = Engine.getInstance().newGradientCollector()) {
-            NDArray z         = encT.forward(new NDList(percInput)).singletonOrThrow();
-            NDArray adaptedZ  = adaT.forward(new NDList(z)).singletonOrThrow();
-            NDArray nextZ     = predT.forward(new NDList(adaptedZ, actionBatch)).singletonOrThrow();
+            NDArray z        = encT.forward(new NDList(percInput)).singletonOrThrow();
+            NDArray adaptedZ = adaT.forward(new NDList(z)).singletonOrThrow();
+
+            NDArray predInput;
+            if (contract.hasDualEncoder && intEncT != null) {
+                // Zero-init internal state: h_t = 0 (valid zero-arousal test input).
+                NDArray hT       = mgr.zeros(new Shape(n, contract.internalStateDim));
+                NDArray zInternal = intEncT.forward(new NDList(hT)).singletonOrThrow();
+                predInput = ai.djl.ndarray.NDArrays.concat(new NDList(adaptedZ, zInternal), 1);
+            } else {
+                predInput = adaptedZ;
+            }
+
+            NDArray nextZ     = predT.forward(new NDList(predInput, actionBatch)).singletonOrThrow();
             NDArray predDelta = critT.forward(new NDList(nextZ, actionBatch)).singletonOrThrow();
 
             NDArray rawLoss      = adaT.getLoss().evaluate(new NDList(target), new NDList(predDelta));
@@ -254,17 +291,20 @@ public class ConsolidationPipelineTest {
     void singleBatchTrainingRound() throws Exception {
         List<Engram> engrams = makeEngrams(16);
 
+        ZooModel<NDList, NDList> intEncModel = contract.hasDualEncoder
+                ? loadTrainable("species_internal_encoder") : null;
         try (ZooModel<NDList, NDList> encModel  = loadTrainable("species_encoder");
              ZooModel<NDList, NDList> adaModel  = loadTrainable("species_adapter");
              ZooModel<NDList, NDList> predModel = loadTrainable("species_predictor");
              ZooModel<NDList, NDList> critModel = loadTrainable("species_critic");
-             Trainer encT  = encModel.newTrainer(frozenConfig());
-             Trainer adaT  = adaModel.newTrainer(adapterConfig());
-             Trainer predT = predModel.newTrainer(frozenConfig());
-             Trainer critT = critModel.newTrainer(frozenConfig());
+             Trainer encT     = encModel.newTrainer(frozenConfig());
+             Trainer adaT     = adaModel.newTrainer(adapterConfig());
+             Trainer predT    = predModel.newTrainer(frozenConfig());
+             Trainer critT    = critModel.newTrainer(frozenConfig());
+             Trainer intEncT  = intEncModel != null ? intEncModel.newTrainer(frozenConfig()) : null;
              NDManager mgr = NDManager.newBaseManager()) {
 
-            float loss = runBatch(encT, adaT, predT, critT, engrams, mgr);
+            float loss = runBatch(encT, adaT, predT, critT, intEncT, engrams, mgr);
             adaT.step();
 
             log.info("singleBatchTrainingRound: loss=" + loss);
@@ -334,14 +374,17 @@ public class ConsolidationPipelineTest {
         int batchSize  = 16;
         List<Engram> engrams = makeEngrams(windowSize);
 
+        ZooModel<NDList, NDList> intEncModel = contract.hasDualEncoder
+                ? loadTrainable("species_internal_encoder") : null;
         try (ZooModel<NDList, NDList> encModel  = loadTrainable("species_encoder");
              ZooModel<NDList, NDList> adaModel  = loadTrainable("species_adapter");
              ZooModel<NDList, NDList> predModel = loadTrainable("species_predictor");
              ZooModel<NDList, NDList> critModel = loadTrainable("species_critic");
-             Trainer encT  = encModel.newTrainer(frozenConfig());
-             Trainer adaT  = adaModel.newTrainer(adapterConfig());
-             Trainer predT = predModel.newTrainer(frozenConfig());
-             Trainer critT = critModel.newTrainer(frozenConfig());
+             Trainer encT    = encModel.newTrainer(frozenConfig());
+             Trainer adaT    = adaModel.newTrainer(adapterConfig());
+             Trainer predT   = predModel.newTrainer(frozenConfig());
+             Trainer critT   = critModel.newTrainer(frozenConfig());
+             Trainer intEncT = intEncModel != null ? intEncModel.newTrainer(frozenConfig()) : null;
              NDManager sessionMgr = NDManager.newBaseManager()) {
 
             int batchCount = 0;
@@ -352,7 +395,7 @@ public class ConsolidationPipelineTest {
 
                 float loss;
                 try (NDManager batchMgr = sessionMgr.newSubManager()) {
-                    loss = runBatch(encT, adaT, predT, critT, batch, batchMgr);
+                    loss = runBatch(encT, adaT, predT, critT, intEncT, batch, batchMgr);
                 }
                 adaT.step();
 

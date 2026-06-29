@@ -20,8 +20,11 @@ import java.util.List;
 public class ModelContract {
 
     private static final int SUPPORTED_SCHEMA_VERSION = 1;
-    private static final List<String> MODEL_FILES =
+    private static final List<String> MODEL_FILES_SINGLE =
             List.of("species_adapter.pt", "species_critic.pt", "species_encoder.pt", "species_predictor.pt");
+    private static final List<String> MODEL_FILES_DUAL =
+            List.of("species_adapter.pt", "species_critic.pt", "species_encoder.pt",
+                    "species_internal_encoder.pt", "species_predictor.pt");
 
     @JsonProperty("schema_version")           public int schemaVersion;
     @JsonProperty("input_dim")                public int inputDim;
@@ -36,8 +39,12 @@ public class ModelContract {
     @JsonProperty("perception_feature_order") public List<String> perceptionFeatureOrder;
     @JsonProperty("min_arousal")              public double minArousal;
     @JsonProperty("max_arousal")              public double maxArousal;
-    @JsonProperty("baseline_pred_error")      public double baselinePredError      = 1.0;
-    @JsonProperty("ood_threshold_multiplier") public double oodThresholdMultiplier = 2.0;
+    @JsonProperty("baseline_pred_error")          public double  baselinePredError      = 1.0;
+    @JsonProperty("ood_threshold_multiplier")     public double  oodThresholdMultiplier = 2.0;
+    @JsonProperty("has_internal_encoder")         public boolean hasDualEncoder         = false;
+    @JsonProperty("internal_state_dim")           public int     internalStateDim        = 0;
+    @JsonProperty("internal_latent_dim")          public int     internalLatentDim       = 0;
+    @JsonProperty("internal_state_feature_order") public List<String> internalStateFeatureOrder;
 
     public int emotionIndexOf(String name) {
         int idx = emotionIndexOrder.indexOf(name);
@@ -73,8 +80,9 @@ public class ModelContract {
             throw new RuntimeException(e);
         }
 
+        List<String> files = hasDualEncoder ? MODEL_FILES_DUAL : MODEL_FILES_SINGLE;
         // Alphabetical order matches the hash computed at training time.
-        for (String filename : MODEL_FILES) {
+        for (String filename : files) {
             try (DigestInputStream dis = new DigestInputStream(
                     Files.newInputStream(modelDir.resolve(filename)), digest)) {
                 dis.transferTo(OutputStream.nullOutputStream());

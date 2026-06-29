@@ -53,18 +53,25 @@ public class MLServiceExtension extends AbstractExtensionId<MLServiceExtension.I
             ZooModel<NDList, NDList> encoder,
             ZooModel<NDList, NDList> predictor,
             ZooModel<NDList, NDList> critic,
+            ZooModel<NDList, NDList> internalEncoder,  // null when hasDualEncoder=false
             ModelContract contract
-    ) {}
+    ) {
+        public boolean hasDualEncoder() { return internalEncoder != null; }
+    }
 
     // -------------------------------------------------------------------------
 
     public static class Impl implements Extension {
 
         private static final Logger logger = Logger.getLogger(Impl.class.getName());
-        private static final List<String> MODEL_FILES = List.of(
+        private static final List<String> MODEL_FILES_SINGLE = List.of(
                 "species_encoder.pt", "species_predictor.pt",
                 "species_critic.pt", "species_adapter.pt",
                 "model_contract.json");
+        private static final List<String> MODEL_FILES_DUAL = List.of(
+                "species_encoder.pt", "species_predictor.pt",
+                "species_critic.pt", "species_adapter.pt",
+                "species_internal_encoder.pt", "model_contract.json");
 
         private final LoadedModels models;
         private final ActorRef inferenceRouter;
@@ -80,13 +87,19 @@ public class MLServiceExtension extends AbstractExtensionId<MLServiceExtension.I
 
         Impl(ExtendedActorSystem system) {
             try {
-                modelDir = extractModelsToTemp();
+                // Extract all model files to temp dir, then validate via ModelContract.load().
+                // We extract the contract first (small, always present) to discover hasDualEncoder,
+                // then extract the appropriate .pt files before hash validation runs.
+                modelDir = extractContractToTemp();
+                ModelContract contractForDiscovery = readContractNoValidation(modelDir);
+                extractModelFiles(modelDir, contractForDiscovery);
                 ModelContract contract = ModelContract.load(modelDir);
                 logger.info("MLServiceExtension: model contract validated (schema_version="
                         + contract.schemaVersion + ", input_dim=" + contract.inputDim + ")");
 
                 models = loadModels(modelDir, contract);
-                logger.info("MLServiceExtension: all four models loaded");
+                logger.info("MLServiceExtension: species models loaded"
+                        + (contract.hasDualEncoder ? " (dual-encoder)" : " (single-encoder)"));
 
                 int poolSize = Math.max(1, Runtime.getRuntime().availableProcessors());
                 inferenceRouter = system.actorOf(
@@ -99,6 +112,7 @@ public class MLServiceExtension extends AbstractExtensionId<MLServiceExtension.I
                     models.encoder().close();
                     models.predictor().close();
                     models.critic().close();
+                    if (models.internalEncoder() != null) models.internalEncoder().close();
                     perCreatureAdapters.values().forEach(m -> {
                         try { m.close(); } catch (Exception ignored) {}
                     });
@@ -167,9 +181,30 @@ public class MLServiceExtension extends AbstractExtensionId<MLServiceExtension.I
                     .loadModel();
         }
 
-        private static Path extractModelsToTemp() throws IOException {
+        private static ModelContract readContractNoValidation(Path dir) throws IOException {
+            com.fasterxml.jackson.databind.ObjectMapper mapper =
+                    new com.fasterxml.jackson.databind.ObjectMapper();
+            try (java.io.InputStream is = java.nio.file.Files.newInputStream(
+                    dir.resolve("model_contract.json"))) {
+                return mapper.readValue(is, ModelContract.class);
+            }
+        }
+
+        private static Path extractContractToTemp() throws IOException {
             Path tempDir = Files.createTempDirectory("dl2l-models-");
-            for (String filename : MODEL_FILES) {
+            try (InputStream is = MLServiceExtension.class
+                    .getResourceAsStream("/models/model_contract.json")) {
+                if (is == null)
+                    throw new IOException("Missing classpath resource: /models/model_contract.json");
+                Files.copy(is, tempDir.resolve("model_contract.json"), StandardCopyOption.REPLACE_EXISTING);
+            }
+            return tempDir;
+        }
+
+        private static void extractModelFiles(Path tempDir, ModelContract contract) throws IOException {
+            List<String> files = contract.hasDualEncoder ? MODEL_FILES_DUAL : MODEL_FILES_SINGLE;
+            for (String filename : files) {
+                if (filename.equals("model_contract.json")) continue;
                 try (InputStream is = MLServiceExtension.class
                         .getResourceAsStream("/models/" + filename)) {
                     if (is == null)
@@ -177,15 +212,18 @@ public class MLServiceExtension extends AbstractExtensionId<MLServiceExtension.I
                     Files.copy(is, tempDir.resolve(filename), StandardCopyOption.REPLACE_EXISTING);
                 }
             }
-            return tempDir;
         }
 
         private static LoadedModels loadModels(Path modelDir, ModelContract contract)
                 throws IOException, ModelNotFoundException, MalformedModelException {
+            ZooModel<NDList, NDList> internalEncoder = contract.hasDualEncoder
+                    ? loadInferenceModel(modelDir, "species_internal_encoder")
+                    : null;
             return new LoadedModels(
                     loadInferenceModel(modelDir, "species_encoder"),
                     loadInferenceModel(modelDir, "species_predictor"),
                     loadInferenceModel(modelDir, "species_critic"),
+                    internalEncoder,
                     contract);
         }
 

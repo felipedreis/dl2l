@@ -41,11 +41,19 @@ class Encoder(nn.Module):
 
 
 class Predictor(nn.Module):
-    """Pred(z_t, a_t) -> z_{t+1}_hat  [latent_dim]"""
+    """Pred(z_t, a_t) -> z_{t+1}_hat  [latent_dim]
 
-    def __init__(self, latent_dim: int, action_dim: int, hidden: int = 128):
+    in_latent_dim: input latent size (defaults to latent_dim).  Set this to
+    combined_latent_dim when used inside DualSpeciesModel so the Predictor can
+    receive concat(z_world, z_internal) as input while still outputting a
+    pure world-latent of size latent_dim.
+    """
+
+    def __init__(self, latent_dim: int, action_dim: int, hidden: int = 128,
+                 in_latent_dim: int = None):
         super().__init__()
-        self.net = _mlp(latent_dim + action_dim, hidden, latent_dim, norm=True)
+        in_dim = in_latent_dim if in_latent_dim is not None else latent_dim
+        self.net = _mlp(in_dim + action_dim, hidden, latent_dim, norm=True)
 
     def forward(self, z: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
         return self.net(torch.cat([z, a], dim=-1))
@@ -132,3 +140,84 @@ class SpeciesModel(nn.Module):
         z_next = self.predictor(z_t, a_t)
         emotion = self.critic(z_t, a_t)
         return z_t, z_next, emotion
+
+
+class InternalEncoder(nn.Module):
+    """Enc(h_t) -> z_internal  [internal_latent_dim]
+
+    Encodes the creature's live homeostatic state (hunger, sleep, pain, tedium)
+    into a small latent vector that is concatenated with z_world before the
+    Predictor and Critic in the dual-encoder architecture.
+
+    No LayerNorm: the 4-dim input is already structured and normalised.
+    """
+
+    def __init__(self, internal_state_dim: int, internal_latent_dim: int, hidden: int = 32):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(internal_state_dim, hidden),
+            nn.ReLU(),
+            nn.Linear(hidden, internal_latent_dim),
+            nn.ReLU(),
+        )
+
+    def forward(self, h: torch.Tensor) -> torch.Tensor:
+        return self.net(h)
+
+
+class DualSpeciesModel(nn.Module):
+    """Dual-encoder species model: WorldEncoder + InternalEncoder combined at Predictor level.
+
+    Architecture:
+        s_t (perception)     -> WorldEncoder   -> z_world   [latent_dim]
+        h_t (live emotions)  -> InternalEncoder -> z_internal [internal_latent_dim]
+
+        concat(z_world, z_internal) + a_t -> Predictor -> z_next [latent_dim]
+        z_next + a_t                      -> Critic    -> emotion_pred [emotion_dim]
+
+    L_pred target: sg(WorldEncoder(s_{t+1})) — world latent only.
+    SIGReg: applied to z_world only.
+    IndividualAdapter wraps the WorldEncoder output before concatenation.
+    """
+
+    def __init__(
+        self,
+        input_dim: int,
+        internal_state_dim: int,
+        action_dim: int,
+        latent_dim: int,
+        internal_latent_dim: int,
+        emotion_dim: int,
+        min_arousal: float = 0.18,
+        max_arousal: float = 7.0,
+        hidden: int = 128,
+    ):
+        super().__init__()
+        self.encoder          = Encoder(input_dim, latent_dim, hidden)
+        self.internal_encoder = InternalEncoder(internal_state_dim, internal_latent_dim)
+        combined_latent_dim   = latent_dim + internal_latent_dim
+        # Predictor takes concat(z_world, z_internal) as input but outputs
+        # a pure world-latent (latent_dim) so L_pred and the Critic stay
+        # in the same 64-dim space as the single-encoder model.
+        self.predictor        = Predictor(latent_dim, action_dim, hidden,
+                                          in_latent_dim=combined_latent_dim)
+        self.critic           = Critic(latent_dim, action_dim, emotion_dim,
+                                       min_arousal, max_arousal, hidden)
+
+    def forward(
+        self,
+        s_t: torch.Tensor,
+        h_t: torch.Tensor,
+        a_t: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Returns (z_world, z_next_hat, emotion_pred).
+
+        z_world is returned (not z_combined) so the training loop can apply
+        SIGReg and compute L_pred against the next world latent only.
+        """
+        z_world    = self.encoder(s_t)
+        z_internal = self.internal_encoder(h_t)
+        z_combined = torch.cat([z_world, z_internal], dim=-1)
+        z_next     = self.predictor(z_combined, a_t)
+        emotion    = self.critic(z_next, a_t)
+        return z_world, z_next, emotion

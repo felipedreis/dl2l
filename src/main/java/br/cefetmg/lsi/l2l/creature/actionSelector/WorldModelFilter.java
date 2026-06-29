@@ -8,6 +8,7 @@ import br.cefetmg.lsi.l2l.creature.ml.ModelContract;
 import br.cefetmg.lsi.l2l.creature.ml.PredictedEmotionalState;
 import br.cefetmg.lsi.l2l.creature.ml.WorldModelEngine;
 import br.cefetmg.lsi.l2l.world.FruitType;
+import br.cefetmg.lsi.l2l.world.PlantType;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -38,9 +39,24 @@ public class WorldModelFilter implements ActionFilter {
     private final WorldModelEngine engine;
     private final ModelContract contract;
 
+    // Current live homeostatic state — set each cycle by FullAppraisal before calling filter().
+    // Null when running with a single-encoder model (contract.hasDualEncoder == false).
+    private float[] currentInternalState;
+
     public WorldModelFilter(WorldModelEngine engine, ModelContract contract) {
         this.engine   = engine;
         this.contract = contract;
+    }
+
+    /**
+     * Called by FullAppraisal each cognitive cycle before filter() so the dual-encoder
+     * path has the creature's current homeostatic state available at inference time.
+     *
+     * @param internalState float[internalStateDim] in model_contract internal_state_feature_order
+     *                      (hunger, sleep, pain, tedium). Ignored when hasDualEncoder=false.
+     */
+    public void updateInternalState(float[] internalState) {
+        this.currentInternalState = internalState;
     }
 
     @Override
@@ -61,8 +77,9 @@ public class WorldModelFilter implements ActionFilter {
         List<ScoredAction> scored = new ArrayList<>(actions.size());
         for (Action action : actions) {
             float[] features = encodePerception(action.perception);
-            PredictedEmotionalState prediction =
-                    engine.predictEmotionalCost(features, action.type);
+            PredictedEmotionalState prediction = contract.hasDualEncoder
+                    ? engine.predictEmotionalCost(features, currentInternalState, action.type)
+                    : engine.predictEmotionalCost(features, action.type);
             if (prediction == null)
                 return actions;  // inference error → full Mode-1 fallback for this cycle
             scored.add(new ScoredAction(action, engine.aversiveCost(prediction)));
@@ -80,7 +97,10 @@ public class WorldModelFilter implements ActionFilter {
     }
 
     // Encode perception into model_contract.json perception_feature_order:
-    //   [distance, angle, sin(angle), type_GRAY_APPLE, type_GREEN_APPLE, type_RED_APPLE]
+    //   [distance, angle, direction, type_GRAY_APPLE, type_GREEN_APPLE, type_RED_APPLE,
+    //    type_ROTTEN_APPLE, type_ALOE, type_CACTUS]
+    // Index positions are driven by contract.perceptionFeatureOrder to stay in sync
+    // with whatever object types were present during training.
     private float[] encodePerception(Perception perception) {
         float[] f = new float[contract.inputDim];
         f[0] = (float) perception.distance;
@@ -88,9 +108,11 @@ public class WorldModelFilter implements ActionFilter {
         f[2] = (float) Math.sin(perception.angle);
         if (perception.objectType.isDefined()) {
             Object type = perception.objectType.get();
-            if (type == FruitType.GRAY_APPLE)  f[3] = 1f;
-            if (type == FruitType.GREEN_APPLE) f[4] = 1f;
-            if (type == FruitType.RED_APPLE)   f[5] = 1f;
+            String typeName = "type_" + (type instanceof FruitType ft ? ft.name()
+                                       : type instanceof PlantType pt ? pt.name() : "");
+            List<String> order = contract.perceptionFeatureOrder;
+            int idx = order.indexOf(typeName);
+            if (idx >= 0 && idx < f.length) f[idx] = 1f;
         }
         return f;
     }
