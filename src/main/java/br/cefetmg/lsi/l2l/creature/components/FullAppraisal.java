@@ -12,6 +12,7 @@ import br.cefetmg.lsi.l2l.creature.actionSelector.WorldModelFilter;
 import br.cefetmg.lsi.l2l.creature.ml.MLServiceExtension;
 import br.cefetmg.lsi.l2l.creature.ml.ModelContract;
 import br.cefetmg.lsi.l2l.creature.ml.WorldModelEngine;
+import java.util.List;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
@@ -49,6 +50,8 @@ public class FullAppraisal extends CreatureComponent {
     private MemorySystem memorySystem;
 
     private WorldModelEngine worldModelEngine;
+    private WorldModelFilter worldModelFilter;  // kept for updateInternalState calls; null when no dual encoder
+    private ModelContract contract;
 
     private long cognitiveCycle = 0;
     private boolean inSleep = false;
@@ -69,7 +72,6 @@ public class FullAppraisal extends CreatureComponent {
         // When mlExt is null (e.g. TestingCreature), the WORLD_MODEL filter is silently
         // disabled regardless of LearningSettings. Other filters still respect settings.
         boolean worldModelAvailable = mlExt != null && learningSettings.isFilterEnabled(ActionSelectionType.WORLD_MODEL);
-        ModelContract contract = null;
         if (worldModelAvailable) {
             contract = ModelContract.load(mlExt.modelDir());
             worldModelEngine = new WorldModelEngine(mlExt, id.key);
@@ -82,7 +84,10 @@ public class FullAppraisal extends CreatureComponent {
                 case TARGET_DISTANCE -> filterList.add(new TargetDistanceFilter());
                 case AFFORDANCE      -> filterList.add(new ActionProbabilityFilter(creature.operantConditioning()));
                 case WORLD_MODEL     -> {
-                    if (worldModelAvailable) filterList.add(new WorldModelFilter(worldModelEngine, contract));
+                    if (worldModelAvailable) {
+                        worldModelFilter = new WorldModelFilter(worldModelEngine, contract);
+                        filterList.add(worldModelFilter);
+                    }
                 }
                 case RANDOM          -> filterList.add(new RandomFilter());
                 default              -> logger.warning("FullAppraisal: unknown filter type " + type + ", skipping");
@@ -108,6 +113,13 @@ public class FullAppraisal extends CreatureComponent {
                 cognitiveCycle++;
                 memorySystem.tickDecisionCycle();
                 EmotionalStimulus emotional = (EmotionalStimulus) stimulus;
+
+                // Dual-encoder: supply current homeostatic state to WorldModelFilter
+                // before action selection so inference can condition on it.
+                if (worldModelFilter != null) {
+                    worldModelFilter.updateInternalState(encodeInternalState());
+                }
+
                 List<Action> possibleActions = definePossibleActions(emotional.getPerceptions());
                 Action action = actionSelection.selectOne(possibleActions, emotional.getMaxEmotion());
 
@@ -233,6 +245,21 @@ public class FullAppraisal extends CreatureComponent {
 
         creature.homeostatic().tell(
                 new TediumStimulus(id, nextStimulusId(), delta, selectedAction));
+    }
+
+    // Encode the creature's current homeostatic state into a float[] for the
+    // dual-encoder InternalEncoder. Uses internalStateFeatureOrder (e.g.
+    // ["ht_hunger","ht_sleep","ht_pain","ht_tedium"]) with "ht_" stripped to
+    // get the emotion name. Returns null when no dual encoder is loaded.
+    private float[] encodeInternalState() {
+        if (worldModelFilter == null || !contract.hasDualEncoder) return null;
+        List<String> featureOrder = contract.internalStateFeatureOrder;
+        float[] state = new float[featureOrder.size()];
+        for (int i = 0; i < featureOrder.size(); i++) {
+            String name = featureOrder.get(i).replaceFirst("^ht_", "");
+            state[i] = (float) creature.emotions().getLevel(name);
+        }
+        return state;
     }
 
     private List<Action> definePossibleActions(List<Perception> perceptions) {

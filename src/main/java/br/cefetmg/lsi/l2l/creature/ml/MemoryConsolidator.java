@@ -2,6 +2,7 @@ package br.cefetmg.lsi.l2l.creature.ml;
 
 import ai.djl.engine.Engine;
 import ai.djl.ndarray.NDArray;
+import ai.djl.ndarray.NDArrays;
 import ai.djl.ndarray.NDList;
 import ai.djl.ndarray.NDManager;
 import ai.djl.ndarray.index.NDIndex;
@@ -26,6 +27,7 @@ import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.creature.memory.Engram;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.world.FruitType;
+import br.cefetmg.lsi.l2l.world.PlantType;
 
 import javax.persistence.EntityManager;
 import javax.persistence.Persistence;
@@ -74,11 +76,13 @@ public class MemoryConsolidator extends UntypedActor {
     private ZooModel<NDList, NDList> adapterModel;
     private ZooModel<NDList, NDList> predictorModel;
     private ZooModel<NDList, NDList> criticModel;
+    private ZooModel<NDList, NDList> internalEncoderModel;  // null when single-encoder
 
     private Trainer encoderTrainer;
     private Trainer adapterTrainer;
     private Trainer predictorTrainer;
     private Trainer criticTrainer;
+    private Trainer internalEncoderTrainer;  // null when single-encoder
 
     private final AtomicBoolean abortFlag = new AtomicBoolean(false);
     private CompletableFuture<?> consolidationTask;
@@ -115,7 +119,14 @@ public class MemoryConsolidator extends UntypedActor {
         predictorTrainer = predictorModel.newTrainer(config);
         criticTrainer    = criticModel.newTrainer(config);
 
-        logger.info("MemoryConsolidator[" + creatureKey + "]: per-creature models loaded");
+        if (contract.hasDualEncoder) {
+            internalEncoderModel   = MLServiceExtension.Impl.loadTrainable(
+                    mlExt.modelDir(), "species_internal_encoder");
+            internalEncoderTrainer = internalEncoderModel.newTrainer(config);
+        }
+
+        logger.info("MemoryConsolidator[" + creatureKey + "]: per-creature models loaded"
+                + (contract.hasDualEncoder ? " (dual-encoder)" : ""));
     }
 
     @Override
@@ -129,10 +140,12 @@ public class MemoryConsolidator extends UntypedActor {
         closeSilently(adapterTrainer);
         closeSilently(predictorTrainer);
         closeSilently(criticTrainer);
+        closeSilently(internalEncoderTrainer);
         closeSilently(encoderModel);
         // adapterModel is owned by MLServiceExtension; released via releaseAdapter() in CreatureActor.kill()
         closeSilently(predictorModel);
         closeSilently(criticModel);
+        closeSilently(internalEncoderModel);
         em.close();
         logger.info("MemoryConsolidator[" + creatureKey + "]: resources released");
     }
@@ -256,20 +269,25 @@ public class MemoryConsolidator extends UntypedActor {
         return new ConsolidationResult(batchStats, episode);
     }
 
-    // Full prediction-error chain:
+    // Full prediction-error chain (single-encoder):
     //   perception → encoder → z → adapter → adapted_z
     //   → predictor(adapted_z, action) → next_z → critic(next_z, action) → pred_delta
-    //   loss = MSE(pred_delta, actual_delta) * mean(eligibility)
     //
-    // The actual emotionDelta (scalar) is broadcast across all emotion dimensions as the target,
-    // encoding the valence signal that the critic should learn to predict.
+    // Dual-encoder adds:
+    //   internal_state → internalEncoder → z_internal
+    //   concat(adapted_z, z_internal) → predictor → next_z → critic → pred_delta
+    //
+    // loss = MSE(pred_delta, actual_delta) * mean(eligibility)
+    // emotionDelta is broadcast across all emotion dimensions as the training target.
     private float trainBatch(List<Engram> batch, NDManager mgr) {
         int n = batch.size();
 
-        float[] percData   = new float[n * contract.inputDim];
-        float[] actionData = new float[n * contract.actionDim];
-        float[] targetData = new float[n * contract.emotionDim];
-        float[] weights    = new float[n];
+        float[] percData     = new float[n * contract.inputDim];
+        float[] actionData   = new float[n * contract.actionDim];
+        float[] targetData   = new float[n * contract.emotionDim];
+        float[] weights      = new float[n];
+        float[] internalData = contract.hasDualEncoder
+                ? new float[n * contract.internalStateDim] : null;
 
         for (int i = 0; i < n; i++) {
             Engram e = batch.get(i);
@@ -282,6 +300,10 @@ public class MemoryConsolidator extends UntypedActor {
             float delta = (float) Math.tanh(e.emotionDelta());
             Arrays.fill(targetData, i * contract.emotionDim, (i + 1) * contract.emotionDim, delta);
             weights[i] = (float) e.eligibility();
+            if (internalData != null) {
+                float[] ht = encodeInternalState(e);
+                System.arraycopy(ht, 0, internalData, i * contract.internalStateDim, contract.internalStateDim);
+            }
         }
 
         NDArray percInput   = mgr.create(percData,   new Shape(n, contract.inputDim));
@@ -296,15 +318,26 @@ public class MemoryConsolidator extends UntypedActor {
         zeroGradients(adapterTrainer);
         zeroGradients(predictorTrainer);
         zeroGradients(criticTrainer);
+        if (internalEncoderTrainer != null) zeroGradients(internalEncoderTrainer);
 
         float lossValue;
         try (GradientCollector gc = Engine.getInstance().newGradientCollector()) {
             NDArray z        = encoderTrainer.forward(new NDList(percInput)).singletonOrThrow();
             NDArray adaptedZ = adapterTrainer.forward(new NDList(z)).singletonOrThrow();
-            NDArray nextZ    = predictorTrainer.forward(new NDList(adaptedZ, actionBatch)).singletonOrThrow();
+
+            NDArray predictorInput;
+            if (internalEncoderTrainer != null && internalData != null) {
+                NDArray htBatch   = mgr.create(internalData, new Shape(n, contract.internalStateDim));
+                NDArray zInternal = internalEncoderTrainer.forward(new NDList(htBatch)).singletonOrThrow();
+                predictorInput    = NDArrays.concat(new NDList(adaptedZ, zInternal), -1);
+            } else {
+                predictorInput = adaptedZ;
+            }
+
+            NDArray nextZ     = predictorTrainer.forward(new NDList(predictorInput, actionBatch)).singletonOrThrow();
             NDArray predDelta = criticTrainer.forward(new NDList(nextZ, actionBatch)).singletonOrThrow();
 
-            NDArray rawLoss     = adapterTrainer.getLoss().evaluate(new NDList(target), new NDList(predDelta));
+            NDArray rawLoss      = adapterTrainer.getLoss().evaluate(new NDList(target), new NDList(predDelta));
             NDArray weightedLoss = rawLoss.mul(weightArr.mean());
             lossValue = weightedLoss.getFloat();
             gc.backward(weightedLoss);
@@ -323,9 +356,28 @@ public class MemoryConsolidator extends UntypedActor {
         f[2] = (float) Math.sin(e.perception().angle);
         if (e.perception().objectType.isDefined()) {
             Object type = e.perception().objectType.get();
-            if (type == FruitType.GRAY_APPLE)  f[3] = 1f;
-            if (type == FruitType.GREEN_APPLE) f[4] = 1f;
-            if (type == FruitType.RED_APPLE)   f[5] = 1f;
+            String typeName = "type_" + (type instanceof FruitType ft ? ft.name()
+                                       : type instanceof PlantType pt ? pt.name() : "");
+            int idx = contract.perceptionFeatureOrder.indexOf(typeName);
+            if (idx >= 0 && idx < f.length) f[idx] = 1f;
+        }
+        return f;
+    }
+
+    // Encodes the creature's homeostatic state at decision time (from Engram.emotionAtDecision)
+    // into the live emotion dims expected by the InternalEncoder.
+    private float[] encodeInternalState(Engram e) {
+        float[] f = new float[contract.internalStateDim];
+        if (e.emotionAtDecision() == null) return f;
+        // liveEmotionDims drives the order to match InternalEncoder's expected input.
+        for (int i = 0; i < contract.liveEmotionDims.size() && i < f.length; i++) {
+            // emotionAtDecision carries the level of the *max* emotion at decision time,
+            // but not the full vector. Use its level only if names match; zero otherwise.
+            // A richer per-emotion snapshot would require extending the Engram record.
+            String dimName = contract.emotionIndexOrder.get(contract.liveEmotionDims.get(i));
+            if (dimName.equals(e.emotionAtDecision().getName())) {
+                f[i] = (float) e.emotionAtDecision().getLevel();
+            }
         }
         return f;
     }

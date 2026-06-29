@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from jepa.dataset  import TrajectoryDataset
 from jepa.evaluate import check_collapse, collect_latents
-from jepa.model    import SpeciesModel
+from jepa.model    import SpeciesModel, DualSpeciesModel
 
 
 def parse_args():
@@ -30,6 +30,7 @@ def parse_args():
     p.add_argument("--data",   default="data")
     p.add_argument("--batch",  type=int, default=512)
     p.add_argument("--device", default=None)
+    p.add_argument("--dual",   action="store_true")
     return p.parse_args()
 
 
@@ -48,17 +49,30 @@ def main():
     else:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = SpeciesModel(
-        input_dim  = stats["input_dim"],
-        action_dim = stats["action_dim"],
-        latent_dim = stats["latent_dim"],
-        emotion_dim= stats["emotion_dim"],
-        min_arousal= stats["min_arousal"],
-        max_arousal= stats["max_arousal"],
-    ).to(device)
+    if args.dual:
+        model = DualSpeciesModel(
+            input_dim          = stats["input_dim"],
+            internal_state_dim = stats["internal_state_dim"],
+            action_dim         = stats["action_dim"],
+            latent_dim         = stats["latent_dim"],
+            internal_latent_dim= stats["internal_latent_dim"],
+            emotion_dim        = stats["emotion_dim"],
+            min_arousal        = stats["min_arousal"],
+            max_arousal        = stats["max_arousal"],
+        ).to(device)
+    else:
+        model = SpeciesModel(
+            input_dim  = stats["input_dim"],
+            action_dim = stats["action_dim"],
+            latent_dim = stats["latent_dim"],
+            emotion_dim= stats["emotion_dim"],
+            min_arousal= stats["min_arousal"],
+            max_arousal= stats["max_arousal"],
+        ).to(device)
     model.load_state_dict(torch.load(ckpt_dir / "best.pt", map_location=device))
 
-    val_ds     = TrajectoryDataset(str(data_dir / "val.parquet"), str(stats_path))
+    val_file = data_dir / ("val_dual.parquet" if args.dual else "val.parquet")
+    val_ds   = TrajectoryDataset(str(val_file), str(stats_path), dual=args.dual)
     val_loader = DataLoader(val_ds, batch_size=args.batch, shuffle=False)
 
     print("Collecting latents on validation set …")

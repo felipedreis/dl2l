@@ -12,11 +12,17 @@ class SimulationViewer {
         
         // Colors and styles
         this.colors = {
-            creature: '#4CAF50',
-            object: '#2196F3',
-            vision: 'rgba(255, 255, 255, 0.1)',
-            olfactory: 'rgba(255, 192, 203, 0.1)',
-            text: '#ffffff'
+            creature:    '#4CAF50',
+            object:      '#2196F3',
+            vision:      'rgba(255, 255, 255, 0.1)',
+            olfactory:   'rgba(255, 192, 203, 0.1)',
+            text:        '#ffffff',
+            RED_APPLE:   '#e53935',
+            GREEN_APPLE: '#43a047',
+            GRAY_APPLE:  '#9e9e9e',
+            ROTTEN_APPLE:'#6d4c41',
+            CACTUS:      '#2e7d32',
+            ALOE:        '#a5d6a7',
         };
         
         this.setupWebSocket();
@@ -93,17 +99,33 @@ class SimulationViewer {
 
     drawObject(entity) {
         const ctx = this.ctx;
-        ctx.beginPath();
-        ctx.fillStyle = this.colors.object;
-        ctx.arc(entity.x, entity.y, 3, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Draw object type
-        if (entity.objectType) {
-            ctx.fillStyle = this.colors.text;
-            ctx.font = '10px Arial';
-            ctx.fillText(entity.objectType, entity.x + 5, entity.y + 5);
+        const color = this.colors[entity.objectType] || this.colors.object;
+        ctx.fillStyle = color;
+
+        if (entity.objectType === 'CACTUS') {
+            this._drawTriangle(ctx, entity.x, entity.y, 6, true);
+        } else if (entity.objectType === 'ALOE') {
+            this._drawTriangle(ctx, entity.x, entity.y, 6, false);
+        } else {
+            ctx.beginPath();
+            ctx.arc(entity.x, entity.y, 3, 0, Math.PI * 2);
+            ctx.fill();
         }
+    }
+
+    // Equilateral triangle inscribed in radius r.
+    // pointingUp=true → ▲ (CACTUS), false → ▽ (ALOE).
+    _drawTriangle(ctx, cx, cy, r, pointingUp) {
+        const baseAngle = pointingUp ? -Math.PI / 2 : Math.PI / 2;
+        ctx.beginPath();
+        for (let i = 0; i < 3; i++) {
+            const a = baseAngle + i * 2 * Math.PI / 3;
+            const x = cx + r * Math.cos(a);
+            const y = cy + r * Math.sin(a);
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
     }
 
     render(timestamp) {

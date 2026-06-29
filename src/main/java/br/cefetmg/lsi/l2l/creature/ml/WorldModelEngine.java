@@ -2,6 +2,7 @@ package br.cefetmg.lsi.l2l.creature.ml;
 
 import ai.djl.inference.Predictor;
 import ai.djl.ndarray.NDArray;
+import ai.djl.ndarray.NDArrays;
 import ai.djl.ndarray.NDList;
 import ai.djl.ndarray.NDManager;
 import ai.djl.translate.TranslateException;
@@ -40,6 +41,7 @@ public class WorldModelEngine implements AutoCloseable {
     private final Predictor<NDList, NDList> adapterPredictor;
     private final Predictor<NDList, NDList> predictorPredictor;
     private final Predictor<NDList, NDList> criticPredictor;
+    private final Predictor<NDList, NDList> internalEncoderPredictor;  // null when single-encoder
     private final ModelContract contract;
 
     // OOD gating — rolling EMA of latent prediction error (prediction_error_monitor.md).
@@ -61,10 +63,12 @@ public class WorldModelEngine implements AutoCloseable {
         }
 
         MLServiceExtension.LoadedModels m = mlExt.models();
-        this.encoderPredictor   = m.encoder().newPredictor();
-        this.adapterPredictor   = mlExt.getOrCreateAdapter(creatureKey).newPredictor();
-        this.predictorPredictor = m.predictor().newPredictor();
-        this.criticPredictor    = m.critic().newPredictor();
+        this.encoderPredictor          = m.encoder().newPredictor();
+        this.adapterPredictor          = mlExt.getOrCreateAdapter(creatureKey).newPredictor();
+        this.predictorPredictor        = m.predictor().newPredictor();
+        this.criticPredictor           = m.critic().newPredictor();
+        this.internalEncoderPredictor  = m.hasDualEncoder()
+                ? m.internalEncoder().newPredictor() : null;
 
         this.latentPredErrorEma = contract.baselinePredError;
         this.emaAlpha           = 2.0 / (100 + 1);
@@ -72,20 +76,51 @@ public class WorldModelEngine implements AutoCloseable {
 
     /**
      * Synchronous inference: perception → encoder → adapter → predictor(action) → critic.
-     * Returns null on TranslateException; callers treat null as Mode-1 fallback for the cycle.
+     * Single-encoder path; delegates to the dual-encoder overload with null internalState
+     * when no InternalEncoder is present.
      *
      * @param perceptionFeatures float[inputDim] encoded per model_contract perception_feature_order
      * @param actionType         the candidate action to score
      */
     public PredictedEmotionalState predictEmotionalCost(float[] perceptionFeatures,
                                                          ActionType actionType) {
+        return predictEmotionalCost(perceptionFeatures, null, actionType);
+    }
+
+    /**
+     * Synchronous inference supporting both single- and dual-encoder models.
+     *
+     * Single-encoder: perception → encoder → adapter → predictor(action) → critic
+     * Dual-encoder:   perception → encoder → adapter → concat(adapted, z_internal)
+     *                           → predictor(action) → critic
+     *                 where z_internal = internalEncoder(internalState)
+     *
+     * Returns null on TranslateException; callers treat null as Mode-1 fallback for the cycle.
+     *
+     * @param perceptionFeatures float[inputDim] per model_contract perception_feature_order
+     * @param internalState      float[internalStateDim] live homeostatic dims, or null for single-encoder
+     * @param actionType         the candidate action to score
+     */
+    public PredictedEmotionalState predictEmotionalCost(float[] perceptionFeatures,
+                                                         float[] internalState,
+                                                         ActionType actionType) {
         try (NDManager mgr = NDManager.newBaseManager()) {
-            NDArray perc       = mgr.create(perceptionFeatures);
-            NDArray latent     = encoderPredictor.predict(new NDList(perc)).singletonOrThrow();
-            NDArray adapted    = adapterPredictor.predict(new NDList(latent)).singletonOrThrow();
+            NDArray perc    = mgr.create(perceptionFeatures);
+            NDArray latent  = encoderPredictor.predict(new NDList(perc)).singletonOrThrow();
+            NDArray adapted = adapterPredictor.predict(new NDList(latent)).singletonOrThrow();
+
+            NDArray predictorInput;
+            if (internalEncoderPredictor != null && internalState != null) {
+                NDArray ht       = mgr.create(internalState);
+                NDArray zInternal = internalEncoderPredictor.predict(new NDList(ht)).singletonOrThrow();
+                predictorInput   = NDArrays.concat(new NDList(adapted, zInternal), -1);
+            } else {
+                predictorInput = adapted;
+            }
+
             NDArray actionHot  = mgr.create(encodeAction(actionType));
             NDArray nextLatent = predictorPredictor.predict(
-                                     new NDList(adapted, actionHot)).singletonOrThrow();
+                                     new NDList(predictorInput, actionHot)).singletonOrThrow();
             float[] deltas     = criticPredictor.predict(
                                      new NDList(nextLatent, actionHot))
                                      .singletonOrThrow().toFloatArray();
@@ -121,6 +156,7 @@ public class WorldModelEngine implements AutoCloseable {
         closeSilently(adapterPredictor);
         closeSilently(predictorPredictor);
         closeSilently(criticPredictor);
+        closeSilently(internalEncoderPredictor);
     }
 
     // -----------------------------------------------------------------------

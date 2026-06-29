@@ -15,6 +15,8 @@ Options:
     --sigreg     λ_sigreg weight (default: 0.1)
     --crit       λ_crit weight (default: 1.0)
     --device     cpu | cuda | mps (default: auto-detect)
+    --dual       Train DualSpeciesModel (WorldEncoder + InternalEncoder).
+                 Requires train_dual.parquet / val_dual.parquet in --data dir.
 """
 
 import argparse
@@ -26,11 +28,10 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 
-# Allow running as `python -m scripts.train_species` from the ml/ directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from jepa.dataset import TrajectoryDataset
-from jepa.model   import SpeciesModel, IndividualAdapter
+from jepa.model   import SpeciesModel, DualSpeciesModel, IndividualAdapter
 from jepa.train   import train_one_epoch, evaluate
 
 
@@ -44,6 +45,8 @@ def parse_args():
     p.add_argument("--sigreg", type=float, default=0.1)
     p.add_argument("--crit",   type=float, default=1.0)
     p.add_argument("--device", default=None)
+    p.add_argument("--dual",   action="store_true",
+                   help="Train DualSpeciesModel with InternalEncoder")
     return p.parse_args()
 
 
@@ -72,22 +75,46 @@ def main():
     else:
         device = torch.device("cpu")
     print(f"Device: {device}")
+    print(f"Dual encoder: {args.dual}")
 
-    train_ds = TrajectoryDataset(str(data_dir / "train.parquet"), str(stats_path))
-    val_ds   = TrajectoryDataset(str(data_dir / "val.parquet"),   str(stats_path))
-    # shuffle=False to preserve temporal order within each creature's segment
-    # (needed for consecutive-pair next-state computation in train.py)
+    if args.dual:
+        if "internal_state_dim" not in stats:
+            sys.exit("--dual requires internal_state_dim in stats.json. "
+                     "Run prepare_dataset.py --dual first.")
+        train_file = data_dir / "train_dual.parquet"
+        val_file   = data_dir / "val_dual.parquet"
+        if not train_file.exists():
+            sys.exit(f"train_dual.parquet not found at {train_file}. "
+                     "Run prepare_dataset.py --dual first.")
+    else:
+        train_file = data_dir / "train.parquet"
+        val_file   = data_dir / "val.parquet"
+
+    train_ds = TrajectoryDataset(str(train_file), str(stats_path), dual=args.dual)
+    val_ds   = TrajectoryDataset(str(val_file),   str(stats_path), dual=args.dual)
     train_loader = DataLoader(train_ds, batch_size=args.batch, shuffle=False, drop_last=True)
     val_loader   = DataLoader(val_ds,   batch_size=args.batch, shuffle=False, drop_last=False)
 
-    model = SpeciesModel(
-        input_dim  = stats["input_dim"],
-        action_dim = stats["action_dim"],
-        latent_dim = stats["latent_dim"],
-        emotion_dim= stats["emotion_dim"],
-        min_arousal= stats["min_arousal"],
-        max_arousal= stats["max_arousal"],
-    ).to(device)
+    if args.dual:
+        model = DualSpeciesModel(
+            input_dim           = stats["input_dim"],
+            internal_state_dim  = stats["internal_state_dim"],
+            action_dim          = stats["action_dim"],
+            latent_dim          = stats["latent_dim"],
+            internal_latent_dim = stats["internal_latent_dim"],
+            emotion_dim         = stats["emotion_dim"],
+            min_arousal         = stats["min_arousal"],
+            max_arousal         = stats["max_arousal"],
+        ).to(device)
+    else:
+        model = SpeciesModel(
+            input_dim   = stats["input_dim"],
+            action_dim  = stats["action_dim"],
+            latent_dim  = stats["latent_dim"],
+            emotion_dim = stats["emotion_dim"],
+            min_arousal = stats["min_arousal"],
+            max_arousal = stats["max_arousal"],
+        ).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
@@ -112,7 +139,6 @@ def main():
 
     torch.save(model.state_dict(), ckpt_dir / "final.pt")
 
-    # Save stats alongside checkpoints so export_model.py can find them.
     import shutil
     shutil.copy(stats_path, ckpt_dir / "stats.json")
 
