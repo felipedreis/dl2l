@@ -6,10 +6,8 @@ import ai.djl.ndarray.NDArrays;
 import ai.djl.ndarray.NDList;
 import ai.djl.ndarray.NDManager;
 import ai.djl.translate.TranslateException;
-import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
 
-import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -33,9 +31,7 @@ public class WorldModelEngine implements AutoCloseable {
             ActionType.PLAY, ActionType.SLEEP, ActionType.TOUCH, ActionType.TURN, ActionType.WANDER
     };
 
-    // Aversive dimensions per model_contract.json emotion_index_order.
-    // pain = index 4, fear = index 6.
-    private static final Set<String> AVERSIVE_DIMS = Set.of(Constants.PAIN, Constants.FEAR);
+    // Aversive dimensions are derived from contract.liveEmotionDims at runtime, not hard-coded.
 
     private final Predictor<NDList, NDList> encoderPredictor;
     private final Predictor<NDList, NDList> adapterPredictor;
@@ -138,13 +134,14 @@ public class WorldModelEngine implements AutoCloseable {
     }
 
     /**
-     * Aversive cost = sum of predicted levels for AVERSIVE_DIMS (pain + fear).
+     * Aversive cost = sum of predicted levels for all live emotion dims (from contract).
+     * Uses the same dims the Critic was trained on so the signal is never noise.
      * Lower is better; used by WorldModelFilter to rank candidates.
      */
     public double aversiveCost(PredictedEmotionalState predicted) {
         double cost = 0;
-        for (String dim : AVERSIVE_DIMS)
-            cost += predicted.level(contract.emotionIndexOf(dim));
+        for (int idx : contract.liveEmotionDims)
+            cost += predicted.level(idx);
         return cost;
     }
 
