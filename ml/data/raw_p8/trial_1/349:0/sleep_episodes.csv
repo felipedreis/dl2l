@@ -1,4 +1,0 @@
-creature_key,onset_cycle,wake_cycle,duration_ticks,engram_count,mean_eligibility,std_eligibility,batches_completed,aborted
-349,1,12,10,0,0.0,0.0,0,false
-349,13,24,10,0,0.0,0.0,0,false
-349,25,36,10,0,0.0,0.0,0,false
