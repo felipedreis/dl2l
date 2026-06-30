@@ -148,15 +148,33 @@ Even with WANDER in Mode-2, SLEEP still wins 60% of Mode-2 events. Two reasons:
 
 ## Figures
 
-All figures in `docs/figures/exp_51/`:
+### Fig 1 — Lifetime: blind Critic vs aware Critic (b6, sparse world)
 
-- `fig1_lifetime_comparison.png` — lifetime EXP-48B vs EXP-51 (b6)
-- `fig2_sleep_rate_comparison.png` — SLEEP rate across EXP-43, EXP-48B, EXP-51
-- `fig3_mode2_action_distribution.png` — Mode-2 breakdown blind vs b6
-- `fig4_consolidation_loss.png` — per-creature consolidation loss curves
-- `fig5_b8_lifetime_all.png` — lifetime for all 6 model × density combinations
-- `fig6_b8_mode2_sparse.png` — Mode-2 action distribution blind / b6 / b8 (sparse)
-- `fig7_b8_mode2_rate_sleep.png` — Mode-2 firing rate and SLEEP% across all conditions
+![Lifetime comparison EXP-48B vs EXP-51](../figures/exp_51/fig1_lifetime_comparison.png)
+
+### Fig 2 — Mode-2 SLEEP rate across experiments
+
+![SLEEP rate comparison](../figures/exp_51/fig2_sleep_rate_comparison.png)
+
+### Fig 3 — Mode-2 action distribution: blind vs b6 (sparse world)
+
+![Mode-2 action distribution blind vs b6](../figures/exp_51/fig3_mode2_action_distribution.png)
+
+### Fig 4 — Per-creature consolidation loss curves
+
+![Consolidation loss](../figures/exp_51/fig4_consolidation_loss.png)
+
+### Fig 5 — Lifetime across all model × density combinations
+
+![Lifetime all experiments](../figures/exp_51/fig5_b8_lifetime_all.png)
+
+### Fig 6 — Mode-2 action distribution: blind / b6 / b8 (sparse world)
+
+![Mode-2 distribution blind vs b6 vs b8 sparse](../figures/exp_51/fig6_b8_mode2_sparse.png)
+
+### Fig 7 — Mode-2 firing rate and SLEEP% across all conditions
+
+![Mode-2 firing rate and SLEEP pct](../figures/exp_51/fig7_b8_mode2_rate_sleep.png)
 
 ## Conclusions
 
