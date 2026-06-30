@@ -59,7 +59,12 @@ def find_target_perception(
     actions: pd.DataFrame,
     perceptions: pd.DataFrame,
 ) -> pd.DataFrame:
-    """For each action, find the last perception of its target object at or before action_time."""
+    """For each action, find the last perception of its target object at or before action_time.
+
+    Self-targeted actions (target_key == creatureKey — e.g. WANDER, self-directed SLEEP)
+    are kept with zeroed perception features to represent an undefined/no-object perception.
+    This ensures WANDER and no-food SLEEP transitions reach the Predictor and Critic.
+    """
     if perceptions.empty or actions.empty:
         return actions.assign(distance=np.nan, angle=np.nan, direction=np.nan, object_type=np.nan)
 
@@ -72,16 +77,25 @@ def find_target_perception(
             cands = perc_group[
                 (perc_group["object_key"] == tk) & (perc_group["time"] <= t_act)
             ]
-            if cands.empty:
-                continue
-            last = cands.iloc[-1]
-            result_rows.append({
-                **act.to_dict(),
-                "distance":    last["distance"],
-                "angle":       last["angle"],
-                "direction":   last["direction"],
-                "object_type": last["object_type"],
-            })
+            if not cands.empty:
+                last = cands.iloc[-1]
+                result_rows.append({
+                    **act.to_dict(),
+                    "distance":    last["distance"],
+                    "angle":       last["angle"],
+                    "direction":   last["direction"],
+                    "object_type": last["object_type"],
+                })
+            elif tk == ck:
+                # Self-targeted: no external perception → undefined context (all zeros).
+                result_rows.append({
+                    **act.to_dict(),
+                    "distance":    0.0,
+                    "angle":       0.0,
+                    "direction":   0.0,
+                    "object_type": None,
+                })
+            # External target with no perception record → drop (stale/missing data).
 
     if not result_rows:
         return pd.DataFrame()
@@ -211,10 +225,10 @@ def main():
     means = df_out[continuous_cols].mean().values.tolist()
     stds  = df_out[continuous_cols].std().values.tolist()
 
-    # ── Detect live emotion dims ───────────────────────────────────────────
-    var_per_dim = df_out[emotion_cols].var()
-    live_dims   = [i for i, ec in enumerate(emotion_cols)
-                   if var_per_dim[ec] > LIVE_VARIANCE_THRESHOLD]
+    # Use the predefined live dims rather than auto-detecting from variance.
+    # Auto-detection fails when some drives (e.g. pain, tedium) have zero variance
+    # in a particular training dataset even though the model architecture expects them.
+    live_dims = list(LIVE_EMOTION_INDICES)
     print(f"  live emotion dims: {live_dims} "
           f"({[EMOTION_INDEX_ORDER[i] for i in live_dims]})")
 

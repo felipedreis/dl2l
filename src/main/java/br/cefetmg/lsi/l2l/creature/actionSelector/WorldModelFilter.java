@@ -40,10 +40,9 @@ public class WorldModelFilter implements ActionFilter {
     // Chosen at p75 of trial_5 arousal data (~26% of cycles, n=106k regulation events).
     static final double HIGH_AROUSAL_THRESHOLD = 4.5;
 
-    // Exploratory / idle actions never appear in Mode-2 training data and the Predictor
-    // extrapolates their z_next OOD, causing the Critic to assign spuriously negative
-    // (good) scores. Exclude them from scoring so they fall through to Mode-1 filters.
-    private static final Set<ActionType> MODE_1_ONLY = EnumSet.of(ActionType.WANDER, ActionType.OBSERVE);
+    // OBSERVE has no meaningful world-model signal (no external target, no drive effect).
+    // WANDER is now trained on self-perception contexts and is eligible for Mode-2 scoring.
+    private static final Set<ActionType> MODE_1_ONLY = EnumSet.of(ActionType.OBSERVE);
 
     private final WorldModelEngine engine;
     private final ModelContract contract;
