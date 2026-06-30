@@ -6,6 +6,7 @@ import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionProbabilityFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionSelection;
+import br.cefetmg.lsi.l2l.creature.actionSelector.MemoryFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.RandomFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.TargetDistanceFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.WorldModelFilter;
@@ -83,6 +84,7 @@ public class FullAppraisal extends CreatureComponent {
             switch (type) {
                 case TARGET_DISTANCE -> filterList.add(new TargetDistanceFilter());
                 case AFFORDANCE      -> filterList.add(new ActionProbabilityFilter(creature.operantConditioning()));
+                case MEMORY          -> filterList.add(new MemoryFilter(memorySystem));
                 case WORLD_MODEL     -> {
                     if (worldModelAvailable) {
                         worldModelFilter = new WorldModelFilter(worldModelEngine, contract);
