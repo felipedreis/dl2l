@@ -46,8 +46,8 @@
   "min_arousal": 0.18,
   "max_arousal": 7.0,
   "has_internal_encoder": true,
-  "model_hash": "a78058ca70d6af863525788decf6480fbedc39a6abb234316d6678578e1c5d1c",
-  "trained_on": "2026-06-29",
+  "model_hash": "bb4201b6fbbc5c0769d392e7c101676f8fdbe9c9ce3542671e05e7b9c9d4d08f",
+  "trained_on": "2026-06-30",
   "internal_state_feature_order": [
     "ht_hunger",
     "ht_sleep",
@@ -55,5 +55,6 @@
     "ht_tedium"
   ],
   "internal_state_dim": 4,
-  "internal_latent_dim": 16
+  "internal_latent_dim": 16,
+  "critic_output": "need_relief_tanh"
 }

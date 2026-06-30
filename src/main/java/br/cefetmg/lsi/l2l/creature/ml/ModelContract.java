@@ -45,6 +45,9 @@ public class ModelContract {
     @JsonProperty("internal_state_dim")           public int     internalStateDim        = 0;
     @JsonProperty("internal_latent_dim")          public int     internalLatentDim       = 0;
     @JsonProperty("internal_state_feature_order") public List<String> internalStateFeatureOrder;
+    // "need_relief_tanh": Critic outputs tanh((next-now)/now) in [-1,1]; lower=more relief=better.
+    // absent or other value: Critic outputs absolute emotion level in [min,max_arousal].
+    @JsonProperty("critic_output")                public String  criticOutput            = "absolute";
 
     public int emotionIndexOf(String name) {
         int idx = emotionIndexOrder.indexOf(name);
