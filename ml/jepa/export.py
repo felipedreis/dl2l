@@ -106,7 +106,7 @@ def export(
         contract["internal_state_feature_order"] = stats["internal_state_feature_order"]
         contract["internal_state_dim"]           = internal_state_dim
         contract["internal_latent_dim"]          = internal_latent_dim
-        contract["critic_output"]                = "need_relief_tanh"
+        contract["critic_output"]                = "need_satisfaction_tanh_v4"
 
     contract_path = out_dir / "model_contract.json"
     contract_path.write_text(json.dumps(contract, indent=2))

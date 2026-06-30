@@ -46,7 +46,7 @@
   "min_arousal": 0.18,
   "max_arousal": 7.0,
   "has_internal_encoder": true,
-  "model_hash": "bb4201b6fbbc5c0769d392e7c101676f8fdbe9c9ce3542671e05e7b9c9d4d08f",
+  "model_hash": "4983a08ffdeecfed739d06a327448da4b8609c95c6519faf918651eba687000e",
   "trained_on": "2026-06-30",
   "internal_state_feature_order": [
     "ht_hunger",
@@ -56,5 +56,5 @@
   ],
   "internal_state_dim": 4,
   "internal_latent_dim": 16,
-  "critic_output": "need_relief_tanh"
+  "critic_output": "need_satisfaction_tanh_v4"
 }

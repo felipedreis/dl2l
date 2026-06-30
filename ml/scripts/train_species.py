@@ -124,10 +124,14 @@ def main():
           f"{'tr_crit':>8}  {'vl_total':>9}  {'vl_pred':>8}")
     print("-" * 72)
 
+    action_names = stats.get("action_index_order")
+
     for epoch in range(1, args.epochs + 1):
         tr = train_one_epoch(model, train_loader, optimizer, live_dims,
-                             args.sigreg, args.crit, device)
-        vl = evaluate(model, val_loader, live_dims, args.sigreg, args.crit, device)
+                             args.sigreg, args.crit, device,
+                             action_names=action_names)
+        vl = evaluate(model, val_loader, live_dims, args.sigreg, args.crit, device,
+                      action_names=action_names)
 
         print(f"{epoch:>6}  {tr['total']:>9.4f}  {tr['pred']:>8.4f}  "
               f"{tr['sigreg']:>7.4f}  {tr['crit']:>8.4f}  "

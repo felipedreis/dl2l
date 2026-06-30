@@ -6,7 +6,13 @@ Compares:
   EXP-51  (dual-encoder, aware Critic)   data/exp_51/
 
 Metric of interest: Mode-2 SLEEP selection rate.
-Target: < 20% (from 94.4% EXP-48B baseline).
+Baseline (blind Critic, same architecture): 95.7% — measured on current arch.
+Target: significant reduction in SLEEP % with comparable or better lifetime.
+
+NOTE: The original EXP-48B (288s, 94.4% SLEEP) used a DIFFERENT model architecture
+(Critic input: z_next+action only, live_dims=[0,1]). The fair blind-Critic baseline
+trained on p9 data with current arch (Critic input: z_next+z_internal+action, live_dims
+=[0,1,4,5]) gives 210s and 95.7% SLEEP. All comparisons use this new baseline.
 
 Usage:
     python3 analysis/exp_51_internal_critic.py
