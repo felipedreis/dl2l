@@ -2,6 +2,7 @@ package br.cefetmg.lsi.l2l.creature.actionSelector;
 
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
 import br.cefetmg.lsi.l2l.creature.common.Action;
+import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.creature.common.Perception;
 import br.cefetmg.lsi.l2l.creature.components.Emotion;
 import br.cefetmg.lsi.l2l.creature.ml.ModelContract;
@@ -9,6 +10,9 @@ import br.cefetmg.lsi.l2l.creature.ml.PredictedEmotionalState;
 import br.cefetmg.lsi.l2l.creature.ml.WorldModelEngine;
 import br.cefetmg.lsi.l2l.world.FruitType;
 import br.cefetmg.lsi.l2l.world.PlantType;
+
+import java.util.EnumSet;
+import java.util.Set;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -35,6 +39,10 @@ public class WorldModelFilter implements ActionFilter {
     // Only deliberate when emotion level exceeds this threshold.
     // Chosen at p75 of trial_5 arousal data (~26% of cycles, n=106k regulation events).
     static final double HIGH_AROUSAL_THRESHOLD = 4.5;
+
+    // OBSERVE has no meaningful world-model signal (no external target, no drive effect).
+    // WANDER is now trained on self-perception contexts and is eligible for Mode-2 scoring.
+    private static final Set<ActionType> MODE_1_ONLY = EnumSet.of(ActionType.OBSERVE);
 
     private final WorldModelEngine engine;
     private final ModelContract contract;
@@ -73,9 +81,11 @@ public class WorldModelFilter implements ActionFilter {
         if (engine.isOodSelfDisabled())
             return actions;
 
-        // Score every candidate
+        // Score every need-driven candidate; skip exploratory actions (OOD for the Critic)
         List<ScoredAction> scored = new ArrayList<>(actions.size());
         for (Action action : actions) {
+            if (MODE_1_ONLY.contains(action.type))
+                continue;
             float[] features = encodePerception(action.perception);
             PredictedEmotionalState prediction = contract.hasDualEncoder
                     ? engine.predictEmotionalCost(features, currentInternalState, action.type)
@@ -84,6 +94,10 @@ public class WorldModelFilter implements ActionFilter {
                 return actions;  // inference error → full Mode-1 fallback for this cycle
             scored.add(new ScoredAction(action, engine.aversiveCost(prediction)));
         }
+
+        // If no need-driven action is available, fall back to Mode-1.
+        if (scored.isEmpty())
+            return actions;
 
         // Return only the best-predicted action so ActionSelection records WORLD_MODEL
         // as the deciding filter and RandomFilter is bypassed for this cycle.

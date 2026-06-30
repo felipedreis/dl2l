@@ -54,16 +54,19 @@ def export(
     critic.eval()
     adapter.eval()
 
-    dummy_s       = torch.zeros(1, input_dim)
-    dummy_z_world = torch.zeros(1, latent_dim)
-    dummy_a       = torch.zeros(1, action_dim)
-    dummy_pred_in = torch.zeros(1, predictor_in_dim - action_dim)  # latent part
+    dummy_s        = torch.zeros(1, input_dim)
+    dummy_z_world  = torch.zeros(1, latent_dim)
+    dummy_a        = torch.zeros(1, action_dim)
+    dummy_pred_in  = torch.zeros(1, predictor_in_dim - action_dim)  # latent part
+    # Dual critic takes concat(z_next[latent_dim], z_internal[internal_latent_dim]).
+    dummy_z_critic = torch.zeros(1, latent_dim + internal_latent_dim) if dual \
+                     else dummy_z_world
 
     pts: list[Path] = []
     for module, name, example in [
         (encoder,   "species_encoder",   dummy_s),
         (predictor, "species_predictor", (dummy_pred_in, dummy_a)),
-        (critic,    "species_critic",    (dummy_z_world, dummy_a)),
+        (critic,    "species_critic",    (dummy_z_critic, dummy_a)),
         (adapter,   "species_adapter",   dummy_z_world),
     ]:
         traced = torch.jit.trace(module, example)
@@ -103,6 +106,7 @@ def export(
         contract["internal_state_feature_order"] = stats["internal_state_feature_order"]
         contract["internal_state_dim"]           = internal_state_dim
         contract["internal_latent_dim"]          = internal_latent_dim
+        contract["critic_output"]                = "need_satisfaction_tanh_v4"
 
     contract_path = out_dir / "model_contract.json"
     contract_path.write_text(json.dumps(contract, indent=2))

@@ -60,10 +60,11 @@ class Predictor(nn.Module):
 
 
 class Critic(nn.Module):
-    """Crit(z_t, a_t) -> emotion_pred  [emotion_dim], bounded to [min_arousal, max_arousal].
+    """Crit(z_t, a_t) -> relief_pred  [emotion_dim], bounded to [-1, 1] via tanh.
 
-    The bound is mandatory: Task 6.3 scores actions via exp(-cost) where
-    cost = sum(aversive dims). Unbounded output makes exp(-cost) numerically unstable.
+    Output semantics: negative = homeostatic relief (good), positive = worsening (bad).
+    Trained to predict tanh((emotion_next - emotion_now) / emotion_now) so that
+    need-conditional relief is learnable even from imbalanced action distributions.
     """
 
     def __init__(
@@ -71,18 +72,16 @@ class Critic(nn.Module):
         latent_dim: int,
         action_dim: int,
         emotion_dim: int,
-        min_arousal: float,
-        max_arousal: float,
+        min_arousal: float,   # kept for API compat; not used in forward
+        max_arousal: float,   # kept for API compat; not used in forward
         hidden: int = 128,
     ):
         super().__init__()
         self.net = _mlp(latent_dim + action_dim, hidden, emotion_dim, norm=False)
-        self.min_arousal = min_arousal
-        self.range = max_arousal - min_arousal
 
     def forward(self, z: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
         raw = self.net(torch.cat([z, a], dim=-1))
-        return self.min_arousal + self.range * torch.sigmoid(raw)
+        return torch.tanh(raw)   # [-1, 1]: negative = relief, positive = worsening
 
 
 class IndividualAdapter(nn.Module):
@@ -197,11 +196,13 @@ class DualSpeciesModel(nn.Module):
         self.internal_encoder = InternalEncoder(internal_state_dim, internal_latent_dim)
         combined_latent_dim   = latent_dim + internal_latent_dim
         # Predictor takes concat(z_world, z_internal) as input but outputs
-        # a pure world-latent (latent_dim) so L_pred and the Critic stay
-        # in the same 64-dim space as the single-encoder model.
+        # a pure world-latent (latent_dim) so L_pred stays in the 64-dim space.
         self.predictor        = Predictor(latent_dim, action_dim, hidden,
                                           in_latent_dim=combined_latent_dim)
-        self.critic           = Critic(latent_dim, action_dim, emotion_dim,
+        # Critic takes concat(z_next, z_internal) so it can condition action
+        # value on the creature's internal state (hunger, sleep…) and break
+        # the SLEEP bias caused by being blind to homeostatic urgency.
+        self.critic           = Critic(combined_latent_dim, action_dim, emotion_dim,
                                        min_arousal, max_arousal, hidden)
 
     def forward(
@@ -219,5 +220,5 @@ class DualSpeciesModel(nn.Module):
         z_internal = self.internal_encoder(h_t)
         z_combined = torch.cat([z_world, z_internal], dim=-1)
         z_next     = self.predictor(z_combined, a_t)
-        emotion    = self.critic(z_next, a_t)
+        emotion    = self.critic(torch.cat([z_next, z_internal], dim=-1), a_t)
         return z_world, z_next, emotion

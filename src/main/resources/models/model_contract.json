@@ -6,7 +6,9 @@
   "emotion_dim": 9,
   "live_emotion_dims": [
     0,
-    1
+    1,
+    4,
+    5
   ],
   "emotion_index_order": [
     "hunger",
@@ -44,8 +46,8 @@
   "min_arousal": 0.18,
   "max_arousal": 7.0,
   "has_internal_encoder": true,
-  "model_hash": "751e79ac060887ceff817d112ccf91bf0fd94ce5030ac00d2ccb256c785f2b83",
-  "trained_on": "2026-06-29",
+  "model_hash": "240f2071db09a3414e9fc418dd1a1a5c2e1b10eb357305149e55304d124011fb",
+  "trained_on": "2026-06-30",
   "internal_state_feature_order": [
     "ht_hunger",
     "ht_sleep",
@@ -53,5 +55,6 @@
     "ht_tedium"
   ],
   "internal_state_dim": 4,
-  "internal_latent_dim": 16
+  "internal_latent_dim": 16,
+  "critic_output": "need_satisfaction_tanh_v4"
 }

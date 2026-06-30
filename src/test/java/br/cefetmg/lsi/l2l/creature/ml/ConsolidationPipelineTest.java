@@ -197,18 +197,23 @@ public class ConsolidationPipelineTest {
             NDArray z        = encT.forward(new NDList(percInput)).singletonOrThrow();
             NDArray adaptedZ = adaT.forward(new NDList(z)).singletonOrThrow();
 
+            NDArray zInternal = null;
             NDArray predInput;
             if (contract.hasDualEncoder && intEncT != null) {
                 // Zero-init internal state: h_t = 0 (valid zero-arousal test input).
-                NDArray hT       = mgr.zeros(new Shape(n, contract.internalStateDim));
-                NDArray zInternal = intEncT.forward(new NDList(hT)).singletonOrThrow();
-                predInput = ai.djl.ndarray.NDArrays.concat(new NDList(adaptedZ, zInternal), 1);
+                NDArray hT = mgr.zeros(new Shape(n, contract.internalStateDim));
+                zInternal  = intEncT.forward(new NDList(hT)).singletonOrThrow();
+                predInput  = ai.djl.ndarray.NDArrays.concat(new NDList(adaptedZ, zInternal), 1);
             } else {
                 predInput = adaptedZ;
             }
 
-            NDArray nextZ     = predT.forward(new NDList(predInput, actionBatch)).singletonOrThrow();
-            NDArray predDelta = critT.forward(new NDList(nextZ, actionBatch)).singletonOrThrow();
+            NDArray nextZ = predT.forward(new NDList(predInput, actionBatch)).singletonOrThrow();
+            // Dual-encoder: Critic takes concat(z_next, z_internal) — mirrors WorldModelEngine.
+            NDArray criticInput = (zInternal != null)
+                    ? ai.djl.ndarray.NDArrays.concat(new NDList(nextZ, zInternal), 1)
+                    : nextZ;
+            NDArray predDelta = critT.forward(new NDList(criticInput, actionBatch)).singletonOrThrow();
 
             NDArray rawLoss      = adaT.getLoss().evaluate(new NDList(target), new NDList(predDelta));
             NDArray weightedLoss = rawLoss.mul(weightArr.mean());
