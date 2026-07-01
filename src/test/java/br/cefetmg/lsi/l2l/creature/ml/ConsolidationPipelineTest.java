@@ -192,28 +192,23 @@ public class ConsolidationPipelineTest {
         zeroGradients(predT);
         zeroGradients(critT);
 
+        ModelVariantStrategy strategy = ModelVariantStrategyFactory.forContract(contract);
+
         float lossValue;
         try (GradientCollector gc = Engine.getInstance().newGradientCollector()) {
             NDArray z        = encT.forward(new NDList(percInput)).singletonOrThrow();
             NDArray adaptedZ = adaT.forward(new NDList(z)).singletonOrThrow();
 
             NDArray zInternal = null;
-            NDArray predInput;
-            if (contract.hasDualEncoder && intEncT != null) {
-                // Zero-init internal state: h_t = 0 (valid zero-arousal test input).
+            if (strategy.requiresInternalState() && intEncT != null) {
                 NDArray hT = mgr.zeros(new Shape(n, contract.internalStateDim));
                 zInternal  = intEncT.forward(new NDList(hT)).singletonOrThrow();
-                predInput  = ai.djl.ndarray.NDArrays.concat(new NDList(adaptedZ, zInternal), 1);
-            } else {
-                predInput = adaptedZ;
             }
 
-            NDArray nextZ = predT.forward(new NDList(predInput, actionBatch)).singletonOrThrow();
-            // Dual-encoder: Critic takes concat(z_next, z_internal) — mirrors WorldModelEngine.
-            NDArray criticInput = (zInternal != null)
-                    ? ai.djl.ndarray.NDArrays.concat(new NDList(nextZ, zInternal), 1)
-                    : nextZ;
-            NDArray predDelta = critT.forward(new NDList(criticInput, actionBatch)).singletonOrThrow();
+            NDArray predInput  = strategy.buildPredictorInput(adaptedZ, zInternal);
+            NDArray nextZ      = predT.forward(new NDList(predInput, actionBatch)).singletonOrThrow();
+            NDArray criticInput = strategy.buildCriticInput(nextZ, zInternal);
+            NDArray predDelta  = critT.forward(new NDList(criticInput, actionBatch)).singletonOrThrow();
 
             NDArray rawLoss      = adaT.getLoss().evaluate(new NDList(target), new NDList(predDelta));
             NDArray weightedLoss = rawLoss.mul(weightArr.mean());

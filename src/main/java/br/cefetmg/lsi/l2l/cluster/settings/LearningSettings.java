@@ -18,6 +18,7 @@ public class LearningSettings implements Serializable {
     public static final List<ActionSelectionType> MASTER_FILTER_ORDER = List.of(
             ActionSelectionType.TARGET_DISTANCE,
             ActionSelectionType.AFFORDANCE,
+            ActionSelectionType.MEMORY,
             ActionSelectionType.WORLD_MODEL,
             ActionSelectionType.RANDOM
     );

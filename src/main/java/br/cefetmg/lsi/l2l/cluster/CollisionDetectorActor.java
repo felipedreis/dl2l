@@ -5,21 +5,14 @@ import akka.cluster.Cluster;
 import akka.cluster.ClusterEvent.*;
 import akka.cluster.Member;
 import akka.japi.pf.ReceiveBuilder;
-import akka.util.Timeout;
 import br.cefetmg.lsi.l2l.cluster.settings.Simulation;
 import br.cefetmg.lsi.l2l.common.QuadTree;
 import br.cefetmg.lsi.l2l.common.SequentialId;
-import br.cefetmg.lsi.l2l.creature.Creature;
-import br.cefetmg.lsi.l2l.creature.CreatureActor;
 import br.cefetmg.lsi.l2l.physics.*;
 import br.cefetmg.lsi.l2l.stimuli.*;
 import br.cefetmg.lsi.l2l.web.GeometrySourceProvider;
 import org.newdawn.slick.geom.Rectangle;
-import scala.concurrent.Await;
-import scala.concurrent.Future;
-import scala.concurrent.duration.Duration;
 
-import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -68,17 +61,9 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
     public Receive createReceive() {
         return ReceiveBuilder.create()
                 .match(CreaturePositioningAttr.class, attr -> {
-                    if(sender().path().toString().contains("deadLetter")) {
-                        logger.severe("Sender is dead letter, will not be handled");
-                        return;
-                    }
-
-                    Creature creature = TypedActor.get(context())
-                            .typedActorOf(new TypedProps<>(CreatureActor.class), sender());
-
                     CreatureGeometry geometry = new CreatureGeometry(attr);
                     creatureAttrs.put(attr.creatureId, geometry);
-                    checkCreatureCollisions(geometry, creature);
+                    checkCreatureCollisions(geometry);
                     geometrySourceProvider.updateCreature(geometry);
                 })
                 .match(WorldObjectPositioningAttr.class, attr -> {
@@ -124,34 +109,27 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
     }
 
 
-    private void checkCreatureCollisions(CreatureGeometry geom, Creature creature){
+    private void checkCreatureCollisions(CreatureGeometry geom) {
         try {
-            if (TypedActor.get(context()).getActorRefFor(creature).isTerminated()) {
-                System.exit(0);
+            if (geom.creatureRef.isTerminated()) {
+                return;
             }
             long time = System.currentTimeMillis();
 
             List<ObjectGeometry> possibleObjectsCollision = collisionTree.query(geom.getBoundingBox());
 
-            possibleObjectsCollision.forEach( obj -> {
-                Stimulus sentStimulus = null;
+            possibleObjectsCollision.forEach(obj -> {
                 if (geom.body.intersects(obj.shape)) {
-                    // TODO rename the TouchStimulus to Mechanical according to Campos (2015) version
-                    sentStimulus = new TouchStimulus(obj.id, null, obj.type);
-                    creature.body().tell(sentStimulus);
+                    geom.bodyRef.tell(new TouchStimulus(obj.id, null, obj.type), ActorRef.noSender());
                 }
                 if (geom.visionField.intersects(obj.shape)) {
-                    sentStimulus = new LuminousStimulus(obj.id, null, obj.type, obj.point);
-                    creature.eye().tell(sentStimulus);
+                    geom.eyeRef.tell(new LuminousStimulus(obj.id, null, obj.type, obj.point), ActorRef.noSender());
                 }
                 if (geom.mouth.intersects(obj.shape)) {
-                    sentStimulus = new MechanicalStimulus(obj.id, null, obj.type);
-                    creature.mouth().tell(sentStimulus);
+                    geom.mouthRef.tell(new MechanicalStimulus(obj.id, null, obj.type), ActorRef.noSender());
                 }
                 if (geom.olfactoryField.intersects(obj.shape)) {
-                    // TODO create a nose
-                    sentStimulus = new SmellStimulus(obj.id, null, obj.type, obj.point);
-                    creature.nose().tell(sentStimulus);
+                    geom.noseRef.tell(new SmellStimulus(obj.id, null, obj.type, obj.point), ActorRef.noSender());
                 }
             });
             logger.info("Elapsed time: %d".formatted(System.currentTimeMillis() - time));

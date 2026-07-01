@@ -56,6 +56,10 @@ public interface Constants {
 
     int CONSOLIDATION_WINDOW = 128;
 
+    int MEMORY_FILTER_WINDOW = 256;
+
+    double MEMORY_CONSOLIDATION_THRESHOLD = 0.1;
+
     int CONSOLIDATION_BATCH_SIZE = 16;
 
     int CIRCADIAN_PERIOD_TICKS = 200;

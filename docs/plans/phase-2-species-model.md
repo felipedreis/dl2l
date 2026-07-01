@@ -437,3 +437,119 @@ The Java loader (Phase 5, Task 5.1) asserts this hash at startup; mismatch abort
 3. Implement Task 2.2 architecture → verify forward-pass shapes and critic bounds (step 2 and 3 can overlap with step 1 once data contract is agreed).
 4. Run Task 2.3 training → `check_collapse.py` → `export_model.py`.
 5. Verify all acceptance criteria above before closing Epic #4.
+
+---
+
+## Phase 2 Completion Record (EXP-p9, 2026-07)
+
+The following documents all decisions and changes made after the initial plan during the p9 experiment series.
+
+### Architecture evolution — four model variants
+
+The original plan described a single `SpeciesModel`. During the p9 experiments, three additional architectures were designed and trained to ablate the role of internal homeostatic state (`h_t`) in world-model prediction:
+
+| Variant | Predictor input | Critic input | Python class |
+|---|---|---|---|
+| `single` | `z_world` | `z_next` | `SpeciesModel` |
+| `dual` | `concat(z_world, z_internal)` | `concat(z_next, z_internal)` | `DualSpeciesModel` |
+| `internal_critic` | `z_world` | `concat(z_next, z_internal)` | `InternalCriticModel` |
+| `internal_predictor` | `concat(z_world, z_internal)` | `z_next` | `InternalPredictorModel` |
+
+All four share the same `Encoder`, `Predictor`, `Critic`, `InternalEncoder`, and `IndividualAdapter` building blocks from `ml/jepa/model.py`. The `DUAL_ENCODER_MODELS` tuple in `train.py` collects all variants that require `h_t` as a third input.
+
+### p9 dataset — trial-based train/val split
+
+Simulation run `p9` used 10 creatures × 10 trials. Prior runs used a creature-based split which caused contamination (the same creature IDs are reused across trials). The fix:
+
+- Added `trial_id` (extracted from the directory name `trial_N/`) to every row in `prepare_dataset.py`.
+- `merge_asof` joins now include `trial_id` in the `by` groups to prevent cross-trial emotion/perception matches.
+- Trials 1–8 → **train** (359,782 samples); trials 9–10 → **val** (89,731 samples).
+
+`stats.json` dimensions: `input_dim=9`, `action_dim=9`, `emotion_dim=9`, `latent_dim=64`, `internal_latent_dim=16`, `internal_state_dim=4`.
+
+### p9 training results
+
+All four variants trained for 50 epochs on MPS (Apple GPU). Best val L_pred (lower is better):
+
+| Variant | Best val L_pred | Best epoch |
+|---|---|---|
+| `internal_critic` | **0.1683** | 2 |
+| `internal_predictor` | 0.1750 | 2 |
+| `single` | 0.1732 | 3 |
+| `dual` | 0.1884 | 2 |
+
+All models converge at epoch 2–4, consistent with limited creature diversity (10 unique IDs). The Baum & Haussler 10× rule requires ~900K samples for reliable generalisation; 360K samples puts the model in the compute-optimal zone but below the generalization threshold. The real bottleneck is diversity: more creatures (50–100) with varied conditions, not longer trials.
+
+### Java Strategy Pattern for model variant routing
+
+A Strategy Pattern isolates tensor-routing per variant in both `WorldModelEngine` (inference) and `MemoryConsolidator` (sleep training):
+
+- `ModelVariantStrategy` interface — `buildPredictorInput`, `buildCriticInput`, `requiresInternalState`, `variantName`
+- Implementations: `SingleEncoderStrategy`, `DualPredictorStrategy`, `InternalCriticStrategy`, `InternalPredictorStrategy`
+- `ModelVariantStrategyFactory.forContract(ModelContract)` — reads `model_variant` from `model_contract.json`; legacy contracts (`has_internal_encoder=true`, no `model_variant`) map to `DualPredictorStrategy`
+
+`model_contract.json` gained a `model_variant` field (`"single"`, `"dual"`, `"internal_critic"`, `"internal_predictor"`).
+
+### export.py fix for per-variant I/O dimensions
+
+The original `export.py` used the `dual` flag (has internal encoder) to set both predictor and critic input sizes. This was wrong for `internal_predictor` (predictor is combined but critic is world-only) and `internal_critic` (predictor is world-only but critic is combined). Fixed:
+
+```python
+predictor_latent_in = (latent_dim + internal_latent_dim) if model_variant in ("dual", "internal_predictor") else latent_dim
+critic_latent_in    = (latent_dim + internal_latent_dim) if model_variant in ("dual", "internal_critic")    else latent_dim
+```
+
+### pg_extract.py — full Python/SQL port of all Java extractors
+
+`scripts/pg_extract.py` was extended to cover every Java extractor that previously required the fat JAR. All queries run via `docker exec psql`. Files written:
+
+**Ensemble (root output dir):**
+- `lifetimes.csv` — creature lifetimes in seconds
+- `distances.csv` — total traveled distance per creature (sum of `body_state.speed`)
+- `perception_coverage.csv` — all object perceptions (creature_key, object_type, distance, angle, time)
+
+**Per-creature (`{key}:{seq}/`):**
+- `trajectory_emotions.csv`, `trajectory_actions.csv`, `trajectory_perceptions.csv` — unchanged
+- `sleep_episodes.csv`, `reg_hist.csv` — unchanged
+- `arousal_history.csv` — 0.001-min binned hunger+sleep arousal averages
+- `accumulated_choices.csv` — EAT/PLAY/TOUCH counts accumulated over time by selection type (AFFORDANCE/MEMORY/RANDOM)
+- `behavioural_efficiency.csv` — simple/complex task efficiency per 0.001-min bin
+- `eaten_nutrients.csv` — accumulated EAT interactions per fruit type over time
+- `choices_over_time.csv` — per-event EAT/PLAY/TOUCH log with elapsed time and selection type
+- `engrams.csv` — operant conditioning engram records (lay_cycle, reinforced_cycle, eligibility, emotion_delta)
+- `consolidation_batches.csv` — per-batch sleep consolidation training stats (onset_cycle, batch_index, loss)
+
+### HuggingFace repositories
+
+| Repo | Type | Contents |
+|---|---|---|
+| `felipedreis/dl2l-jepa` | Model | TorchScript `.pt` + `model_contract.json` for all 4 variants |
+| `felipedreis/dl2l-experiments` | Dataset | `p9/` — parquet files + `stats.json` for p9 experiment |
+
+Upload script: `ml/scripts/upload_hf.py --repo felipedreis/dl2l-jepa --data-repo felipedreis/dl2l-experiments --ckpt checkpoints_p9 --data data_p9 --data-prefix p9`
+
+Models are exported to `src/main/resources/models/{variant}/` for fat-JAR inclusion. The Java loader selects the variant from `model_contract.json`'s `model_variant` field at startup.
+
+### Additional files changed in p9 series
+
+| File | Change |
+|---|---|
+| `ml/jepa/model.py` | Added `InternalCriticModel`, `InternalPredictorModel` |
+| `ml/jepa/train.py` | Added `InternalPredictorModel` to `DUAL_ENCODER_MODELS`; updated imports |
+| `ml/jepa/export.py` | Fixed per-variant predictor/critic input dims; added `model_variant` to contract |
+| `ml/scripts/prepare_dataset.py` | Trial-based split; `trial_id` in merge_asof `by` groups |
+| `ml/scripts/train_species.py` | Added `internal_predictor` variant |
+| `ml/scripts/export_model.py` | Added `internal_predictor` variant |
+| `ml/scripts/check_collapse.py` | Added `internal_predictor` variant |
+| `ml/scripts/upload_hf.py` | Added 4th variant; split `--data-repo` from `--repo`; dataset prefix |
+| `scripts/pg_extract.py` | Full port of all Java extractors to Python+SQL |
+| `src/.../ml/InternalCriticStrategy.java` | New strategy for `internal_critic` variant |
+| `src/.../ml/InternalPredictorStrategy.java` | New strategy for `internal_predictor` variant |
+| `src/.../ml/DualPredictorStrategy.java` | New strategy for `dual` variant |
+| `src/.../ml/SingleEncoderStrategy.java` | New strategy for `single` variant |
+| `src/.../ml/ModelVariantStrategy.java` | New interface |
+| `src/.../ml/ModelVariantStrategyFactory.java` | Factory with legacy compat |
+| `src/.../ml/ModelContract.java` | Added `model_variant` field |
+| `src/.../ml/WorldModelEngine.java` | Delegates tensor routing to strategy |
+| `src/.../ml/MemoryConsolidator.java` | Delegates tensor routing to strategy |
+| `src/test/.../ml/ModelVariantStrategyTest.java` | 16 unit tests covering all 4 strategies + factory |

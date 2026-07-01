@@ -1,0 +1,82 @@
+version: "3.1"
+services:
+  dl2l-db:
+    image: postgres
+    container_name: db
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: l2l
+      POSTGRES_INITDB_ARGS: "--auth-host=md5"
+    ports:
+      - "5432:5432"
+    networks:
+      - dl2l-network
+    volumes:
+      - source: ../config/init-db.sql
+        target: /docker-entrypoint-initdb.d/init-db.sql
+        read_only: true
+        type: bind
+
+  dl2l-manager:
+    image: dl2l
+    depends_on:
+      - dl2l-db
+    environment:
+      ROLE: "manager,idProvider"
+      SIMULATION: "simulations/exp_p7_4_jepa_only.conf"
+      HOST: "dl2l-manager"
+      PORT: 2551
+    networks:
+      - dl2l-network
+    healthcheck:
+      test: [ "CMD", "nc", "-z", "dl2l-manager", "2551" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - source: ../config/docker-config.conf
+        target: /config/docker-config.conf
+        read_only: true
+        type: bind
+
+  dl2l-detector:
+    image: dl2l
+    depends_on:
+      dl2l-manager:
+        condition: service_healthy
+    environment:
+      ROLE: "collisionDetector"
+      SIMULATION: "simulations/exp_p7_4_jepa_only.conf"
+      HOST: "dl2l-detector"
+      PORT: 2551
+    networks:
+      - dl2l-network
+    volumes:
+      - source: ../config/docker-config.conf
+        target: /config/docker-config.conf
+        read_only: true
+        type: bind
+
+  dl2l-holder:
+    image: dl2l
+    depends_on:
+      dl2l-manager:
+        condition: service_healthy
+      dl2l-detector:
+        condition: service_started
+    environment:
+      ROLE: "holder"
+      SIMULATION: "simulations/exp_p7_4_jepa_only.conf"
+      HOST: "dl2l-holder"
+      PORT: "2551"
+    networks:
+      - dl2l-network
+    volumes:
+      - source: ../config/docker-config.conf
+        target: /config/docker-config.conf
+        read_only: true
+        type: bind
+
+networks:
+  dl2l-network:
+    driver: bridge

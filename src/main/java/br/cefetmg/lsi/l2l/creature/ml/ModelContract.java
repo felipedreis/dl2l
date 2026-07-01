@@ -42,6 +42,8 @@ public class ModelContract {
     @JsonProperty("baseline_pred_error")          public double  baselinePredError      = 1.0;
     @JsonProperty("ood_threshold_multiplier")     public double  oodThresholdMultiplier = 2.0;
     @JsonProperty("has_internal_encoder")         public boolean hasDualEncoder         = false;
+    // "single" | "dual" | "internal_critic" — determines inference routing strategy.
+    @JsonProperty("model_variant")                public String  modelVariant           = "single";
     @JsonProperty("internal_state_dim")           public int     internalStateDim        = 0;
     @JsonProperty("internal_latent_dim")          public int     internalLatentDim       = 0;
     @JsonProperty("internal_state_feature_order") public List<String> internalStateFeatureOrder;

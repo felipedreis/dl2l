@@ -15,8 +15,10 @@ import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioningActor;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystemActor;
+import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
 import br.cefetmg.lsi.l2l.creature.ml.MLServiceExtension;
 import br.cefetmg.lsi.l2l.creature.ml.MemoryConsolidator;
+import br.cefetmg.lsi.l2l.creature.ml.MemoryTraceConsolidator;
 import br.cefetmg.lsi.l2l.physics.CreaturePositioningAttr;
 import scala.concurrent.duration.Duration;
 
@@ -128,10 +130,18 @@ public class CreatureActor implements Creature {
         ext.configure(id.key, effective);
 
         if (effective.isConsolidationEnabled()) {
-            consolidator = context.actorOf(
-                    Props.create(MemoryConsolidator.class, () -> new MemoryConsolidator(id.key))
-                            .withDispatcher("wm-dispatcher"),
-                    "memoryConsolidator");
+            boolean jepaMode = effective.isFilterEnabled(ActionSelectionType.WORLD_MODEL);
+            if (jepaMode) {
+                consolidator = context.actorOf(
+                        Props.create(MemoryConsolidator.class, () -> new MemoryConsolidator(id.key))
+                                .withDispatcher("wm-dispatcher"),
+                        "memoryConsolidator");
+            } else {
+                consolidator = context.actorOf(
+                        Props.create(MemoryTraceConsolidator.class, () -> new MemoryTraceConsolidator(id.key))
+                                .withDispatcher("wm-dispatcher"),
+                        "memoryConsolidator");
+            }
         } else {
             consolidator = context.system().deadLetters();
         }
@@ -213,13 +223,19 @@ public class CreatureActor implements Creature {
     }
 
     private CreaturePositioningAttr getPositioningAttr() {
-        return new CreaturePositioningAttr(id, componentId(Body.class), componentId(Eye.class), componentId(Nose.class),
-                componentId(Mouth.class), position, visionFieldPosition, visionFieldOpening, olfactoryFieldRadius,
-                false, false);
+        return new CreaturePositioningAttr(id,
+                componentId(Body.class), componentId(Eye.class), componentId(Nose.class), componentId(Mouth.class),
+                TypedActor.context().self(),
+                componentRef(Body.class), componentRef(Eye.class), componentRef(Nose.class), componentRef(Mouth.class),
+                position, visionFieldPosition, visionFieldOpening, olfactoryFieldRadius, false, false);
     }
 
     private SequentialId componentId(Class componentClass) {
         return components.get(componentClass).first;
+    }
+
+    private ActorRef componentRef(Class componentClass) {
+        return components.get(componentClass).second;
     }
 
     private void updatePositioningAttribute() {

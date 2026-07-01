@@ -32,6 +32,9 @@
     <class>br.cefetmg.lsi.l2l.creature.bd.ConsolidationEpisodeStat</class>
     <class>br.cefetmg.lsi.l2l.creature.bd.ConsolidationBatchStat</class>
 
+    <!-- EXP-P7: Mapa memory trace consolidation stat -->
+    <class>br.cefetmg.lsi.l2l.creature.bd.MemoryTraceStat</class>
+
     <properties>
         <property name="javax.persistence.jdbc.url" value="jdbc:postgresql://dl2l-db:5432/l2l"/>
         <property name="javax.persistence.jdbc.password" value="postgres"/>

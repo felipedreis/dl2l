@@ -34,7 +34,10 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from .model import SpeciesModel, DualSpeciesModel
+from .model import SpeciesModel, DualSpeciesModel, InternalCriticModel, InternalPredictorModel
+
+# All model classes that require h_t (internal state) as a third input.
+DUAL_ENCODER_MODELS = (DualSpeciesModel, InternalCriticModel, InternalPredictorModel)
 
 
 def sigreg_loss(z: torch.Tensor) -> torch.Tensor:
@@ -121,7 +124,7 @@ def train_one_epoch(
     model.train()
     totals = {"pred": 0.0, "sigreg": 0.0, "crit": 0.0, "total": 0.0}
     n_batches = 0
-    dual = isinstance(model, DualSpeciesModel)
+    dual = isinstance(model, DUAL_ENCODER_MODELS)
 
     for batch in loader:
         if dual:
@@ -183,7 +186,7 @@ def evaluate(
     model.eval()
     totals = {"pred": 0.0, "sigreg": 0.0, "crit": 0.0, "total": 0.0}
     n_batches = 0
-    dual = isinstance(model, DualSpeciesModel)
+    dual = isinstance(model, DUAL_ENCODER_MODELS)
 
     for batch in loader:
         if dual:
