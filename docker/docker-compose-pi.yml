@@ -1,0 +1,82 @@
+version: "3.1"
+services:
+  dl2l-db:
+    image: postgres
+    container_name: db
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: l2l
+      POSTGRES_INITDB_ARGS: "--auth-host=md5"
+    ports:
+      - "5432:5432"
+    networks:
+      - dl2l-network
+    volumes:
+      - type: bind
+        source: ${CONFIG_DIR:-/home/pi/dl2l-config}/init-db.sql
+        target: /docker-entrypoint-initdb.d/init-db.sql
+        read_only: true
+
+  dl2l-manager:
+    image: ${DL2L_IMAGE:-192.168.1.200:5000/dl2l:latest}
+    depends_on:
+      - dl2l-db
+    environment:
+      ROLE: "manager,idProvider"
+      SIMULATION: ${SIMULATION:-simulations/exp_p7_0_jepa_train.conf}
+      HOST: "dl2l-manager"
+      PORT: 2551
+    networks:
+      - dl2l-network
+    healthcheck:
+      test: [ "CMD", "nc", "-z", "dl2l-manager", "2551" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - type: bind
+        source: ${CONFIG_DIR:-/home/pi/dl2l-config}/docker-config.conf
+        target: /config/docker-config.conf
+        read_only: true
+
+  dl2l-detector:
+    image: ${DL2L_IMAGE:-192.168.1.200:5000/dl2l:latest}
+    depends_on:
+      dl2l-manager:
+        condition: service_healthy
+    environment:
+      ROLE: "collisionDetector"
+      SIMULATION: ${SIMULATION:-simulations/exp_p7_0_jepa_train.conf}
+      HOST: "dl2l-detector"
+      PORT: 2551
+    networks:
+      - dl2l-network
+    volumes:
+      - type: bind
+        source: ${CONFIG_DIR:-/home/pi/dl2l-config}/docker-config.conf
+        target: /config/docker-config.conf
+        read_only: true
+
+  dl2l-holder:
+    image: ${DL2L_IMAGE:-192.168.1.200:5000/dl2l:latest}
+    depends_on:
+      dl2l-manager:
+        condition: service_healthy
+      dl2l-detector:
+        condition: service_started
+    environment:
+      ROLE: "holder"
+      SIMULATION: ${SIMULATION:-simulations/exp_p7_0_jepa_train.conf}
+      HOST: "dl2l-holder"
+      PORT: "2551"
+    networks:
+      - dl2l-network
+    volumes:
+      - type: bind
+        source: ${CONFIG_DIR:-/home/pi/dl2l-config}/docker-config.conf
+        target: /config/docker-config.conf
+        read_only: true
+
+networks:
+  dl2l-network:
+    driver: bridge
