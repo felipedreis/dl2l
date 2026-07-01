@@ -32,6 +32,9 @@ docker build -f docker/Dockerfile -t dl2l .
 
 # Run data extractor (exports simulation data to CSV)
 java -jar target/l2l-2.0.0-SNAPSHOT-wd.jar --host localhost --port 2551 --roles holder --extractor --save <output-dir>
+
+# Preferred: extract directly from PostgreSQL (no fat JAR needed)
+python3 scripts/pg_extract.py --out <output-dir> --container <db-container>
 ```
 
 The generic launch script signature:
@@ -101,6 +104,45 @@ All JPA entities are in `creature/bd/` and `common/SequentialId`. EclipseLink is
 Python 2.7 scripts in `analysis/`. After simulation, copy the SLURM output directory back locally, set the `wd` variable in `exp1.py` / `exp2.py` / `exp3.py` / `tracing.py`, and run. Requires `numpy` and `scipy`.
 
 New JEPA-integration analysis scripts (`coverage_probe.py`, `reg_granularity.py`, …) are Python 3 + pandas + sklearn + matplotlib and follow the same `wd` convention. Run them with `python3 analysis/<script>.py`.
+
+## JEPA World Model
+
+The `ml/` directory contains everything for the species base world model:
+
+```
+ml/
+  jepa/             # PyTorch modules: model.py, train.py, export.py, dataset.py, evaluate.py
+  scripts/          # CLI entry points:
+    prepare_dataset.py   # assemble (s_t, a_t, emotion_target) tuples from CSV → parquet
+    train_species.py     # train single|dual|internal_critic|internal_predictor variant
+    check_collapse.py    # verify encoder did not collapse
+    export_model.py      # trace to TorchScript + write model_contract.json
+    upload_hf.py         # push models to HF model repo + dataset to HF dataset repo
+```
+
+### HuggingFace repositories
+
+| Repository | URL | Contents |
+|---|---|---|
+| **dl2l-jepa** (model) | `https://huggingface.co/felipedreis/dl2l-jepa` | TorchScript `.pt` + `model_contract.json` per variant |
+| **dl2l-experiments** (dataset) | `https://huggingface.co/datasets/felipedreis/dl2l-experiments` | Parquet files + `stats.json`, one prefix per experiment (e.g. `p9/`) |
+
+To upload after training:
+```bash
+cd ml
+python3 -m scripts.upload_hf \
+    --repo felipedreis/dl2l-jepa \
+    --data-repo felipedreis/dl2l-experiments \
+    --ckpt checkpoints_p9 --data data_p9 --data-prefix p9
+```
+
+Model variants (all trained on p9 data, best val L_pred):
+- `internal_critic` — 0.1683 (predictor: world-only; critic: world+internal)
+- `single`          — 0.1732 (predictor: world-only; critic: world-only)
+- `internal_predictor` — 0.1750 (predictor: world+internal; critic: world-only)
+- `dual`            — 0.1884 (predictor: world+internal; critic: world+internal)
+
+Exported artifacts live in `src/main/resources/models/{variant}/` and are bundled into the fat JAR. The Java runtime selects the variant from `model_contract.json`'s `model_variant` field.
 
 ## Akka Actor Anti-Patterns
 

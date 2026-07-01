@@ -17,6 +17,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 
 import numpy as np
@@ -42,17 +43,33 @@ LIVE_EMOTION_NAMES   = [EMOTION_INDEX_ORDER[i] for i in LIVE_EMOTION_INDICES]
 MIN_AROUSAL = 0.18
 MAX_AROUSAL = 7.0
 
-LIVE_VARIANCE_THRESHOLD = 1e-6
-TRAIN_FRACTION          = 0.80
+# Trial-based split: first 8 trials = train, last 2 = val.
+# Trials are numbered from the directory name (trial_1 … trial_10).
+TRAIN_TRIALS = set(range(1, 9))   # 1–8
+VAL_TRIALS   = set(range(9, 11))  # 9–10
+
 # Only keep AFFORDANCE and RANDOM selections; MEMORY is dead in current codebase.
-VALID_SELECTION_TYPES   = {"AFFORDANCE", "RANDOM"}
+VALID_SELECTION_TYPES = {"AFFORDANCE", "RANDOM"}
+
+_TRIAL_RE = re.compile(r'trial_(\d+)')
+
+
+def _trial_id(path: str) -> int:
+    m = _TRIAL_RE.search(path)
+    return int(m.group(1)) if m else -1
 
 
 def load_glob(pattern: str) -> pd.DataFrame:
+    """Load CSVs matching pattern, tagging each row with its trial_id from the path."""
     files = glob.glob(pattern, recursive=True)
     if not files:
         return pd.DataFrame()
-    return pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
+    frames = []
+    for f in files:
+        df = pd.read_csv(f)
+        df["trial_id"] = _trial_id(f)
+        frames.append(df)
+    return pd.concat(frames, ignore_index=True)
 
 
 def find_target_perception(
@@ -63,90 +80,100 @@ def find_target_perception(
 
     Self-targeted actions (target_key == creatureKey — e.g. WANDER, self-directed SLEEP)
     are kept with zeroed perception features to represent an undefined/no-object perception.
-    This ensures WANDER and no-food SLEEP transitions reach the Predictor and Critic.
+    External actions with no prior perception are dropped.
     """
     if perceptions.empty or actions.empty:
         return actions.assign(distance=np.nan, angle=np.nan, direction=np.nan, object_type=np.nan)
 
-    result_rows = []
-    for ck, act_group in actions.groupby("creatureKey"):
-        perc_group = perceptions[perceptions["creatureKey"] == ck].sort_values("time")
-        for _, act in act_group.iterrows():
-            t_act  = act["action_time"]
-            tk     = act["target_key"]
-            cands = perc_group[
-                (perc_group["object_key"] == tk) & (perc_group["time"] <= t_act)
-            ]
-            if not cands.empty:
-                last = cands.iloc[-1]
-                result_rows.append({
-                    **act.to_dict(),
-                    "distance":    last["distance"],
-                    "angle":       last["angle"],
-                    "direction":   last["direction"],
-                    "object_type": last["object_type"],
-                })
-            elif tk == ck:
-                # Self-targeted: no external perception → undefined context (all zeros).
-                result_rows.append({
-                    **act.to_dict(),
-                    "distance":    0.0,
-                    "angle":       0.0,
-                    "direction":   0.0,
-                    "object_type": None,
-                })
-            # External target with no perception record → drop (stale/missing data).
+    # Rename perceptions so merge_asof can join on (creatureKey, target_key, action_time).
+    # merge_asof requires the on-key to be globally sorted — sort by action_time alone;
+    # within-group order is preserved automatically for by-groups.
+    perc = (
+        perceptions
+        .rename(columns={"object_key": "target_key", "time": "action_time"})
+        [["trial_id", "creatureKey", "target_key", "action_time",
+          "distance", "angle", "direction", "object_type"]]
+        .sort_values("action_time")
+    )
+    acts = actions.sort_values("action_time")
 
-    if not result_rows:
-        return pd.DataFrame()
-    return pd.DataFrame(result_rows)
+    joined = pd.merge_asof(
+        acts, perc,
+        on="action_time",
+        by=["trial_id", "creatureKey", "target_key"],
+        direction="backward",
+    )
+
+    # Self-targeted rows with NaN → zeroed context (not dropped).
+    self_mask = joined["target_key"] == joined["creatureKey"]
+    for col in ("distance", "angle", "direction"):
+        joined.loc[self_mask & joined[col].isna(), col] = 0.0
+    joined.loc[self_mask & joined["object_type"].isna(), "object_type"] = None
+
+    # External rows with no perception match → drop.
+    external_no_perc = (~self_mask) & joined["distance"].isna()
+    return joined[~external_no_perc].reset_index(drop=True)
 
 
 def find_next_emotion(
     actions: pd.DataFrame,
     emotions: pd.DataFrame,
 ) -> pd.DataFrame:
-    """For each action find the first regulation event strictly after action_time.
+    """For each action find the first regulation event strictly after action_time,
+    and the last regulation event at or before action_time (for h_t / initial state).
 
-    Returns the action row augmented with:
-      - final_<dim>  : emotion levels AFTER regulation (training target / s_{t+1})
-      - initial_<dim>: emotion levels at decision time (h_t proxy for dual encoder),
-                       taken from the last regulation event AT OR BEFORE action_time.
-                       Falls back to the next-event values when no prior event exists.
+    Uses merge_asof for O(n log n) instead of O(n²) per-row iteration.
     """
     if emotions.empty or actions.empty:
         return pd.DataFrame()
 
-    final_cols = [f"final_{e}" for e in EMOTION_INDEX_ORDER]
+    final_cols   = [f"final_{e}" for e in EMOTION_INDEX_ORDER]
+    initial_cols = [f"initial_{e}" for e in EMOTION_INDEX_ORDER]
 
-    result_rows = []
-    for ck, act_group in actions.groupby("creatureKey"):
-        emo_group = emotions[emotions["creatureKey"] == ck].sort_values("regulation_time")
-        for _, act in act_group.iterrows():
-            t_act = act["action_time"]
-            nexts = emo_group[emo_group["regulation_time"] > t_act]
-            if nexts.empty:
-                continue
-            first = nexts.iloc[0]
-            row = {**act.to_dict()}
-            for ec in final_cols:
-                row[ec] = first[ec] if ec in first.index else np.nan
+    # Sort by on-key only (merge_asof requires global monotonic sort on the on column).
+    emo = (
+        emotions
+        .rename(columns={"regulation_time": "action_time"})
+        [["trial_id", "creatureKey", "action_time"] + final_cols]
+        .sort_values("action_time")
+    )
+    acts = actions.sort_values("action_time")
 
-            # h_t: emotion state at decision time = final state of the last
-            # regulation event that fired at or before the action.
-            prevs = emo_group[emo_group["regulation_time"] <= t_act]
-            if not prevs.empty:
-                prev = prevs.iloc[-1]
-            else:
-                prev = first  # no prior event; reuse next as fallback
-            for ec in final_cols:
-                col_name = ec.replace("final_", "initial_")
-                row[col_name] = prev[ec] if ec in prev.index else np.nan
-            result_rows.append(row)
+    # Next emotion: first regulation strictly AFTER action_time (within same trial).
+    # merge_asof forward uses >=; shift by +1 ms to get strictly >.
+    acts_shifted = acts.copy()
+    acts_shifted["action_time"] = acts_shifted["action_time"] + 1
+    next_emo = pd.merge_asof(
+        acts_shifted,
+        emo.rename(columns={c: c + "_next" for c in final_cols}),
+        on="action_time",
+        by=["trial_id", "creatureKey"],
+        direction="forward",
+    )
+    next_emo["action_time"] = next_emo["action_time"] - 1  # restore
 
-    if not result_rows:
-        return pd.DataFrame()
-    return pd.DataFrame(result_rows)
+    first_final = f"final_{EMOTION_INDEX_ORDER[0]}_next"
+    next_emo = next_emo.dropna(subset=[first_final])
+
+    # Previous emotion: last regulation AT OR BEFORE action_time (for h_t).
+    prev_emo = pd.merge_asof(
+        next_emo[["trial_id", "creatureKey", "action_time"]].sort_values("action_time"),
+        emo.rename(columns={c: c + "_prev" for c in final_cols}),
+        on="action_time",
+        by=["trial_id", "creatureKey"],
+        direction="backward",
+    )
+
+    result = next_emo.copy()
+    for e in EMOTION_INDEX_ORDER:
+        result[f"final_{e}"]   = next_emo[f"final_{e}_next"].values
+        prev_col = prev_emo[f"final_{e}_prev"].values
+        next_col = next_emo[f"final_{e}_next"].values
+        result[f"initial_{e}"] = np.where(np.isnan(prev_col), next_col, prev_col)
+
+    result = result.drop(columns=[c for c in result.columns if c.endswith(("_next", "_prev"))],
+                         errors="ignore")
+    return result.reset_index(drop=True)
 
 
 def one_hot(series: pd.Series, categories: list[str]) -> pd.DataFrame:
@@ -212,7 +239,7 @@ def main():
 
     df_out = pd.concat(
         [
-            df[["creatureKey", "action_time"]].reset_index(drop=True),
+            df[["trial_id", "creatureKey", "action_time"]].reset_index(drop=True),
             df[continuous_cols].reset_index(drop=True),
             type_ohe.reset_index(drop=True),
             action_ohe.reset_index(drop=True),
@@ -232,26 +259,24 @@ def main():
     print(f"  live emotion dims: {live_dims} "
           f"({[EMOTION_INDEX_ORDER[i] for i in live_dims]})")
 
-    # ── Train / val split (stratified by creatureKey) ─────────────────────
-    creature_keys = sorted(df_out["creatureKey"].unique())
-    n_train = max(1, int(len(creature_keys) * TRAIN_FRACTION))
-    rng = np.random.default_rng(42)
-    rng.shuffle(creature_keys)
-    train_keys = set(creature_keys[:n_train])
-
-    df_train = df_out[df_out["creatureKey"].isin(train_keys)]
-    df_val   = df_out[~df_out["creatureKey"].isin(train_keys)]
+    # ── Train / val split by trial (trials 1–8 = train, 9–10 = val) ──────
+    present_trials = sorted(df_out["trial_id"].unique())
+    print(f"  trials present: {present_trials}")
+    df_train = df_out[df_out["trial_id"].isin(TRAIN_TRIALS)]
+    df_val   = df_out[df_out["trial_id"].isin(VAL_TRIALS)]
 
     if df_val.empty:
-        print("  Warning: only one creature — val split is a 20% time-based tail.")
-        cut = int(len(df_out) * TRAIN_FRACTION)
+        print("  Warning: no val-trial data found — falling back to 20% time-based tail.")
+        cut = int(len(df_out) * 0.80)
         df_train = df_out.iloc[:cut]
         df_val   = df_out.iloc[cut:]
 
-    print(f"  train: {len(df_train)} samples, val: {len(df_val)} samples")
+    print(f"  train: {len(df_train)} samples ({df_train['trial_id'].nunique()} trials)")
+    print(f"  val:   {len(df_val)} samples ({df_val['trial_id'].nunique()} trials)")
 
-    df_train.to_parquet(os.path.join(out, "train.parquet"), index=False)
-    df_val  .to_parquet(os.path.join(out, "val.parquet"),   index=False)
+    drop_cols = ["trial_id"] if "trial_id" in df_train.columns else []
+    df_train.drop(columns=drop_cols).to_parquet(os.path.join(out, "train.parquet"), index=False)
+    df_val  .drop(columns=drop_cols).to_parquet(os.path.join(out, "val.parquet"),   index=False)
 
     stats = {
         "input_dim":                len(feature_order),
@@ -286,15 +311,18 @@ def main():
             df_internal = df_internal.rename(columns=rename_map)
 
             df_dual = pd.concat([df_out.reset_index(drop=True), df_internal], axis=1)
-            df_dual_train = df_dual[df_dual["creatureKey"].isin(train_keys)]
-            df_dual_val   = df_dual[~df_dual["creatureKey"].isin(train_keys)]
+            df_dual_train = df_dual[df_dual["trial_id"].isin(TRAIN_TRIALS)]
+            df_dual_val   = df_dual[df_dual["trial_id"].isin(VAL_TRIALS)]
             if df_dual_val.empty:
-                cut = int(len(df_dual) * TRAIN_FRACTION)
+                cut = int(len(df_dual) * 0.80)
                 df_dual_train = df_dual.iloc[:cut]
                 df_dual_val   = df_dual.iloc[cut:]
 
-            df_dual_train.to_parquet(os.path.join(out, "train_dual.parquet"), index=False)
-            df_dual_val  .to_parquet(os.path.join(out, "val_dual.parquet"),   index=False)
+            drop_cols_dual = ["trial_id"] if "trial_id" in df_dual_train.columns else []
+            df_dual_train.drop(columns=drop_cols_dual).to_parquet(
+                os.path.join(out, "train_dual.parquet"), index=False)
+            df_dual_val.drop(columns=drop_cols_dual).to_parquet(
+                os.path.join(out, "val_dual.parquet"),   index=False)
 
             ht_cols_written = list(rename_map.values())
             print(f"  dual parquet written: h_t columns = {ht_cols_written}")

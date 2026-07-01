@@ -39,6 +39,7 @@ public class WorldModelEngine implements AutoCloseable {
     private final Predictor<NDList, NDList> criticPredictor;
     private final Predictor<NDList, NDList> internalEncoderPredictor;  // null when single-encoder
     private final ModelContract contract;
+    private final ModelVariantStrategy strategy;
 
     // OOD gating — rolling EMA of latent prediction error (prediction_error_monitor.md).
     private double latentPredErrorEma;
@@ -65,6 +66,7 @@ public class WorldModelEngine implements AutoCloseable {
         this.criticPredictor           = m.critic().newPredictor();
         this.internalEncoderPredictor  = m.hasDualEncoder()
                 ? m.internalEncoder().newPredictor() : null;
+        this.strategy                  = ModelVariantStrategyFactory.forContract(this.contract);
 
         this.latentPredErrorEma = contract.baselinePredError;
         this.emaAlpha           = 2.0 / (100 + 1);
@@ -105,27 +107,18 @@ public class WorldModelEngine implements AutoCloseable {
             NDArray latent  = encoderPredictor.predict(new NDList(perc)).singletonOrThrow();
             NDArray adapted = adapterPredictor.predict(new NDList(latent)).singletonOrThrow();
 
-            NDArray zInternal = null;
-            NDArray predictorInput;
-            if (internalEncoderPredictor != null && internalState != null) {
-                NDArray ht    = mgr.create(internalState);
-                zInternal     = internalEncoderPredictor.predict(new NDList(ht)).singletonOrThrow();
-                predictorInput = NDArrays.concat(new NDList(adapted, zInternal), -1);
-            } else {
-                predictorInput = adapted;
-            }
+            NDArray zInternal = (internalEncoderPredictor != null && internalState != null)
+                    ? internalEncoderPredictor.predict(new NDList(mgr.create(internalState))).singletonOrThrow()
+                    : null;
 
-            NDArray actionHot  = mgr.create(encodeAction(actionType));
-            NDArray nextLatent = predictorPredictor.predict(
-                                     new NDList(predictorInput, actionHot)).singletonOrThrow();
-            // Dual-encoder: Critic takes concat(z_next, z_internal) so it can
-            // condition action value on the creature's internal homeostatic state.
-            NDArray criticInput = (zInternal != null)
-                    ? NDArrays.concat(new NDList(nextLatent, zInternal), -1)
-                    : nextLatent;
-            float[] deltas     = criticPredictor.predict(
-                                     new NDList(criticInput, actionHot))
-                                     .singletonOrThrow().toFloatArray();
+            NDArray actionHot    = mgr.create(encodeAction(actionType));
+            NDArray predictorIn  = strategy.buildPredictorInput(adapted, zInternal);
+            NDArray nextLatent   = predictorPredictor.predict(
+                                       new NDList(predictorIn, actionHot)).singletonOrThrow();
+            NDArray criticIn     = strategy.buildCriticInput(nextLatent, zInternal);
+            float[] deltas       = criticPredictor.predict(
+                                       new NDList(criticIn, actionHot))
+                                       .singletonOrThrow().toFloatArray();
             return buildState(deltas);
         } catch (TranslateException e) {
             logger.log(Level.WARNING, "WorldModelEngine: inference failed, returning null", e);

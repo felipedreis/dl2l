@@ -35,6 +35,7 @@ def export(
     stats:             dict,
     out_dir:           Path,
     internal_encoder:  Optional[InternalEncoder] = None,
+    model_variant:     str = "single",   # "single" | "dual" | "internal_critic" | "internal_predictor"
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -45,22 +46,24 @@ def export(
     dual = internal_encoder is not None
     internal_state_dim  = stats.get("internal_state_dim", 0)
     internal_latent_dim = stats.get("internal_latent_dim", 0)
-    # Predictor input = z_world (+ z_internal when dual) + action
-    predictor_in_dim = (latent_dim + internal_latent_dim + action_dim) if dual \
-                       else (latent_dim + action_dim)
+
+    # Predictor sees combined latent for dual and internal_predictor; world-only otherwise.
+    predictor_latent_in = (latent_dim + internal_latent_dim) \
+                          if model_variant in ("dual", "internal_predictor") else latent_dim
+    # Critic sees combined latent for dual and internal_critic; world-only otherwise.
+    critic_latent_in = (latent_dim + internal_latent_dim) \
+                       if model_variant in ("dual", "internal_critic") else latent_dim
 
     encoder.eval()
     predictor.eval()
     critic.eval()
     adapter.eval()
 
-    dummy_s        = torch.zeros(1, input_dim)
-    dummy_z_world  = torch.zeros(1, latent_dim)
-    dummy_a        = torch.zeros(1, action_dim)
-    dummy_pred_in  = torch.zeros(1, predictor_in_dim - action_dim)  # latent part
-    # Dual critic takes concat(z_next[latent_dim], z_internal[internal_latent_dim]).
-    dummy_z_critic = torch.zeros(1, latent_dim + internal_latent_dim) if dual \
-                     else dummy_z_world
+    dummy_s         = torch.zeros(1, input_dim)
+    dummy_z_world   = torch.zeros(1, latent_dim)
+    dummy_a         = torch.zeros(1, action_dim)
+    dummy_pred_in   = torch.zeros(1, predictor_latent_in)
+    dummy_z_critic  = torch.zeros(1, critic_latent_in)
 
     pts: list[Path] = []
     for module, name, example in [
@@ -99,6 +102,7 @@ def export(
         "min_arousal":              stats["min_arousal"],
         "max_arousal":              stats["max_arousal"],
         "has_internal_encoder":     dual,
+        "model_variant":            model_variant,
         "model_hash":               model_hash,
         "trained_on":               date.today().isoformat(),
     }

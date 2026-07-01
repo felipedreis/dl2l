@@ -15,8 +15,14 @@ Options:
     --sigreg     λ_sigreg weight (default: 0.1)
     --crit       λ_crit weight (default: 1.0)
     --device     cpu | cuda | mps (default: auto-detect)
-    --dual       Train DualSpeciesModel (WorldEncoder + InternalEncoder).
-                 Requires train_dual.parquet / val_dual.parquet in --data dir.
+    --variant    Architecture to train (default: single):
+                   single              — SpeciesModel: world encoder + predictor + critic
+                   dual                — DualSpeciesModel: internal state fed to predictor AND critic
+                   internal_critic     — InternalCriticModel: predictor is world-only; only critic
+                                         sees internal state
+                   internal_predictor  — InternalPredictorModel: predictor sees internal state;
+                                         critic is world-only
+                 Dual variants require train_dual.parquet / val_dual.parquet in --data dir.
 """
 
 import argparse
@@ -31,7 +37,7 @@ from torch.utils.data import DataLoader
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from jepa.dataset import TrajectoryDataset
-from jepa.model   import SpeciesModel, DualSpeciesModel, IndividualAdapter
+from jepa.model   import SpeciesModel, DualSpeciesModel, InternalCriticModel, InternalPredictorModel, IndividualAdapter
 from jepa.train   import train_one_epoch, evaluate
 
 
@@ -44,9 +50,9 @@ def parse_args():
     p.add_argument("--lr",     type=float, default=1e-3)
     p.add_argument("--sigreg", type=float, default=0.1)
     p.add_argument("--crit",   type=float, default=1.0)
-    p.add_argument("--device", default=None)
-    p.add_argument("--dual",   action="store_true",
-                   help="Train DualSpeciesModel with InternalEncoder")
+    p.add_argument("--device",  default=None)
+    p.add_argument("--variant", default="single",
+                   choices=["single", "dual", "internal_critic", "internal_predictor"])
     return p.parse_args()
 
 
@@ -75,11 +81,13 @@ def main():
     else:
         device = torch.device("cpu")
     print(f"Device: {device}")
-    print(f"Dual encoder: {args.dual}")
+    print(f"Variant: {args.variant}")
 
-    if args.dual:
+    dual_variant = args.variant in ("dual", "internal_critic", "internal_predictor")
+
+    if dual_variant:
         if "internal_state_dim" not in stats:
-            sys.exit("--dual requires internal_state_dim in stats.json. "
+            sys.exit(f"--variant {args.variant} requires internal_state_dim in stats.json. "
                      "Run prepare_dataset.py --dual first.")
         train_file = data_dir / "train_dual.parquet"
         val_file   = data_dir / "val_dual.parquet"
@@ -90,23 +98,23 @@ def main():
         train_file = data_dir / "train.parquet"
         val_file   = data_dir / "val.parquet"
 
-    train_ds = TrajectoryDataset(str(train_file), str(stats_path), dual=args.dual)
-    val_ds   = TrajectoryDataset(str(val_file),   str(stats_path), dual=args.dual)
+    train_ds = TrajectoryDataset(str(train_file), str(stats_path), dual=dual_variant)
+    val_ds   = TrajectoryDataset(str(val_file),   str(stats_path), dual=dual_variant)
     train_loader = DataLoader(train_ds, batch_size=args.batch, shuffle=False, drop_last=True)
     val_loader   = DataLoader(val_ds,   batch_size=args.batch, shuffle=False, drop_last=False)
 
-    if args.dual:
-        model = DualSpeciesModel(
-            input_dim           = stats["input_dim"],
-            internal_state_dim  = stats["internal_state_dim"],
-            action_dim          = stats["action_dim"],
-            latent_dim          = stats["latent_dim"],
-            internal_latent_dim = stats["internal_latent_dim"],
-            emotion_dim         = stats["emotion_dim"],
-            min_arousal         = stats["min_arousal"],
-            max_arousal         = stats["max_arousal"],
-        ).to(device)
-    else:
+    dual_kwargs = dict(
+        input_dim           = stats["input_dim"],
+        internal_state_dim  = stats["internal_state_dim"],
+        action_dim          = stats["action_dim"],
+        latent_dim          = stats["latent_dim"],
+        internal_latent_dim = stats["internal_latent_dim"],
+        emotion_dim         = stats["emotion_dim"],
+        min_arousal         = stats["min_arousal"],
+        max_arousal         = stats["max_arousal"],
+    ) if dual_variant else {}
+
+    if args.variant == "single":
         model = SpeciesModel(
             input_dim   = stats["input_dim"],
             action_dim  = stats["action_dim"],
@@ -115,6 +123,12 @@ def main():
             min_arousal = stats["min_arousal"],
             max_arousal = stats["max_arousal"],
         ).to(device)
+    elif args.variant == "dual":
+        model = DualSpeciesModel(**dual_kwargs).to(device)
+    elif args.variant == "internal_critic":
+        model = InternalCriticModel(**dual_kwargs).to(device)
+    else:
+        model = InternalPredictorModel(**dual_kwargs).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 

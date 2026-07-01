@@ -165,18 +165,19 @@ class InternalEncoder(nn.Module):
 
 
 class DualSpeciesModel(nn.Module):
-    """Dual-encoder species model: WorldEncoder + InternalEncoder combined at Predictor level.
+    """Internal state informs both the Predictor and the Critic.
 
     Architecture:
-        s_t (perception)     -> WorldEncoder   -> z_world   [latent_dim]
-        h_t (live emotions)  -> InternalEncoder -> z_internal [internal_latent_dim]
+        s_t (perception)    -> WorldEncoder    -> z_world    [latent_dim]
+        h_t (live emotions) -> InternalEncoder -> z_internal [internal_latent_dim]
 
-        concat(z_world, z_internal) + a_t -> Predictor -> z_next [latent_dim]
-        z_next + a_t                      -> Critic    -> emotion_pred [emotion_dim]
+        concat(z_world, z_internal) + a_t -> Predictor -> z_next       [latent_dim]
+        concat(z_next,  z_internal) + a_t -> Critic    -> emotion_pred [emotion_dim]
 
+    The Predictor learns world dynamics conditioned on homeostatic urgency.
+    The Critic evaluates the emotional cost of the predicted next state.
     L_pred target: sg(WorldEncoder(s_{t+1})) — world latent only.
     SIGReg: applied to z_world only.
-    IndividualAdapter wraps the WorldEncoder output before concatenation.
     """
 
     def __init__(
@@ -192,16 +193,11 @@ class DualSpeciesModel(nn.Module):
         hidden: int = 128,
     ):
         super().__init__()
+        combined_latent_dim   = latent_dim + internal_latent_dim
         self.encoder          = Encoder(input_dim, latent_dim, hidden)
         self.internal_encoder = InternalEncoder(internal_state_dim, internal_latent_dim)
-        combined_latent_dim   = latent_dim + internal_latent_dim
-        # Predictor takes concat(z_world, z_internal) as input but outputs
-        # a pure world-latent (latent_dim) so L_pred stays in the 64-dim space.
         self.predictor        = Predictor(latent_dim, action_dim, hidden,
                                           in_latent_dim=combined_latent_dim)
-        # Critic takes concat(z_next, z_internal) so it can condition action
-        # value on the creature's internal state (hunger, sleep…) and break
-        # the SLEEP bias caused by being blind to homeostatic urgency.
         self.critic           = Critic(combined_latent_dim, action_dim, emotion_dim,
                                        min_arousal, max_arousal, hidden)
 
@@ -211,14 +207,113 @@ class DualSpeciesModel(nn.Module):
         h_t: torch.Tensor,
         a_t: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Returns (z_world, z_next_hat, emotion_pred).
-
-        z_world is returned (not z_combined) so the training loop can apply
-        SIGReg and compute L_pred against the next world latent only.
-        """
+        """Returns (z_world, z_next_hat, emotion_pred)."""
         z_world    = self.encoder(s_t)
         z_internal = self.internal_encoder(h_t)
-        z_combined = torch.cat([z_world, z_internal], dim=-1)
-        z_next     = self.predictor(z_combined, a_t)
+        z_next     = self.predictor(torch.cat([z_world, z_internal], dim=-1), a_t)
+        emotion    = self.critic(torch.cat([z_next, z_internal], dim=-1), a_t)
+        return z_world, z_next, emotion
+
+
+class InternalPredictorModel(nn.Module):
+    """Internal state informs the Predictor only; the Critic is world-blind.
+
+    Architecture:
+        s_t (perception)    -> WorldEncoder    -> z_world    [latent_dim]
+        h_t (live emotions) -> InternalEncoder -> z_internal [internal_latent_dim]
+
+        concat(z_world, z_internal) + a_t -> Predictor -> z_next       [latent_dim]
+        z_next + a_t                       -> Critic    -> emotion_pred [emotion_dim]
+
+    The Predictor conditions world-dynamics on homeostatic urgency.
+    The Critic evaluates predicted next-state cost using world-space only.
+    L_pred target: sg(WorldEncoder(s_{t+1})).
+    SIGReg: applied to z_world only.
+    """
+
+    def __init__(
+        self,
+        input_dim: int,
+        internal_state_dim: int,
+        action_dim: int,
+        latent_dim: int,
+        internal_latent_dim: int,
+        emotion_dim: int,
+        min_arousal: float = 0.18,
+        max_arousal: float = 7.0,
+        hidden: int = 128,
+    ):
+        super().__init__()
+        combined_latent_dim   = latent_dim + internal_latent_dim
+        self.encoder          = Encoder(input_dim, latent_dim, hidden)
+        self.internal_encoder = InternalEncoder(internal_state_dim, internal_latent_dim)
+        self.predictor        = Predictor(latent_dim, action_dim, hidden,
+                                          in_latent_dim=combined_latent_dim)
+        self.critic           = Critic(latent_dim, action_dim, emotion_dim,
+                                       min_arousal, max_arousal, hidden)
+
+    def forward(
+        self,
+        s_t: torch.Tensor,
+        h_t: torch.Tensor,
+        a_t: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Returns (z_world, z_next_hat, emotion_pred)."""
+        z_world    = self.encoder(s_t)
+        z_internal = self.internal_encoder(h_t)
+        z_next     = self.predictor(torch.cat([z_world, z_internal], dim=-1), a_t)
+        emotion    = self.critic(z_next, a_t)   # critic is blind to internal state
+        return z_world, z_next, emotion
+
+
+class InternalCriticModel(nn.Module):
+    """World dynamics are internal-blind; only the Critic sees internal state.
+
+    Architecture:
+        s_t (perception)    -> WorldEncoder    -> z_world    [latent_dim]
+        h_t (live emotions) -> InternalEncoder -> z_internal [internal_latent_dim]
+
+        z_world + a_t                      -> Predictor -> z_next       [latent_dim]
+        concat(z_next, z_internal) + a_t   -> Critic    -> emotion_pred [emotion_dim]
+
+    The Predictor is a pure world-dynamics model: it has no knowledge of the
+    creature's homeostatic state. The Critic is the sole homeostatic evaluator,
+    conditioning emotional cost prediction on both the predicted next world state
+    and the creature's current internal urgency.
+
+    L_pred target: sg(WorldEncoder(s_{t+1})).
+    SIGReg: applied to z_world only.
+    """
+
+    def __init__(
+        self,
+        input_dim: int,
+        internal_state_dim: int,
+        action_dim: int,
+        latent_dim: int,
+        internal_latent_dim: int,
+        emotion_dim: int,
+        min_arousal: float = 0.18,
+        max_arousal: float = 7.0,
+        hidden: int = 128,
+    ):
+        super().__init__()
+        combined_latent_dim   = latent_dim + internal_latent_dim
+        self.encoder          = Encoder(input_dim, latent_dim, hidden)
+        self.internal_encoder = InternalEncoder(internal_state_dim, internal_latent_dim)
+        self.predictor        = Predictor(latent_dim, action_dim, hidden)
+        self.critic           = Critic(combined_latent_dim, action_dim, emotion_dim,
+                                       min_arousal, max_arousal, hidden)
+
+    def forward(
+        self,
+        s_t: torch.Tensor,
+        h_t: torch.Tensor,
+        a_t: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Returns (z_world, z_next_hat, emotion_pred)."""
+        z_world    = self.encoder(s_t)
+        z_internal = self.internal_encoder(h_t)
+        z_next     = self.predictor(z_world, a_t)
         emotion    = self.critic(torch.cat([z_next, z_internal], dim=-1), a_t)
         return z_world, z_next, emotion

@@ -21,16 +21,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from jepa.dataset  import TrajectoryDataset
 from jepa.evaluate import check_collapse, collect_latents
-from jepa.model    import SpeciesModel, DualSpeciesModel
+from jepa.model    import SpeciesModel, DualSpeciesModel, InternalCriticModel, InternalPredictorModel
 
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--ckpt",   default="checkpoints")
-    p.add_argument("--data",   default="data")
-    p.add_argument("--batch",  type=int, default=512)
-    p.add_argument("--device", default=None)
-    p.add_argument("--dual",   action="store_true")
+    p.add_argument("--ckpt",    default="checkpoints")
+    p.add_argument("--data",    default="data")
+    p.add_argument("--batch",   type=int, default=512)
+    p.add_argument("--device",  default=None)
+    p.add_argument("--variant", default="single",
+                   choices=["single", "dual", "internal_critic", "internal_predictor"])
     return p.parse_args()
 
 
@@ -49,30 +50,38 @@ def main():
     else:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    if args.dual:
-        model = DualSpeciesModel(
-            input_dim          = stats["input_dim"],
-            internal_state_dim = stats["internal_state_dim"],
-            action_dim         = stats["action_dim"],
-            latent_dim         = stats["latent_dim"],
-            internal_latent_dim= stats["internal_latent_dim"],
-            emotion_dim        = stats["emotion_dim"],
-            min_arousal        = stats["min_arousal"],
-            max_arousal        = stats["max_arousal"],
-        ).to(device)
-    else:
+    dual_variant = args.variant in ("dual", "internal_critic", "internal_predictor")
+    dual_kwargs = dict(
+        input_dim           = stats["input_dim"],
+        internal_state_dim  = stats["internal_state_dim"],
+        action_dim          = stats["action_dim"],
+        latent_dim          = stats["latent_dim"],
+        internal_latent_dim = stats["internal_latent_dim"],
+        emotion_dim         = stats["emotion_dim"],
+        min_arousal         = stats["min_arousal"],
+        max_arousal         = stats["max_arousal"],
+    ) if dual_variant else {}
+
+    if args.variant == "single":
         model = SpeciesModel(
-            input_dim  = stats["input_dim"],
-            action_dim = stats["action_dim"],
-            latent_dim = stats["latent_dim"],
-            emotion_dim= stats["emotion_dim"],
-            min_arousal= stats["min_arousal"],
-            max_arousal= stats["max_arousal"],
+            input_dim   = stats["input_dim"],
+            action_dim  = stats["action_dim"],
+            latent_dim  = stats["latent_dim"],
+            emotion_dim = stats["emotion_dim"],
+            min_arousal = stats["min_arousal"],
+            max_arousal = stats["max_arousal"],
         ).to(device)
+    elif args.variant == "dual":
+        model = DualSpeciesModel(**dual_kwargs).to(device)
+    elif args.variant == "internal_critic":
+        model = InternalCriticModel(**dual_kwargs).to(device)
+    else:
+        model = InternalPredictorModel(**dual_kwargs).to(device)
+
     model.load_state_dict(torch.load(ckpt_dir / "best.pt", map_location=device))
 
-    val_file = data_dir / ("val_dual.parquet" if args.dual else "val.parquet")
-    val_ds   = TrajectoryDataset(str(val_file), str(stats_path), dual=args.dual)
+    val_file   = data_dir / ("val_dual.parquet" if dual_variant else "val.parquet")
+    val_ds     = TrajectoryDataset(str(val_file), str(stats_path), dual=dual_variant)
     val_loader = DataLoader(val_ds, batch_size=args.batch, shuffle=False)
 
     print("Collecting latents on validation set …")
