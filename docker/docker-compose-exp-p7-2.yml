@@ -39,15 +39,33 @@ services:
         read_only: true
         type: bind
 
-  # Combine holder + collisionDetector on one JVM so TypedActor.getActorRefFor()
-  # resolves correctly (it only works for actors local to the same ActorSystem).
-  dl2l-holder:
+  dl2l-detector:
     image: dl2l
     depends_on:
       dl2l-manager:
         condition: service_healthy
     environment:
-      ROLE: "holder,collisionDetector"
+      ROLE: "collisionDetector"
+      SIMULATION: "simulations/exp_p7_2_memory_only.conf"
+      HOST: "dl2l-detector"
+      PORT: 2551
+    networks:
+      - dl2l-network
+    volumes:
+      - source: ../config/docker-config.conf
+        target: /config/docker-config.conf
+        read_only: true
+        type: bind
+
+  dl2l-holder:
+    image: dl2l
+    depends_on:
+      dl2l-manager:
+        condition: service_healthy
+      dl2l-detector:
+        condition: service_started
+    environment:
+      ROLE: "holder"
       SIMULATION: "simulations/exp_p7_2_memory_only.conf"
       HOST: "dl2l-holder"
       PORT: "2551"

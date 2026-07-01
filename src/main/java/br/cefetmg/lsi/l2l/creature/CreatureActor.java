@@ -223,13 +223,19 @@ public class CreatureActor implements Creature {
     }
 
     private CreaturePositioningAttr getPositioningAttr() {
-        return new CreaturePositioningAttr(id, componentId(Body.class), componentId(Eye.class), componentId(Nose.class),
-                componentId(Mouth.class), position, visionFieldPosition, visionFieldOpening, olfactoryFieldRadius,
-                false, false);
+        return new CreaturePositioningAttr(id,
+                componentId(Body.class), componentId(Eye.class), componentId(Nose.class), componentId(Mouth.class),
+                TypedActor.context().self(),
+                componentRef(Body.class), componentRef(Eye.class), componentRef(Nose.class), componentRef(Mouth.class),
+                position, visionFieldPosition, visionFieldOpening, olfactoryFieldRadius, false, false);
     }
 
     private SequentialId componentId(Class componentClass) {
         return components.get(componentClass).first;
+    }
+
+    private ActorRef componentRef(Class componentClass) {
+        return components.get(componentClass).second;
     }
 
     private void updatePositioningAttribute() {
