@@ -17,8 +17,9 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 COMPOSE_FILE="$ROOT_DIR/docker/docker-compose-pi.yml"
 JAR="$ROOT_DIR/target/l2l-2.0.0-SNAPSHOT-wd.jar"
 
-IMAGE="192.168.1.200:5000/dl2l:latest"
-REMOTE_CONFIG="/root/dl2l-config"
+IMAGE="127.0.0.1:5000/dl2l:latest"
+REMOTE_CONFIG="/home/felipeduarte/dl2l-config"
+REMOTE_COMPOSE="/home/felipeduarte/docker-compose-pi.yml"
 
 TRAIN_TRIALS=${1:-10}
 
@@ -67,35 +68,34 @@ run_trial() {
 
     # Tear down any leftover state
     ssh "$NODE" "cd ~ && DL2L_IMAGE=$IMAGE SIMULATION=$SIM CONFIG_DIR=$REMOTE_CONFIG \
-        docker compose -p $PROJECT -f ~/docker-compose-pi.yml down -v --remove-orphans 2>/dev/null || true"
+        sudo env DL2L_IMAGE=$IMAGE SIMULATION=$SIM CONFIG_DIR=$REMOTE_CONFIG \
+            docker compose -p $PROJECT -f $REMOTE_COMPOSE down -v --remove-orphans 2>/dev/null || true"
 
     # Start the simulation
     ssh "$NODE" "cd ~ && DL2L_IMAGE=$IMAGE SIMULATION=$SIM CONFIG_DIR=$REMOTE_CONFIG \
-        docker compose -p $PROJECT -f ~/docker-compose-pi.yml up -d"
+        sudo env DL2L_IMAGE=$IMAGE SIMULATION=$SIM CONFIG_DIR=$REMOTE_CONFIG \
+            docker compose -p $PROJECT -f $REMOTE_COMPOSE up -d"
 
     # Wait for the holder container to exit
     local HOLDER_ID
-    HOLDER_ID=$(ssh "$NODE" "docker ps -aq --filter name=${PROJECT}-dl2l-holder")
+    HOLDER_ID=$(ssh "$NODE" "sudo docker ps -aq --filter name=${PROJECT}-dl2l-holder-1")
     if [ -z "$HOLDER_ID" ]; then
-        # compose v2 uses PROJECT-service-N naming
-        HOLDER_ID=$(ssh "$NODE" "docker ps -aq --filter name=${PROJECT}_dl2l-holder")
+        HOLDER_ID=$(ssh "$NODE" "sudo docker ps -aq --filter name=${PROJECT}_dl2l-holder_1")
     fi
     echo "  [$NODE] Waiting for holder ($HOLDER_ID) to finish..."
-    ssh "$NODE" "docker wait $HOLDER_ID"
+    ssh "$NODE" "sudo docker wait $HOLDER_ID"
 
     # Extract data
     echo "  [$NODE] Extracting data..."
     local REMOTE_OUT="/tmp/dl2l_extract_$$"
     ssh "$NODE" "mkdir -p $REMOTE_OUT && \
-        docker run --rm \
+        sudo docker run --rm \
             --network ${PROJECT}_dl2l-network \
-            --entrypoint java \
-            -v $JAR:/dl2l/run/dl2l.jar \
             -v $REMOTE_CONFIG/docker-config.conf:/config/docker-config.conf \
             -v $REMOTE_OUT:/output \
+            -e HOST=localhost -e PORT=2551 -e ROLE=holder \
+            -e DATA_DIR=/output -e SIMULATION='' \
             $IMAGE \
-            -Dconfig.file=/config/docker-config.conf \
-            -jar dl2l.jar \
             --host localhost --port 2551 --roles holder --extractor --save /output"
 
     # Rsync results to Mac
@@ -105,7 +105,8 @@ run_trial() {
 
     # Tear down
     ssh "$NODE" "cd ~ && DL2L_IMAGE=$IMAGE SIMULATION=$SIM CONFIG_DIR=$REMOTE_CONFIG \
-        docker compose -p $PROJECT -f ~/docker-compose-pi.yml down -v"
+        sudo env DL2L_IMAGE=$IMAGE SIMULATION=$SIM CONFIG_DIR=$REMOTE_CONFIG \
+            docker compose -p $PROJECT -f $REMOTE_COMPOSE down -v 2>/dev/null || true"
 
     echo "  [$NODE] Done → $(ls "$LOCAL_OUT" | wc -l | tr -d ' ') creature dirs"
 }

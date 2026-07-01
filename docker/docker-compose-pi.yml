@@ -18,7 +18,7 @@ services:
         read_only: true
 
   dl2l-manager:
-    image: ${DL2L_IMAGE:-192.168.1.200:5000/dl2l:latest}
+    image: ${DL2L_IMAGE:-127.0.0.1:5000/dl2l:latest}
     depends_on:
       - dl2l-db
     environment:
@@ -40,7 +40,7 @@ services:
         read_only: true
 
   dl2l-detector:
-    image: ${DL2L_IMAGE:-192.168.1.200:5000/dl2l:latest}
+    image: ${DL2L_IMAGE:-127.0.0.1:5000/dl2l:latest}
     depends_on:
       dl2l-manager:
         condition: service_healthy
@@ -58,7 +58,7 @@ services:
         read_only: true
 
   dl2l-holder:
-    image: ${DL2L_IMAGE:-192.168.1.200:5000/dl2l:latest}
+    image: ${DL2L_IMAGE:-127.0.0.1:5000/dl2l:latest}
     depends_on:
       dl2l-manager:
         condition: service_healthy
