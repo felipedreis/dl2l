@@ -106,17 +106,25 @@ echo "  Preparing dataset (dual) ..."
     --out "$ML_DATA_P7" \
     --dual)
 
-for VARIANT in "" "--dual" "--dual --critic"; do
-    LABEL=$(echo "$VARIANT" | tr ' ' '_' | sed 's/^_//')
-    LABEL=${LABEL:-single}
+# Variant definitions: (label, extra_flags)
+#   single       : SpeciesModel (one encoder, no internal state)
+#   dual         : DualSpeciesModel, critic loss suppressed (λ_crit=0)
+#   dual_critic  : DualSpeciesModel, full critic-aware (λ_crit=1.0) — EXP-51 arch
+declare -A VARIANT_FLAGS
+VARIANT_FLAGS[single]=""
+VARIANT_FLAGS[dual]="--dual --crit 0.0"
+VARIANT_FLAGS[dual_critic]="--dual"
+
+for LABEL in single dual dual_critic; do
+    FLAGS="${VARIANT_FLAGS[$LABEL]}"
     CKPT_V="$CKPT_DIR/$LABEL"
     mkdir -p "$CKPT_V"
-    echo "  Training variant: $LABEL ..."
+    echo "  Training variant: $LABEL ($FLAGS) ..."
     # shellcheck disable=SC2086
     (cd "$ROOT_DIR/ml" && python3 -m scripts.train_species \
         --data "$ML_DATA_P7" \
         --ckpt "$CKPT_V" \
-        $VARIANT \
+        $FLAGS \
         --epochs 200) || echo "  WARNING: variant $LABEL training failed, continuing."
 done
 
@@ -125,7 +133,7 @@ done
 echo ""
 echo ">>> PHASE 2: Exporting critic-aware model <<<"
 
-CKPT_FINAL="$CKPT_DIR/--dual_--critic"
+CKPT_FINAL="$CKPT_DIR/dual_critic"
 
 echo "  Checking for representation collapse ..."
 (cd "$ROOT_DIR/ml" && python3 -m scripts.check_collapse \
