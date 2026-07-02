@@ -67,7 +67,7 @@ def psql_copy(container: str, sql: str) -> list:
     """
     copy = f"COPY ({sql}) TO STDOUT WITH CSV HEADER;\n"
     result = subprocess.run(
-        ["sudo", "docker", "exec", "-i", container,
+        ["docker", "exec", "-i", container,
          "psql", "-U", DB_USER, "-d", DB_NAME],
         input=copy, capture_output=True, text=True,
     )
@@ -80,7 +80,7 @@ def psql_copy(container: str, sql: str) -> list:
 def psql_query(container: str, sql: str) -> list:
     """Run a plain SELECT (not COPY) and return rows as list-of-lists."""
     result = subprocess.run(
-        ["sudo", "docker", "exec", "-i", container,
+        ["docker", "exec", "-i", container,
          "psql", "-U", DB_USER, "-d", DB_NAME, "-t", "-A", "-F", ","],
         input=sql + ";\n", capture_output=True, text=True,
     )
