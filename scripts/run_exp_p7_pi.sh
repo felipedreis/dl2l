@@ -85,30 +85,29 @@ run_trial() {
     echo "  [$NODE] Waiting for holder ($HOLDER_ID) to finish..."
     ssh "$NODE" "sudo docker wait $HOLDER_ID"
 
-    # Extract data
+    # ── Backup first — stream pg_dump directly to Mac before touching anything ──
+    mkdir -p "$LOCAL_OUT"
+    echo "  [$NODE] Backing up database..."
+    ssh "$NODE" "sudo docker exec db pg_dump -U postgres -d l2l -Fc" > "$LOCAL_OUT/db_backup.dump"
+    echo "  [$NODE] Backup saved ($(du -sh "$LOCAL_OUT/db_backup.dump" | cut -f1))"
+
+    # Extract CSVs via pg_extract.py (backup already safe above)
     echo "  [$NODE] Extracting data..."
     local REMOTE_OUT="/tmp/dl2l_extract_$$"
-    ssh "$NODE" "mkdir -p $REMOTE_OUT && \
-        sudo docker run --rm \
-            --network ${PROJECT}_dl2l-network \
-            -v $REMOTE_CONFIG/docker-config.conf:/config/docker-config.conf \
-            -v $REMOTE_OUT:/output \
-            -e HOST=localhost -e PORT=2551 -e ROLE=holder \
-            -e DATA_DIR=/output -e SIMULATION='' \
-            $IMAGE \
-            --host localhost --port 2551 --roles holder --extractor --save /output"
+    ssh "$NODE" "rm -rf $REMOTE_OUT && mkdir -p $REMOTE_OUT"
+    scp -q "$ROOT_DIR/scripts/pg_extract.py" "$NODE:/tmp/pg_extract_$$.py"
+    ssh "$NODE" "python3 /tmp/pg_extract_$$.py --container db --out $REMOTE_OUT && rm /tmp/pg_extract_$$.py"
 
-    # Rsync results to Mac
-    mkdir -p "$LOCAL_OUT"
+    # Rsync CSVs to Mac
     rsync -a --remove-source-files "$NODE:$REMOTE_OUT/" "$LOCAL_OUT/"
     ssh "$NODE" "rm -rf $REMOTE_OUT"
 
-    # Tear down
+    # Tear down only after data is safe
     ssh "$NODE" "cd ~ && DL2L_IMAGE=$IMAGE SIMULATION=$SIM CONFIG_DIR=$REMOTE_CONFIG \
         sudo env DL2L_IMAGE=$IMAGE SIMULATION=$SIM CONFIG_DIR=$REMOTE_CONFIG \
             docker compose -p $PROJECT -f $REMOTE_COMPOSE down -v 2>/dev/null || true"
 
-    echo "  [$NODE] Done → $(ls "$LOCAL_OUT" | wc -l | tr -d ' ') creature dirs"
+    echo "  [$NODE] Done → $(ls "$LOCAL_OUT" | wc -l | tr -d ' ') files"
 }
 
 # ── Helper: run N trials in parallel batches across nodes ───────────────────
@@ -159,30 +158,23 @@ echo "  Preparing dataset..."
 (cd "$ROOT_DIR/ml" && python3 -m scripts.prepare_dataset \
     --wd "$RAW_P7_DIR" --out "$ML_DATA_P7" --dual)
 
-declare -A VARIANT_FLAGS
-VARIANT_FLAGS[single]=""
-VARIANT_FLAGS[dual]="--dual --crit 0.0"
-VARIANT_FLAGS[dual_critic]="--dual"
-
-for LABEL in single dual dual_critic; do
-    FLAGS="${VARIANT_FLAGS[$LABEL]}"
+for LABEL in single dual internal_critic internal_predictor; do
     CKPT_V="$CKPT_DIR/$LABEL"
     mkdir -p "$CKPT_V"
     echo "  Training $LABEL ..."
-    # shellcheck disable=SC2086
     (cd "$ROOT_DIR/ml" && python3 -m scripts.train_species \
-        --data "$ML_DATA_P7" --ckpt "$CKPT_V" $FLAGS --epochs 200) \
+        --data "$ML_DATA_P7" --ckpt "$CKPT_V" --variant "$LABEL" --epochs 200) \
         || echo "  WARNING: $LABEL failed, continuing."
 done
 
-# ── Phase 2: Export, rebuild ARM64 image, push to registry ──────────────────
+# ── Phase 2: Export best variant, rebuild ARM64 image, push to registry ──────
 echo ""
-echo ">>> PHASE 2: Export model → rebuild ARM64 image → push <<<"
+echo ">>> PHASE 2: Export internal_critic → rebuild ARM64 image → push <<<"
 
-CKPT_FINAL="$CKPT_DIR/dual_critic"
-(cd "$ROOT_DIR/ml" && python3 -m scripts.check_collapse --ckpt "$CKPT_FINAL" --dual \
-    2>/dev/null || echo "  (check_collapse non-zero — inspect above)")
-(cd "$ROOT_DIR/ml" && python3 -m scripts.export_model --dual \
+CKPT_FINAL="$CKPT_DIR/internal_critic"
+(cd "$ROOT_DIR/ml" && python3 -m scripts.check_collapse --ckpt "$CKPT_FINAL" \
+    --variant internal_critic 2>/dev/null || echo "  (check_collapse non-zero — inspect above)")
+(cd "$ROOT_DIR/ml" && python3 -m scripts.export_model --variant internal_critic \
     --ckpt "$CKPT_FINAL" --out "$ROOT_DIR/src/main/resources/models")
 
 echo "  Rebuilding jar..."

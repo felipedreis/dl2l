@@ -46,8 +46,9 @@
   "min_arousal": 0.18,
   "max_arousal": 7.0,
   "has_internal_encoder": true,
-  "model_hash": "240f2071db09a3414e9fc418dd1a1a5c2e1b10eb357305149e55304d124011fb",
-  "trained_on": "2026-06-30",
+  "model_variant": "internal_critic",
+  "model_hash": "cb284377a94d87137c1d06b5ae74fbdaba5a47a912218fc4d98acc958fce80d2",
+  "trained_on": "2026-07-01",
   "internal_state_feature_order": [
     "ht_hunger",
     "ht_sleep",

@@ -362,42 +362,50 @@ def load_inference_times(sample_dir: str) -> pd.DataFrame:
 
 
 def plot_inference_time_comparison(mac_data: dict, pi_data: dict, out_path: str):
-    """Box/violin comparison of per-call WM inference time on Mac vs Pi."""
-    labels, data_mac, data_pi = [], [], []
+    """Box comparison of per-call WM inference time on Mac (and Pi if available)."""
+    entries = []
     for name, lbl in [("p7_4_jepa_only", "JEPA only"), ("p7_5_jepa_consolidation", "JEPA+consol")]:
         dm = mac_data.get(name, pd.DataFrame())
-        dp = pi_data.get(name, pd.DataFrame())
-        if dm.empty or dp.empty:
+        if dm.empty or "inference_time_ms" not in dm.columns:
             continue
-        labels.append(lbl)
-        data_mac.append(dm["inference_time_ms"].values)
-        data_pi.append(dp["inference_time_ms"].values)
+        dp = pi_data.get(name, pd.DataFrame())
+        has_pi = not dp.empty and "inference_time_ms" in dp.columns
+        entries.append((lbl, dm["inference_time_ms"].values,
+                        dp["inference_time_ms"].values if has_pi else None))
 
-    if not labels:
+    if not entries:
         return
 
-    fig, axes = plt.subplots(1, len(labels), figsize=(6 * len(labels), 5))
-    if len(labels) == 1:
+    fig, axes = plt.subplots(1, len(entries), figsize=(6 * len(entries), 5))
+    if len(entries) == 1:
         axes = [axes]
 
-    for ax, lbl, dm, dp in zip(axes, labels, data_mac, data_pi):
-        bps = ax.boxplot([dm, dp], tick_labels=["Mac", "Pi"], patch_artist=True,
-                         medianprops=dict(color="black", linewidth=2))
-        bps["boxes"][0].set_facecolor("#2196F3")
-        bps["boxes"][1].set_facecolor("#FF9800")
-        for box in bps["boxes"]:
-            box.set_alpha(0.7)
+    for ax, (lbl, dm, dp) in zip(axes, entries):
+        if dp is not None:
+            bps = ax.boxplot([dm, dp], tick_labels=["Mac", "Pi"], patch_artist=True,
+                             medianprops=dict(color="black", linewidth=2))
+            bps["boxes"][0].set_facecolor("#2196F3")
+            bps["boxes"][1].set_facecolor("#FF9800")
+            for box in bps["boxes"]:
+                box.set_alpha(0.7)
+            pi_med = np.median(dp)
+            ax.annotate(f"Mac median: {np.median(dm):.1f}ms\nPi median:  {pi_med:.1f}ms\n"
+                        f"Ratio: {pi_med/np.median(dm):.1f}×",
+                        xy=(0.97, 0.97), xycoords="axes fraction",
+                        ha="right", va="top", fontsize=9,
+                        bbox=dict(boxstyle="round", fc="white", alpha=0.8))
+        else:
+            bps = ax.boxplot([dm], tick_labels=["Mac"], patch_artist=True,
+                             medianprops=dict(color="black", linewidth=2))
+            bps["boxes"][0].set_facecolor("#2196F3")
+            bps["boxes"][0].set_alpha(0.7)
+            ax.annotate(f"Mac median: {np.median(dm):.1f}ms\n(Pi: no telemetry)",
+                        xy=(0.97, 0.97), xycoords="axes fraction",
+                        ha="right", va="top", fontsize=9,
+                        bbox=dict(boxstyle="round", fc="white", alpha=0.8))
         ax.set_ylabel("Inference time per cycle (ms)")
         ax.set_title(lbl)
         ax.grid(axis="y", linestyle="--", alpha=0.4)
-
-        mac_med = np.median(dm)
-        pi_med  = np.median(dp)
-        ax.annotate(f"Mac median: {mac_med:.1f}ms\nPi median:  {pi_med:.1f}ms\n"
-                    f"Ratio: {pi_med/mac_med:.1f}×",
-                    xy=(0.97, 0.97), xycoords="axes fraction",
-                    ha="right", va="top", fontsize=9,
-                    bbox=dict(boxstyle="round", fc="white", alpha=0.8))
 
     fig.suptitle("EXP-P7: WM Inference Time — Mac (M-series) vs Pi (ARM Cortex-A72)", fontsize=11)
     plt.tight_layout()

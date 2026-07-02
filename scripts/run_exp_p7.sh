@@ -6,7 +6,7 @@
 #
 # Phases:
 #   0 — Collect JEPA training data (P7-0: dist+afford+rand, N=TRAIN_TRIALS)
-#   1 — Train all three JEPA variants (single-encoder, dual-encoder, critic-aware)
+#   1 — Train all four JEPA variants (single, dual, internal_critic, internal_predictor)
 #   2 — Export critic-aware model, rebuild jar + Docker image
 #   3 — Run samples P7-1 through P7-5 (N=VAL_TRIALS each)
 #   4 — Extract data from all samples
@@ -94,7 +94,7 @@ for i in $(seq 1 "$TRAIN_TRIALS"); do
     (cd "$COMPOSE_DIR" && $DC -f "$TRAIN_COMPOSE" down -v)
 done
 
-# ── Phase 1: Train all three JEPA variants ───────────────────────────────────
+# ── Phase 1: Train all four JEPA variants ────────────────────────────────────
 
 echo ""
 echo ">>> PHASE 1: Preparing dataset and training JEPA variants <<<"
@@ -106,43 +106,34 @@ echo "  Preparing dataset (dual) ..."
     --out "$ML_DATA_P7" \
     --dual)
 
-# Variant definitions: (label, extra_flags)
-#   single       : SpeciesModel (one encoder, no internal state)
-#   dual         : DualSpeciesModel, critic loss suppressed (λ_crit=0)
-#   dual_critic  : DualSpeciesModel, full critic-aware (λ_crit=1.0) — EXP-51 arch
-declare -A VARIANT_FLAGS
-VARIANT_FLAGS[single]=""
-VARIANT_FLAGS[dual]="--dual --crit 0.0"
-VARIANT_FLAGS[dual_critic]="--dual"
-
-for LABEL in single dual dual_critic; do
-    FLAGS="${VARIANT_FLAGS[$LABEL]}"
+# Four-variant ablation (see docs/plans/phase-2-species-model.md for design).
+# Best performer selects as the live model for P7-4 / P7-5.
+for LABEL in single dual internal_critic internal_predictor; do
     CKPT_V="$CKPT_DIR/$LABEL"
     mkdir -p "$CKPT_V"
-    echo "  Training variant: $LABEL ($FLAGS) ..."
-    # shellcheck disable=SC2086
+    echo "  Training variant: $LABEL ..."
     (cd "$ROOT_DIR/ml" && python3 -m scripts.train_species \
         --data "$ML_DATA_P7" \
         --ckpt "$CKPT_V" \
-        $FLAGS \
+        --variant "$LABEL" \
         --epochs 200) || echo "  WARNING: variant $LABEL training failed, continuing."
 done
 
-# ── Phase 2: Export critic-aware model, rebuild ──────────────────────────────
+# ── Phase 2: Export best variant (internal_critic), rebuild ──────────────────
 
 echo ""
-echo ">>> PHASE 2: Exporting critic-aware model <<<"
+echo ">>> PHASE 2: Exporting internal_critic model <<<"
 
-CKPT_FINAL="$CKPT_DIR/dual_critic"
+CKPT_FINAL="$CKPT_DIR/internal_critic"
 
 echo "  Checking for representation collapse ..."
 (cd "$ROOT_DIR/ml" && python3 -m scripts.check_collapse \
     --ckpt "$CKPT_FINAL" \
-    --dual 2>/dev/null || echo "  (check_collapse returned non-zero — inspect output above)")
+    --variant internal_critic 2>/dev/null || echo "  (check_collapse returned non-zero — inspect output above)")
 
 echo "  Exporting model to src/main/resources/models/ ..."
 (cd "$ROOT_DIR/ml" && python3 -m scripts.export_model \
-    --dual \
+    --variant internal_critic \
     --ckpt "$CKPT_FINAL" \
     --out "$ROOT_DIR/src/main/resources/models")
 
@@ -190,16 +181,13 @@ for IDX in "${!SAMPLE_NAMES[@]}"; do
         HOLDER_ID=$(cd "$COMPOSE_DIR" && $DC -f "$COMPOSE" ps -q dl2l-holder)
         docker wait "$HOLDER_ID"
 
-        docker run --rm \
-            --network "$NETWORK" \
-            --entrypoint java \
-            -v "$JAR":/dl2l/run/dl2l.jar \
-            -v "$CONFIG_FILE":/config/docker-config.conf \
-            -v "$TRIAL_DIR":/output \
-            dl2l \
-            -Dconfig.file=/config/docker-config.conf \
-            -jar dl2l.jar \
-            --host localhost --port 2551 --roles holder --extractor --save /output
+        # Backup first — stream pg_dump to local trial dir before touching anything
+        echo "  Backing up database..."
+        docker exec db pg_dump -U postgres -d l2l -Fc > "$TRIAL_DIR/db_backup.dump"
+        echo "  Backup saved ($(du -sh "$TRIAL_DIR/db_backup.dump" | cut -f1))"
+
+        # Extract CSVs
+        python3 "$ROOT_DIR/scripts/pg_extract.py" --container db --out "$TRIAL_DIR"
 
         (cd "$COMPOSE_DIR" && $DC -f "$COMPOSE" down -v)
         echo "  Trial $i done."
