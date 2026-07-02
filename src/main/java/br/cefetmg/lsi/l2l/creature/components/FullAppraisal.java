@@ -172,10 +172,13 @@ public class FullAppraisal extends CreatureComponent {
 
                 creature.effectorCortex().tell(cortical);
 
+                long inferenceMs = (worldModelFilter != null)
+                        ? worldModelFilter.getLastInferenceDurationMs() : 0L;
                 ChangeStimulusState change = new ChangeStimulusStateBuilder(this, id)
                         .buildOneReceivedOneEmitted(emotional, cortical);
                 ChosenActionState chosenActionState = new ChosenActionState(change,
-                        actionSelection.getLastUsedFilterType(), action.type, action.perception.id);
+                        actionSelection.getLastUsedFilterType(), action.type, action.perception.id,
+                        inferenceMs);
                 persist(change, chosenActionState);
             }
         }
