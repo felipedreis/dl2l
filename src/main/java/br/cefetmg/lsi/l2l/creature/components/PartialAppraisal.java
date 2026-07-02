@@ -100,7 +100,7 @@ public class PartialAppraisal extends CreatureComponent {
         BehaviouralEfficiencyState behaviouralState = new BehaviouralEfficiencyState();
         behaviouralState.setBehaviouralEfficiency(behaviouralEfficiency);
         behaviouralState.setNumberOfObjects(perceptions.size());
-        behaviouralState.setComplexTask(perceptions.size() < Constants.COMPLEX_TASK);
+        behaviouralState.setComplexTask(perceptions.size() >= Constants.COMPLEX_TASK);
         behaviouralState.setChangeStimulusState(changeEmotional);
 
         persist(changeEmotional, changeAdrenergic, behaviouralState);

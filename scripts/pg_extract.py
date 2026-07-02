@@ -336,7 +336,7 @@ def main():
         # Matches BehaviouralEfficiencyExtractor.
         raw = psql_copy(c, f"""
             SELECT ROUND(CAST((css.time - {bt}) / 60000.0 AS NUMERIC), 3) AS time,
-                   bes.complextask,
+                   bes.complextask::text AS complextask,
                    AVG(bes.behaviouralefficiency) AS efficiency
             FROM data.behavioural_efficiency_state bes
             JOIN data.change_stimulus_state css ON bes.changestimulusstate_id = css.id
@@ -344,6 +344,7 @@ def main():
             GROUP BY 1, 2 ORDER BY 1, 2
         """)
         if len(raw) > 1:
+            # PostgreSQL COPY emits booleans as 't'/'f'; cast to text gives 'true'/'false'.
             wide = pivot_long_to_wide(raw, "time", "complextask", "efficiency",
                                       ["false", "true"])
             # Rename columns to match Java output.
