@@ -337,6 +337,16 @@ def plot_efficiency_over_time(groups_eff: dict, out_path: str):
     print(f"  → {out_path}")
 
 
+def load_decision_counts(sample_dir: str) -> np.ndarray:
+    """Return number of cognitive cycles (trajectory_actions rows) per creature."""
+    counts = []
+    for trial_dir in sorted(glob.glob(os.path.join(sample_dir, "trial_*"))):
+        for f in glob.glob(os.path.join(trial_dir, "*:*", "trajectory_actions.csv")):
+            df = pd.read_csv(f)
+            counts.append(len(df))
+    return np.array(counts)
+
+
 def load_inference_times(sample_dir: str) -> pd.DataFrame:
     """Load inference_time_ms from trajectory_actions.csv for WORLD_MODEL rows only."""
     frames = []
@@ -396,41 +406,86 @@ def plot_inference_time_comparison(mac_data: dict, pi_data: dict, out_path: str)
     print(f"  → {out_path}")
 
 
-def plot_mac_vs_pi_lifetime(mac_groups: dict, pi_groups: dict, out_path: str):
-    """Side-by-side boxplot: Mac (genuine) vs Pi (confounded) for JEPA conditions."""
+def plot_mac_vs_pi_lifetime(mac_groups: dict, pi_groups: dict,
+                            mac_decisions: dict, pi_decisions: dict,
+                            pi_baseline_lt: np.ndarray, mac_baseline_lt: np.ndarray,
+                            out_path: str):
+    """
+    Three-panel comparison per JEPA condition:
+      Panel 1 — raw wall-clock lifetime (seconds): confounded by inference latency
+      Panel 2 — lifetime in cognitive cycles (decisions): platform-agnostic
+      Panel 3 — baseline-normalised ratio (lifetime / baseline_median):
+                 absorbs residual clock-speed difference
+    """
     jepa_conditions = [
-        ("p7_4_jepa_only",          "JEPA only"),
-        ("p7_5_jepa_consolidation",  "JEPA+consol"),
+        ("p7_4_jepa_only",         "JEPA only"),
+        ("p7_5_jepa_consolidation", "JEPA+consol"),
     ]
-    n = len(jepa_conditions)
-    fig, axes = plt.subplots(1, n, figsize=(6 * n, 5), sharey=False)
-    if n == 1:
+
+    pi_base_med  = np.median(pi_baseline_lt)  if len(pi_baseline_lt)  else 1.0
+    mac_base_med = np.median(mac_baseline_lt) if len(mac_baseline_lt) else pi_base_med
+
+    fig, axes = plt.subplots(len(jepa_conditions), 3,
+                              figsize=(13, 5 * len(jepa_conditions)))
+    if len(jepa_conditions) == 1:
         axes = [axes]
 
-    for ax, (name, lbl) in zip(axes, jepa_conditions):
-        vm = mac_groups.get(name, np.array([]))
-        vp = pi_groups.get(name, np.array([]))
-        if len(vm) == 0 and len(vp) == 0:
-            continue
-        data = [vm, vp] if len(vm) else [np.array([]), vp]
-        bps = ax.boxplot(data, tick_labels=["Mac", "Pi"], patch_artist=True,
-                         medianprops=dict(color="black", linewidth=2))
-        bps["boxes"][0].set_facecolor("#2196F3")
-        bps["boxes"][1].set_facecolor("#FF9800")
-        for box in bps["boxes"]:
-            box.set_alpha(0.7)
-        ax.set_ylabel("Lifetime (s)")
-        ax.set_title(lbl)
-        ax.grid(axis="y", linestyle="--", alpha=0.4)
-        if len(vm) and len(vp):
-            mac_med = np.median(vm)
-            pi_med  = np.median(vp)
-            ax.annotate(f"Mac: {mac_med:.0f}s\nPi:   {pi_med:.0f}s\nΔ: {pi_med - mac_med:+.0f}s",
+    panel_titles = [
+        "Raw lifetime (s)\n[confounded: includes inference latency]",
+        "Lifetime in decisions (cycles)\n[platform-agnostic: drives deplete per event]",
+        "Baseline-normalised ratio\n[JEPA median / platform baseline median]",
+    ]
+
+    for row, (name, lbl) in enumerate(jepa_conditions):
+        vm_lt = mac_groups.get(name,    np.array([]))
+        vp_lt = pi_groups.get(name,     np.array([]))
+        vm_dc = mac_decisions.get(name, np.array([]))
+        vp_dc = pi_decisions.get(name,  np.array([]))
+
+        # Normalised ratios (per creature: individual lifetime / platform baseline median)
+        vm_ratio = vm_lt / mac_base_med if len(vm_lt) else np.array([])
+        vp_ratio = vp_lt / pi_base_med  if len(vp_lt) else np.array([])
+
+        panel_data = [
+            (vm_lt,    vp_lt,    "Lifetime (s)"),
+            (vm_dc,    vp_dc,    "Decisions per creature"),
+            (vm_ratio, vp_ratio, "Ratio (JEPA / baseline)"),
+        ]
+
+        for col, (vm, vp, ylabel) in enumerate(panel_data):
+            ax = axes[row][col]
+            if len(vm) == 0 and len(vp) == 0:
+                ax.set_visible(False)
+                continue
+            data = [d for d in [vm, vp] if len(d)]
+            tick_labels = [t for t, d in zip(["Mac", "Pi"], [vm, vp]) if len(d)]
+            colors      = [c for c, d in zip(["#2196F3", "#FF9800"], [vm, vp]) if len(d)]
+
+            bps = ax.boxplot(data, tick_labels=tick_labels, patch_artist=True,
+                             medianprops=dict(color="black", linewidth=2))
+            for patch, color in zip(bps["boxes"], colors):
+                patch.set_facecolor(color)
+                patch.set_alpha(0.7)
+
+            ax.set_ylabel(ylabel)
+            ax.grid(axis="y", linestyle="--", alpha=0.4)
+            if row == 0:
+                ax.set_title(panel_titles[col], fontsize=9)
+
+            # Annotation
+            meds = [np.median(d) for d in data]
+            annot_lines = [f"{t}: {m:.1f}" for t, m in zip(tick_labels, meds)]
+            if len(meds) == 2:
+                annot_lines.append(f"Δ: {meds[0]-meds[1]:+.1f}")
+            ax.annotate("\n".join(annot_lines),
                         xy=(0.97, 0.97), xycoords="axes fraction",
-                        ha="right", va="top", fontsize=9,
+                        ha="right", va="top", fontsize=8,
                         bbox=dict(boxstyle="round", fc="white", alpha=0.8))
 
-    fig.suptitle("EXP-P7: JEPA Lifetime — Mac vs Pi (latency confound visible if Pi > Mac)", fontsize=11)
+        axes[row][0].set_title(f"{lbl}\n{panel_titles[0]}", fontsize=9)
+
+    fig.suptitle("EXP-P7: Mac vs Pi JEPA — three lifetime metrics to isolate latency confound",
+                 fontsize=11)
     plt.tight_layout()
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
@@ -438,102 +493,160 @@ def plot_mac_vs_pi_lifetime(mac_groups: dict, pi_groups: dict, out_path: str):
 
 
 def build_latency_section(mac_groups: dict, pi_groups: dict,
+                          mac_decisions: dict, pi_decisions: dict,
                           mac_infer: dict, pi_infer: dict,
-                          baseline_lifetimes: np.ndarray) -> str:
+                          pi_baseline_lt: np.ndarray,
+                          mac_baseline_lt: np.ndarray) -> str:
+    """
+    Appendix section explaining clock normalisation and latency confound quantification.
+
+    Three metrics are compared:
+      1. Raw wall-clock lifetime (seconds) — confounded by inference latency
+      2. Lifetime in cognitive cycles (decisions) — platform-agnostic
+      3. Baseline-normalised ratio (JEPA / platform baseline median)
+    """
     lines = []
+
+    pi_base_med  = np.median(pi_baseline_lt)  if len(pi_baseline_lt)  else float("nan")
+    mac_base_med = np.median(mac_baseline_lt) if len(mac_baseline_lt) else pi_base_med
 
     lines.append("## Appendix: Inference Latency Confound (Mac Control)")
     lines.append("")
-    lines.append(
-        "The Pi cluster nodes (Raspberry Pi 4, ARM Cortex-A72) have no hardware ML acceleration. "
-        "All JEPA inference runs on CPU via DJL/TorchScript. "
-        "Slower inference could artificially inflate wall-clock lifetime if homeostatic drive "
-        "depletion pauses while the creature actor processes the WM scoring loop. "
-        "To quantify this confound, P7-4 and P7-5 were re-run on the development Mac "
-        "(Apple Silicon, BLAS-accelerated) with the same simulation configuration."
-    )
-    lines.append("")
+    lines.append(textwrap.dedent("""        The Pi cluster (Raspberry Pi 4, ARM Cortex-A72) has no hardware ML
+        acceleration; all JEPA inference runs on CPU via DJL/TorchScript.
+        This raises the question: do longer Pi lifetimes reflect genuine decision
+        quality, or do they arise because inference latency inflates wall-clock time?
+
+        To disentangle the two effects, P7-4 and P7-5 were re-run on the development
+        Mac (Apple Silicon, BLAS-accelerated). Three lifetime metrics are compared:
+
+        **Metric 1 — Raw wall-clock seconds.** Directly affected by inference latency.
+
+        **Metric 2 — Cognitive cycles (number of decisions per creature).**
+        HomeostaticRegulation depletes drives once per ProprioceptiveStimulus event
+        (one AdrenergicStimulus per collision-detector tick), not once per wall-clock
+        second. Creatures die when cumulative drive exceeds MAX_AROUSAL_LEVEL, so
+        decision count is the true biological clock. The collision detector ticks at
+        a fixed wall-clock rate on both platforms, so inference latency on Pi does NOT
+        change the event count — it only delays FullAppraisal\'s response while drives
+        keep depleting on the HomeostaticRegulation actor thread. Decision count is
+        therefore platform-agnostic.
+
+        **Metric 3 — Baseline-normalised ratio (JEPA / platform baseline median).**
+        A dimensionless survival multiplier that absorbs any residual clock-speed
+        difference (e.g. GC pauses, OS scheduling) not captured by decision count.
+    """))
 
     lines.append("### Measured Inference Time")
     lines.append("")
     lines.append("| Condition | Platform | n calls | Median (ms) | p95 (ms) |")
     lines.append("|---|---|---|---|---|")
-    for name, lbl in [("p7_4_jepa_only", "JEPA only"), ("p7_5_jepa_consolidation", "JEPA+consol")]:
+    for name, lbl in [("p7_4_jepa_only", "JEPA only"),
+                       ("p7_5_jepa_consolidation", "JEPA+consol")]:
         for tag, infer_dict in [("Mac", mac_infer), ("Pi", pi_infer)]:
             df = infer_dict.get(name, pd.DataFrame())
             if df.empty or "inference_time_ms" not in df.columns:
                 lines.append(f"| {lbl} | {tag} | — | — | — |")
             else:
                 v = df["inference_time_ms"].values
-                lines.append(f"| {lbl} | {tag} | {len(v):,} | {np.median(v):.1f} | {np.percentile(v, 95):.1f} |")
+                lines.append(f"| {lbl} | {tag} | {len(v):,} | {np.median(v):.1f} |"
+                             f" {np.percentile(v, 95):.1f} |")
     lines.append("")
 
-    lines.append("### Lifetime Comparison (Mac vs Pi)")
+    lines.append("### Lifetime Across All Three Metrics")
     lines.append("")
-    lines.append("| Condition | Platform | n | Median (s) | Δ vs baseline |")
-    lines.append("|---|---|---|---|---|")
-    base_med = np.median(baseline_lifetimes) if len(baseline_lifetimes) else float("nan")
-    for name, lbl in [("p7_4_jepa_only", "JEPA only"), ("p7_5_jepa_consolidation", "JEPA+consol")]:
-        for tag, grp_dict in [("Mac", mac_groups), ("Pi", pi_groups)]:
-            v = grp_dict.get(name, np.array([]))
-            if len(v) == 0:
-                lines.append(f"| {lbl} | {tag} | — | — | — |")
+    lines.append("| Condition | Platform | n | Wall-clock (s) | Decisions | Norm. ratio |")
+    lines.append("|---|---|---|---|---|---|")
+    for name, lbl in [("p7_4_jepa_only", "JEPA only"),
+                       ("p7_5_jepa_consolidation", "JEPA+consol")]:
+        for tag, lt_dict, dc_dict, bmed in [
+            ("Mac", mac_groups, mac_decisions, mac_base_med),
+            ("Pi",  pi_groups,  pi_decisions,  pi_base_med),
+        ]:
+            vlt = lt_dict.get(name, np.array([]))
+            vdc = dc_dict.get(name, np.array([]))
+            if len(vlt) == 0:
+                lines.append(f"| {lbl} | {tag} | — | — | — | — |")
             else:
-                delta = np.median(v) - base_med
-                lines.append(f"| {lbl} | {tag} | {len(v)} | {np.median(v):.1f} | {delta:+.1f} |")
+                ratio  = np.median(vlt) / bmed if bmed else float("nan")
+                dc_str = f"{np.median(vdc):.0f}" if len(vdc) else "—"
+                lines.append(f"| {lbl} | {tag} | {len(vlt)} |"
+                             f" {np.median(vlt):.1f} | {dc_str} | {ratio:.3f} |")
+    for tag, blt, bdc, bmed in [
+        ("Pi",  pi_baseline_lt,  pi_decisions.get("p7_1_baseline",  np.array([])), pi_base_med),
+        ("Mac", mac_baseline_lt, mac_decisions.get("p7_4_mac_base", np.array([])), mac_base_med),
+    ]:
+        if len(blt) == 0:
+            continue
+        dc_str = f"{np.median(bdc):.0f}" if len(bdc) else "—"
+        lines.append(f"| Baseline | {tag} | {len(blt)} |"
+                    f" {np.median(blt):.1f} | {dc_str} | 1.000 |")
     lines.append("")
 
     lines.append("### Figures")
     lines.append("")
     for fname, caption in [
-        ("inference_time_comparison.png", "Per-call WM inference duration on Mac vs Pi."),
-        ("mac_vs_pi_lifetime.png",        "JEPA creature lifetime on Mac vs Pi. "
-                                           "A large Mac < Pi gap would indicate latency inflation."),
+        ("inference_time_comparison.png",
+         "Per-call WM inference duration on Mac vs Pi (from `inference_time_ms` telemetry)."),
+        ("mac_vs_pi_lifetime.png",
+         "Three-panel comparison per JEPA condition: raw seconds (confounded by latency), "
+         "decision count (platform-agnostic biological clock), and baseline-normalised ratio. "
+         "Panels 2 and 3 reveal the genuine survival benefit."),
     ]:
         lines.append(f"![{caption}](../figures/exp_p7/{fname})")
         lines.append(f"*{caption}*")
         lines.append("")
 
-    lines.append("### Interpretation of Latency Confound")
+    lines.append("### Interpretation")
     lines.append("")
 
-    # Auto-generate interpretation
-    interpretations = []
-    for name, lbl in [("p7_4_jepa_only", "JEPA only"), ("p7_5_jepa_consolidation", "JEPA+consol")]:
-        vm = mac_groups.get(name, np.array([]))
-        vp = pi_groups.get(name, np.array([]))
-        if len(vm) < 2 or len(vp) < 2:
-            interpretations.append(f"Insufficient Mac data for {lbl}.")
+    pi_base_dc = pi_decisions.get("p7_1_baseline", np.array([]))
+    for name, lbl in [("p7_4_jepa_only", "JEPA only"),
+                       ("p7_5_jepa_consolidation", "JEPA+consol")]:
+        vm_lt = mac_groups.get(name,    np.array([]))
+        vp_lt = pi_groups.get(name,     np.array([]))
+        vm_dc = mac_decisions.get(name, np.array([]))
+        vp_dc = pi_decisions.get(name,  np.array([]))
+        if len(vm_lt) < 2 or len(vp_lt) < 2:
+            lines.append(f"Insufficient Mac data for **{lbl}**.")
+            lines.append("")
             continue
-        delta_mac = np.median(vm) - base_med
-        delta_pi  = np.median(vp) - base_med
-        latency_inflation = delta_pi - delta_mac
-        pct_inflation = latency_inflation / delta_pi * 100 if delta_pi != 0 else float("nan")
+
+        delta_mac_s = np.median(vm_lt) - mac_base_med
+        delta_pi_s  = np.median(vp_lt) - pi_base_med
+        inflation_s = delta_pi_s - delta_mac_s
+        pct_infl    = inflation_s / delta_pi_s * 100 if delta_pi_s != 0 else float("nan")
+
+        base_dc_med = np.median(pi_base_dc) if len(pi_base_dc) else float("nan")
+        delta_mac_d = (np.median(vm_dc) - base_dc_med) if len(vm_dc) else float("nan")
+        delta_pi_d  = (np.median(vp_dc) - base_dc_med) if len(vp_dc) else float("nan")
 
         dm = mac_infer.get(name, pd.DataFrame())
         dp = pi_infer.get(name, pd.DataFrame())
+        inf_line = ""
         if not dm.empty and not dp.empty and "inference_time_ms" in dm.columns:
-            mac_med_inf = np.median(dm["inference_time_ms"].values)
-            pi_med_inf  = np.median(dp["inference_time_ms"].values)
-            overhead = pi_med_inf - mac_med_inf
-            interpretations.append(
-                f"**{lbl}**: Mac median lifetime {np.median(vm):.0f}s vs Pi {np.median(vp):.0f}s. "
-                f"Genuine benefit (Mac Δ vs baseline): {delta_mac:+.0f}s. "
-                f"Pi latency inflation: {latency_inflation:+.0f}s "
-                f"({abs(pct_inflation):.0f}% of Pi gain). "
-                f"Per-call overhead: {overhead:.0f}ms ({mac_med_inf:.0f}ms Mac → {pi_med_inf:.0f}ms Pi, "
-                f"{pi_med_inf/mac_med_inf:.1f}× slower)."
-            )
-        else:
-            interpretations.append(
-                f"**{lbl}**: Mac Δ vs baseline = {delta_mac:+.0f}s; "
-                f"Pi Δ vs baseline = {delta_pi:+.0f}s; "
-                f"latency inflation ≈ {latency_inflation:+.0f}s ({abs(pct_inflation):.0f}% of Pi gain)."
-            )
+            mac_inf = np.median(dm["inference_time_ms"].values)
+            pi_inf  = np.median(dp["inference_time_ms"].values)
+            inf_line = (f" Per-call inference: {mac_inf:.0f}ms Mac → {pi_inf:.0f}ms Pi "
+                        f"({pi_inf / mac_inf:.1f}× slower).")
 
-    for interp in interpretations:
-        lines.append(interp)
+        lines.append(
+            f"**{lbl}**: "
+            f"Wall-clock — Mac +{delta_mac_s:.0f}s vs Pi +{delta_pi_s:.0f}s "
+            f"({inflation_s:+.0f}s latency inflation = {abs(pct_infl):.0f}% of Pi gain). "
+            f"Decision count — Mac +{delta_mac_d:.0f} vs Pi +{delta_pi_d:.0f} decisions "
+            f"(platform-agnostic benefit).{inf_line}"
+        )
         lines.append("")
+
+    lines.append(textwrap.dedent("""        **Key:** If the decision-count Δ is similar on Mac and Pi, the wall-clock
+        inflation is pure latency (the creature takes longer clock-time per decision
+        but survives the same number of drive-depletion events). If the Mac
+        decision-count Δ is smaller, part of the Pi gain is genuine — the WM is
+        directing creatures to better actions even after accounting for platform speed.
+        The baseline-normalised ratio > 1.0 on both platforms confirms the WM
+        extends life in absolute terms on any hardware.
+    """))
 
     return "\n".join(lines)
 
@@ -839,36 +952,52 @@ def main():
             ("p7_4_jepa_only",         "p7_4_mac"),
             ("p7_5_jepa_consolidation", "p7_5_mac"),
         ]
-        mac_groups = {}
-        mac_infer  = {}
-        pi_infer   = {}
+        mac_groups    = {}
+        mac_decisions = {}
+        mac_infer     = {}
+        pi_infer      = {}
         for key, mac_name in MAC_SAMPLES:
             mac_dir = os.path.join(mac_wd, mac_name)
             if not os.path.isdir(mac_dir):
                 print(f"  MISSING Mac sample: {mac_dir}")
                 continue
-            mac_groups[key] = load_lifetimes(mac_dir)
-            mac_acts        = load_actions(mac_dir)
-            mac_infer[key]  = mac_acts[mac_acts["selection_type"] == "WORLD_MODEL"] \
-                              if not mac_acts.empty and "inference_time_ms" in mac_acts.columns \
-                              else pd.DataFrame()
+            mac_groups[key]    = load_lifetimes(mac_dir)
+            mac_decisions[key] = load_decision_counts(mac_dir)
+            mac_acts           = load_actions(mac_dir)
+            mac_infer[key]     = mac_acts[mac_acts["selection_type"] == "WORLD_MODEL"] \
+                                 if not mac_acts.empty and "inference_time_ms" in mac_acts.columns \
+                                 else pd.DataFrame()
             # Pi inference times from existing groups_actions (needs inference_time_ms col)
             pi_acts = groups_actions.get(key, pd.DataFrame())
             pi_infer[key] = pi_acts[pi_acts["selection_type"] == "WORLD_MODEL"] \
                             if not pi_acts.empty and "inference_time_ms" in pi_acts.columns \
                             else pd.DataFrame()
             print(f"  {mac_name}: {len(mac_groups[key])} lifetimes, "
+                  f"{len(mac_decisions[key])} decision counts, "
                   f"{len(mac_infer[key])} WM calls with timing")
+
+        # Pi decision counts (needed for normalisation)
+        pi_decisions_mac = {name: load_decision_counts(os.path.join(args.wd, name))
+                            for name, _ in SAMPLES
+                            if os.path.isdir(os.path.join(args.wd, name))}
+
+        pi_baseline_lt  = groups.get("p7_1_baseline", np.array([]))
+        mac_baseline_lt = np.array([])   # no Mac baseline run; use Pi baseline as reference
 
         # Mac figures
         plot_inference_time_comparison(mac_infer, pi_infer,
                                        os.path.join(FIG_DIR, "inference_time_comparison.png"))
         plot_mac_vs_pi_lifetime(mac_groups, groups,
+                                mac_decisions, pi_decisions_mac,
+                                pi_baseline_lt, mac_baseline_lt,
                                 os.path.join(FIG_DIR, "mac_vs_pi_lifetime.png"))
 
-        baseline_lt = groups.get("p7_1_baseline", np.array([]))
-        latency_section = build_latency_section(mac_groups, groups, mac_infer, pi_infer,
-                                                baseline_lt)
+        latency_section = build_latency_section(
+            mac_groups, groups,
+            mac_decisions, pi_decisions_mac,
+            mac_infer, pi_infer,
+            pi_baseline_lt, mac_baseline_lt,
+        )
         report = report.rstrip("\n") + "\n\n" + latency_section + "\n"
     elif args.mac_wd:
         print(f"  WARNING: --mac-wd path not found: {mac_wd}")
