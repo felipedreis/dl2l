@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "input_dim": 9,
+  "latent_dim": 64,
+  "action_dim": 9,
+  "emotion_dim": 9,
+  "live_emotion_dims": [
+    0,
+    1,
+    4,
+    5
+  ],
+  "emotion_index_order": [
+    "hunger",
+    "sleep",
+    "apathy",
+    "stress",
+    "pain",
+    "tedium",
+    "fear",
+    "curiosity",
+    "fertility"
+  ],
+  "action_index_order": [
+    "APPROACH",
+    "AVOID",
+    "EAT",
+    "ESCAPE",
+    "PLAY",
+    "SLEEP",
+    "TOUCH",
+    "TURN",
+    "WANDER"
+  ],
+  "perception_feature_order": [
+    "distance",
+    "angle",
+    "direction",
+    "type_GRAY_APPLE",
+    "type_GREEN_APPLE",
+    "type_RED_APPLE",
+    "type_ROTTEN_APPLE",
+    "type_ALOE",
+    "type_CACTUS"
+  ],
+  "min_arousal": 0.18,
+  "max_arousal": 7.0,
+  "has_internal_encoder": false,
+  "model_variant": "single",
+  "model_hash": "91b11acda2fce2e2629540f43f0580aaa4aa92cf4397f3415a878d51a6960813",
+  "trained_on": "2026-07-01"
+}

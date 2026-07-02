@@ -49,7 +49,7 @@ import br.cefetmg.lsi.l2l.creature.common.ActionType;
 		@NamedNativeQuery(name="ChosenActionState.getForTrajectory",
 			query = "SELECT css.key AS creature_key, css.time AS action_time, " +
 					"cas.action AS action_type, cas.actionselectiontype AS selection_type, " +
-					"cas.key AS target_key " +
+					"cas.key AS target_key, cas.inference_duration_ms " +
 					"FROM data.chosen_action_state cas " +
 					"JOIN data.change_stimulus_state css ON cas.changestimulusstate_id = css.id " +
 					"WHERE css.key = ? ORDER BY css.time")
@@ -72,17 +72,26 @@ public class ChosenActionState implements PersistenceState{
 
 	@Embedded
 	private SequentialId target;
-	
+
+	@Column(name = "inference_duration_ms")
+	private long inferenceDurationMs;
+
 	public ChosenActionState(){
-		
+
 	}
 
 	public ChosenActionState(ChangeStimulusState changeStimulusState, ActionSelectionType actionSelectionType,
 							 ActionType action, SequentialId target) {
+		this(changeStimulusState, actionSelectionType, action, target, 0L);
+	}
+
+	public ChosenActionState(ChangeStimulusState changeStimulusState, ActionSelectionType actionSelectionType,
+							 ActionType action, SequentialId target, long inferenceDurationMs) {
 		this.changeStimulusState = changeStimulusState;
 		this.actionSelectionType = actionSelectionType;
 		this.action = action;
 		this.target = target;
+		this.inferenceDurationMs = inferenceDurationMs;
 	}
 
 	public int getId() {
@@ -120,9 +129,17 @@ public class ChosenActionState implements PersistenceState{
 	public SequentialId getTarget() {
 		return target;
 	}
-	
+
 	public void setTarget(SequentialId target) {
 		this.target = target;
+	}
+
+	public long getInferenceDurationMs() {
+		return inferenceDurationMs;
+	}
+
+	public void setInferenceDurationMs(long inferenceDurationMs) {
+		this.inferenceDurationMs = inferenceDurationMs;
 	}
 
 	@Override

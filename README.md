@@ -43,3 +43,70 @@ The project's source code is neatly organized into a few packages. Are they:
 * `world`: Entities from the artificial world such as nutrients and predators should be in this package.
 
 Classes don't all follow the JavaBeans standard, this mainly thanks to the actors model. Messages exchanged between actors should be immutable, per a recommendation from _toolkit_ Akka
+
+## Machine Learning — JEPA World Model
+
+DL2L includes an offline-trained JEPA (Joint Embedding Predictive Architecture) world model that each creature uses during sleep consolidation to refine its action-selection policy. The model is trained from simulation trajectories extracted from PostgreSQL and exported as TorchScript artifacts loaded by the Java runtime via DJL.
+
+### Model architectures
+
+Four variants are available, differing in how the creature's homeostatic state (`h_t`) is routed:
+
+| Variant | Predictor sees | Critic sees | Best val L_pred |
+|---|---|---|---|
+| `internal_critic` | `z_world` only | `z_next + z_internal` | **0.1683** |
+| `single` | `z_world` only | `z_next` only | 0.1732 |
+| `internal_predictor` | `z_world + z_internal` | `z_next` only | 0.1750 |
+| `dual` | `z_world + z_internal` | `z_next + z_internal` | 0.1884 |
+
+### Training data extraction
+
+Simulation data is extracted from PostgreSQL using `scripts/pg_extract.py` (Python + `docker exec psql`, no psycopg2 required):
+
+```bash
+python3 scripts/pg_extract.py --out /path/to/output --container <db-container>
+```
+
+The script covers all creature-level and ensemble-level data: trajectories, sleep episodes, engrams, arousal history, behavioural efficiency, traveled distances, perception coverage, consolidation batch stats, and more.
+
+After extraction, the ML dataset is assembled with:
+
+```bash
+cd ml
+python3 -m scripts.prepare_dataset --wd /path/to/output --out data_p9 --dual
+```
+
+### Training and export
+
+```bash
+cd ml
+# Train all four variants (50 epochs, MPS/CUDA/CPU):
+for VARIANT in single dual internal_critic internal_predictor; do
+    python3 -m scripts.train_species --data data_p9 --ckpt checkpoints_p9/$VARIANT \
+        --epochs 50 --variant $VARIANT
+done
+
+# Export TorchScript artifacts:
+for VARIANT in single dual internal_critic internal_predictor; do
+    python3 -m scripts.export_model --variant $VARIANT \
+        --ckpt checkpoints_p9/$VARIANT \
+        --out src/main/resources/models/$VARIANT
+done
+```
+
+### HuggingFace repositories
+
+| Repository | Type | Contents |
+|---|---|---|
+| [`felipedreis/dl2l-jepa`](https://huggingface.co/felipedreis/dl2l-jepa) | Model | TorchScript `.pt` files + `model_contract.json` for all 4 variants |
+| [`felipedreis/dl2l-experiments`](https://huggingface.co/datasets/felipedreis/dl2l-experiments) | Dataset | Parquet training/validation files + `stats.json`, organized by experiment (e.g. `p9/`) |
+
+To upload models and dataset:
+
+```bash
+cd ml
+python3 -m scripts.upload_hf \
+    --repo felipedreis/dl2l-jepa \
+    --data-repo felipedreis/dl2l-experiments \
+    --ckpt checkpoints_p9 --data data_p9 --data-prefix p9
+```

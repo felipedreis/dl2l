@@ -92,10 +92,11 @@ public class ActionSelectionConfigTest {
     // -----------------------------------------------------------------------
 
     @Test
-    void master_order_is_target_distance_affordance_world_model_random() {
+    void master_order_is_target_distance_affordance_memory_world_model_random() {
         List<ActionSelectionType> expected = List.of(
                 ActionSelectionType.TARGET_DISTANCE,
                 ActionSelectionType.AFFORDANCE,
+                ActionSelectionType.MEMORY,
                 ActionSelectionType.WORLD_MODEL,
                 ActionSelectionType.RANDOM
         );

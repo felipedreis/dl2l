@@ -67,8 +67,18 @@ public class WorldModelFilter implements ActionFilter {
         this.currentInternalState = internalState;
     }
 
+    // Wall-clock inference duration (ns → ms) for the last filter() call.
+    // Zero when any gate fires before inference, or on Mode-1 fallback.
+    private long lastInferenceDurationMs = 0L;
+
+    public long getLastInferenceDurationMs() {
+        return lastInferenceDurationMs;
+    }
+
     @Override
     public List<Action> filter(List<Action> actions, Emotion toRegulate) {
+        lastInferenceDurationMs = 0L;
+
         // Gate 1 — Mode-2 frequency gate
         if (actions.size() <= 1 || toRegulate.getLevel() < HIGH_AROUSAL_THRESHOLD)
             return actions;
@@ -83,6 +93,7 @@ public class WorldModelFilter implements ActionFilter {
 
         // Score every need-driven candidate; skip exploratory actions (OOD for the Critic)
         List<ScoredAction> scored = new ArrayList<>(actions.size());
+        long t0 = System.nanoTime();
         for (Action action : actions) {
             if (MODE_1_ONLY.contains(action.type))
                 continue;
@@ -90,10 +101,13 @@ public class WorldModelFilter implements ActionFilter {
             PredictedEmotionalState prediction = contract.hasDualEncoder
                     ? engine.predictEmotionalCost(features, currentInternalState, action.type)
                     : engine.predictEmotionalCost(features, action.type);
-            if (prediction == null)
+            if (prediction == null) {
+                lastInferenceDurationMs = (System.nanoTime() - t0) / 1_000_000L;
                 return actions;  // inference error → full Mode-1 fallback for this cycle
+            }
             scored.add(new ScoredAction(action, engine.aversiveCost(prediction)));
         }
+        lastInferenceDurationMs = (System.nanoTime() - t0) / 1_000_000L;
 
         // If no need-driven action is available, fall back to Mode-1.
         if (scored.isEmpty())

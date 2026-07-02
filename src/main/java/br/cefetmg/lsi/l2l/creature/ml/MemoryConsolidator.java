@@ -68,6 +68,7 @@ public class MemoryConsolidator extends UntypedActor {
     private MemorySystem memory;
     private MLServiceExtension.Impl mlExt;
     private ModelContract contract;
+    private ModelVariantStrategy strategy;
 
     // Per-creature models loaded with trainParam=true for gradient flow through the full chain.
     // Frozen models (encoder, predictor, critic) accumulate gradients but are never stepped —
@@ -125,8 +126,10 @@ public class MemoryConsolidator extends UntypedActor {
             internalEncoderTrainer = internalEncoderModel.newTrainer(config);
         }
 
+        strategy = ModelVariantStrategyFactory.forContract(contract);
+
         logger.info("MemoryConsolidator[" + creatureKey + "]: per-creature models loaded"
-                + (contract.hasDualEncoder ? " (dual-encoder)" : ""));
+                + " (" + contract.modelVariant + ")");
     }
 
     @Override
@@ -325,21 +328,16 @@ public class MemoryConsolidator extends UntypedActor {
             NDArray z        = encoderTrainer.forward(new NDList(percInput)).singletonOrThrow();
             NDArray adaptedZ = adapterTrainer.forward(new NDList(z)).singletonOrThrow();
 
-            NDArray zInternal = null;
-            NDArray predictorInput;
-            if (internalEncoderTrainer != null && internalData != null) {
-                NDArray htBatch = mgr.create(internalData, new Shape(n, contract.internalStateDim));
-                zInternal       = internalEncoderTrainer.forward(new NDList(htBatch)).singletonOrThrow();
-                predictorInput  = NDArrays.concat(new NDList(adaptedZ, zInternal), -1);
-            } else {
-                predictorInput = adaptedZ;
-            }
+            NDArray zInternal = (internalEncoderTrainer != null && internalData != null)
+                    ? internalEncoderTrainer.forward(
+                            new NDList(mgr.create(internalData, new Shape(n, contract.internalStateDim))))
+                              .singletonOrThrow()
+                    : null;
 
-            NDArray nextZ       = predictorTrainer.forward(new NDList(predictorInput, actionBatch)).singletonOrThrow();
-            NDArray criticInput = (zInternal != null)
-                    ? NDArrays.concat(new NDList(nextZ, zInternal), -1)
-                    : nextZ;
-            NDArray predDelta   = criticTrainer.forward(new NDList(criticInput, actionBatch)).singletonOrThrow();
+            NDArray predictorInput = strategy.buildPredictorInput(adaptedZ, zInternal);
+            NDArray nextZ          = predictorTrainer.forward(new NDList(predictorInput, actionBatch)).singletonOrThrow();
+            NDArray criticInput    = strategy.buildCriticInput(nextZ, zInternal);
+            NDArray predDelta      = criticTrainer.forward(new NDList(criticInput, actionBatch)).singletonOrThrow();
 
             NDArray rawLoss      = adapterTrainer.getLoss().evaluate(new NDList(target), new NDList(predDelta));
             NDArray weightedLoss = rawLoss.mul(weightArr.mean());

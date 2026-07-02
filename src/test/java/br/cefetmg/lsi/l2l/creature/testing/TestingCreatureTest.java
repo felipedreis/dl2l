@@ -223,6 +223,48 @@ class TestingCreatureTest {
 
     // -------- 7. kill cycle ---------------------------------------------------------------
 
+    // -------- 8. behavioural efficiency -------------------------------------------------
+
+    @Test
+    void behavioural_efficiency_is_nonzero_at_resting_arousal() {
+        TestingHarness h = newHarness();
+
+        h.tick();
+
+        EmotionalStimulus emotional = h.fullRecorder().lastOf(EmotionalStimulus.class);
+        assertNotNull(emotional);
+        assertTrue(emotional.behaviouralEfficiency > 0,
+                "Efficiency must be > 0 at MIN_AROUSAL_LEVEL; got " + emotional.behaviouralEfficiency);
+    }
+
+    @Test
+    void behavioural_efficiency_scales_speed_and_focus_in_cortical_stimulus() {
+        TestingHarness h = newHarness();
+
+        // Raise hunger above MIN_AROUSAL so efficiency is meaningfully above 0.
+        h.creature().emotions().regulate(Constants.HUNGER, 2.0);
+
+        LuminousStimulus luminous = new LuminousStimulus(
+                new SequentialId(80L), new SequentialId(81L),
+                FruitType.RED_APPLE, new Point(200, 100));
+        h.injectLuminous(luminous);
+
+        CorticalStimulus cortical = h.effectorCortexRecorder().lastOf(CorticalStimulus.class);
+        assertNotNull(cortical);
+        // Speed and focus must be strictly above their minimums when efficiency > 0.
+        assertTrue(cortical.speed > Constants.MIN_STEP,
+                "Speed must exceed MIN_STEP when efficiency > 0; got " + cortical.speed);
+        assertTrue(cortical.focus > Constants.MIN_VISION_FIELD_OPENING,
+                "Focus must exceed MIN_VISION_FIELD_OPENING when efficiency > 0; got " + cortical.focus);
+        // And must not exceed their maximums.
+        assertTrue(cortical.speed <= Constants.MAX_STEP,
+                "Speed must not exceed MAX_STEP; got " + cortical.speed);
+        assertTrue(cortical.focus <= Constants.MAX_VISION_FIELD_OPENING,
+                "Focus must not exceed MAX_VISION_FIELD_OPENING; got " + cortical.focus);
+    }
+
+    // -------- 9. kill cycle ---------------------------------------------------------------
+
     @Test
     void kill_notifies_holder_with_creature_id_and_marks_dead() {
         TestingHarness h = newHarness();

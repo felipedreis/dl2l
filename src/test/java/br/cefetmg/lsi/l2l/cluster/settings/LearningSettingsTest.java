@@ -29,13 +29,14 @@ public class LearningSettingsTest {
     }
 
     @Test
-    void defaults_include_all_four_filters_in_master_order() {
+    void defaults_include_all_five_filters_in_master_order() {
         List<ActionSelectionType> filters = new LearningSettings().getEnabledFilters();
-        assertEquals(4, filters.size());
+        assertEquals(5, filters.size());
         assertEquals(ActionSelectionType.TARGET_DISTANCE, filters.get(0));
         assertEquals(ActionSelectionType.AFFORDANCE,      filters.get(1));
-        assertEquals(ActionSelectionType.WORLD_MODEL,     filters.get(2));
-        assertEquals(ActionSelectionType.RANDOM,          filters.get(3));
+        assertEquals(ActionSelectionType.MEMORY,          filters.get(2));
+        assertEquals(ActionSelectionType.WORLD_MODEL,     filters.get(3));
+        assertEquals(ActionSelectionType.RANDOM,          filters.get(4));
     }
 
     // -----------------------------------------------------------------------

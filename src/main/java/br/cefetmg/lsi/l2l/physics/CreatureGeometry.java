@@ -1,5 +1,6 @@
 package br.cefetmg.lsi.l2l.physics;
 
+import akka.actor.ActorRef;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.common.ResourceLoader;
@@ -21,8 +22,13 @@ public class CreatureGeometry implements Serializable, Geometry {
     public final Arc visionField;
     public final double visionFieldPosition;
 
-    //public Image bodyTexture;
-    //public Image mouthTexture;
+    /** Direct ActorRefs — populated from CreaturePositioningAttr so the collision detector
+     *  can route stimuli without any TypedActor remote-method calls. */
+    public final ActorRef creatureRef;
+    public final ActorRef bodyRef;
+    public final ActorRef eyeRef;
+    public final ActorRef mouthRef;
+    public final ActorRef noseRef;
 
     public CreatureGeometry(CreaturePositioningAttr attr) {
         body = new Circle( attr.position.x,  attr.position.y,
@@ -42,6 +48,11 @@ public class CreatureGeometry implements Serializable, Geometry {
                  Constants.DEFAULT_MOUTH_OPENING, 10);
         this.id = attr.bodyId;
         this.visionFieldPosition = attr.visionFieldPosition;
+        this.creatureRef = attr.creatureRef;
+        this.bodyRef     = attr.bodyRef;
+        this.eyeRef      = attr.eyeRef;
+        this.mouthRef    = attr.mouthRef;
+        this.noseRef     = attr.noseRef;
     }
 
     @Override
