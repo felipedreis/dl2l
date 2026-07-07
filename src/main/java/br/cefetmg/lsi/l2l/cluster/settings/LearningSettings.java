@@ -1,12 +1,17 @@
 package br.cefetmg.lsi.l2l.cluster.settings;
 
+import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
+import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyMode;
 
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Immutable snapshot of the learning subsystem feature flags loaded from
@@ -24,6 +29,17 @@ public class LearningSettings implements Serializable {
             ActionSelectionType.RANDOM
     );
 
+    /**
+     * Campos (2006) innate action tendencies: the coarse action set that regulates each active drive.
+     * Used by {@code ActionTendencyFilter} to bias action selection by the dominant emotion.
+     */
+    public static final Map<String, Set<ActionType>> DEFAULT_ACTION_TENDENCIES = Map.of(
+            Constants.HUNGER, EnumSet.of(ActionType.EAT, ActionType.APPROACH, ActionType.WANDER),
+            Constants.SLEEP,  EnumSet.of(ActionType.SLEEP, ActionType.WANDER),
+            Constants.PAIN,   EnumSet.of(ActionType.ESCAPE, ActionType.AVOID, ActionType.WANDER),
+            Constants.TEDIUM, EnumSet.of(ActionType.WANDER, ActionType.OBSERVE)
+    );
+
     private final boolean circadianEnabled;
     private final boolean consolidationEnabled;
     private final List<ActionSelectionType> enabledFilters;
@@ -33,11 +49,14 @@ public class LearningSettings implements Serializable {
     private final ExpectancyMode expectancyMode;
     private final boolean neuromodulationEnabled;
 
+    // --- Innate emotion→action coupling (issue #57) — default-off ---
+    private final boolean actionTendencyEnabled;
+
     public LearningSettings(boolean circadianEnabled,
                             boolean consolidationEnabled,
                             List<ActionSelectionType> enabledFilters) {
         this(circadianEnabled, consolidationEnabled, enabledFilters,
-                false, ExpectancyMode.DISCRETE, false);
+                false, ExpectancyMode.DISCRETE, false, false);
     }
 
     public LearningSettings(boolean circadianEnabled,
@@ -46,12 +65,24 @@ public class LearningSettings implements Serializable {
                             boolean expectancyEnabled,
                             ExpectancyMode expectancyMode,
                             boolean neuromodulationEnabled) {
+        this(circadianEnabled, consolidationEnabled, enabledFilters,
+                expectancyEnabled, expectancyMode, neuromodulationEnabled, false);
+    }
+
+    public LearningSettings(boolean circadianEnabled,
+                            boolean consolidationEnabled,
+                            List<ActionSelectionType> enabledFilters,
+                            boolean expectancyEnabled,
+                            ExpectancyMode expectancyMode,
+                            boolean neuromodulationEnabled,
+                            boolean actionTendencyEnabled) {
         this.circadianEnabled       = circadianEnabled;
         this.consolidationEnabled   = consolidationEnabled;
         this.enabledFilters         = Collections.unmodifiableList(new ArrayList<>(enabledFilters));
         this.expectancyEnabled      = expectancyEnabled;
         this.expectancyMode         = expectancyMode;
         this.neuromodulationEnabled = neuromodulationEnabled;
+        this.actionTendencyEnabled  = actionTendencyEnabled;
     }
 
     /** Default: all subsystems enabled, full filter chain in canonical order. */
@@ -76,6 +107,16 @@ public class LearningSettings implements Serializable {
     /** Whether tonic dopamine/serotonin modulate action selection (exploration/patience). */
     public boolean isNeuromodulationEnabled() {
         return neuromodulationEnabled;
+    }
+
+    /** Whether the innate ActionTendency prior biases action selection by the dominant emotion. */
+    public boolean isActionTendencyEnabled() {
+        return actionTendencyEnabled;
+    }
+
+    /** The emotion→action tendency map used when {@link #isActionTendencyEnabled()}. */
+    public Map<String, Set<ActionType>> getActionTendencies() {
+        return DEFAULT_ACTION_TENDENCIES;
     }
 
     public boolean isConsolidationEnabled() {

@@ -6,6 +6,7 @@ import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionProbabilityFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionSelection;
+import br.cefetmg.lsi.l2l.creature.actionSelector.ActionTendencyFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.MemoryFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.RandomFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.TargetDistanceFilter;
@@ -85,6 +86,11 @@ public class FullAppraisal extends CreatureComponent {
         }
 
         List<ActionFilter> filterList = new ArrayList<>();
+        // Innate emotion→action coupling runs first as a coarse prior (soft, pass-through when empty),
+        // so e.g. a hungry creature pursues EAT/APPROACH instead of SLEEP before the learned filters.
+        if (learningSettings.isActionTendencyEnabled()) {
+            filterList.add(new ActionTendencyFilter(learningSettings.getActionTendencies()));
+        }
         for (ActionSelectionType type : LearningSettings.MASTER_FILTER_ORDER) {
             if (!learningSettings.isFilterEnabled(type)) continue;
             switch (type) {

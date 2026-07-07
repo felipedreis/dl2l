@@ -101,8 +101,10 @@ public class Simulation {
             expectancyMode = ExpectancyMode.valueOf(ls.getString("expectancyMode").toUpperCase());
         }
 
+        boolean actionTendencyEnabled = ls.hasPath("actionTendencyEnabled") && ls.getBoolean("actionTendencyEnabled");
+
         return new LearningSettings(circadianEnabled, consolidationEnabled, enabledFilters,
-                expectancyEnabled, expectancyMode, neuromodulationEnabled);
+                expectancyEnabled, expectancyMode, neuromodulationEnabled, actionTendencyEnabled);
     }
 
     public Long getNumHolders() {
