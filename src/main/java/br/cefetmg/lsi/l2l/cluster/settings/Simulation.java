@@ -2,6 +2,7 @@ package br.cefetmg.lsi.l2l.cluster.settings;
 
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
+import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyMode;
 import br.cefetmg.lsi.l2l.world.FruitType;
 import br.cefetmg.lsi.l2l.world.PlantType;
 import br.cefetmg.lsi.l2l.world.PositionFactory;
@@ -91,7 +92,15 @@ public class Simulation {
             enabledFilters = LearningSettings.MASTER_FILTER_ORDER;
         }
 
-        return new LearningSettings(circadianEnabled, consolidationEnabled, enabledFilters);
+        // Issue #57 — neuromodulatory expectancy loop (default-off).
+        boolean expectancyEnabled = ls.hasPath("expectancyEnabled") && ls.getBoolean("expectancyEnabled");
+        ExpectancyMode expectancyMode = ls.hasPath("expectancyMode")
+                ? ExpectancyMode.valueOf(ls.getString("expectancyMode").toUpperCase())
+                : ExpectancyMode.DISCRETE;
+        boolean neuromodulationEnabled = ls.hasPath("neuromodulationEnabled") && ls.getBoolean("neuromodulationEnabled");
+
+        return new LearningSettings(circadianEnabled, consolidationEnabled, enabledFilters,
+                expectancyEnabled, expectancyMode, neuromodulationEnabled);
     }
 
     public Long getNumHolders() {
