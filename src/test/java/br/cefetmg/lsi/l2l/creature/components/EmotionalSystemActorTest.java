@@ -104,6 +104,42 @@ public class EmotionalSystemActorTest {
         assertTrue(emotions.getLevel(Constants.TEDIUM) < before);
     }
 
+    // --- Active/disabled emotion scoping (Finding A) ---
+
+    @Test
+    void disabled_emotions_stay_at_min_arousal_after_many_regulate_all_calls() {
+        for (int i = 0; i < 5000; i++) {
+            emotions.regulateAll(Constants.DELTA);
+        }
+        assertEquals(Constants.MIN_AROUSAL_LEVEL, emotions.getLevel(Constants.STRESS),   1e-9);
+        assertEquals(Constants.MIN_AROUSAL_LEVEL, emotions.getLevel(Constants.APATHY),   1e-9);
+        assertEquals(Constants.MIN_AROUSAL_LEVEL, emotions.getLevel(Constants.FEAR),     1e-9);
+        assertEquals(Constants.MIN_AROUSAL_LEVEL, emotions.getLevel(Constants.CURIOSITY),1e-9);
+        assertEquals(Constants.MIN_AROUSAL_LEVEL, emotions.getLevel(Constants.FERTILITY),1e-9);
+    }
+
+    @Test
+    void active_emotions_increase_on_regulate_all() {
+        double hungerBefore  = emotions.getLevel(Constants.HUNGER);
+        double sleepBefore   = emotions.getLevel(Constants.SLEEP);
+        double painBefore    = emotions.getLevel(Constants.PAIN);
+        double tediumBefore  = emotions.getLevel(Constants.TEDIUM);
+        emotions.regulateAll(Constants.DELTA);
+        assertTrue(emotions.getLevel(Constants.HUNGER) > hungerBefore);
+        assertTrue(emotions.getLevel(Constants.SLEEP)  > sleepBefore);
+        assertTrue(emotions.getLevel(Constants.PAIN)   > painBefore);
+        assertTrue(emotions.getLevel(Constants.TEDIUM) > tediumBefore);
+    }
+
+    @Test
+    void get_max_arousal_ignores_disabled_emotions() {
+        // Raise an active emotion well above MIN and verify getMaxArousal returns it, not a disabled one.
+        emotions.regulate(Constants.HUNGER, 3.0);
+        Emotion max = emotions.getMaxArousal();
+        assertEquals(Constants.HUNGER, max.getName());
+        assertTrue(max.getLevel() > Constants.MIN_AROUSAL_LEVEL + 2.5);
+    }
+
     // --- Hunger regulation ---
 
     @Test

@@ -1,5 +1,6 @@
 package br.cefetmg.lsi.l2l.creature.components;
 
+import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
@@ -20,8 +21,11 @@ import java.util.List;
  */
 public class HomeostaticRegulation extends CreatureComponent {
 
-    public HomeostaticRegulation(SequentialId id) {
+    private final LearningSettings learningSettings;
+
+    public HomeostaticRegulation(SequentialId id, LearningSettings learningSettings) {
         super(id);
+        this.learningSettings = learningSettings;
     }
 
     @Override
@@ -77,7 +81,14 @@ public class HomeostaticRegulation extends CreatureComponent {
     }
 
     private Stimulus handleAdrenergic(AdrenergicStimulus s) {
-        creature.emotions().regulateAll(s.delta);
+        if (learningSettings.isCircadianEnabled()) {
+            // Circadian clock owns sleep pressure via AdenosinergicStimulus; exclude SLEEP here.
+            creature.emotions().regulate(Constants.HUNGER, s.delta);
+            creature.emotions().regulate(Constants.PAIN,   s.delta);
+            creature.emotions().regulate(Constants.TEDIUM, s.delta);
+        } else {
+            creature.emotions().regulateAll(s.delta);
+        }
         return null;
     }
 

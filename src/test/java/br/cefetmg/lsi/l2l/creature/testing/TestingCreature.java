@@ -81,7 +81,7 @@ public final class TestingCreature implements Creature {
         register(cid = cid.next(), new PartialAppraisal(cid, learningSettings));
         // FullAppraisal: pass null for MLServiceExtension.Impl so WORLD_MODEL is skipped.
         register(cid = cid.next(), new FullAppraisal(cid, learningSettings, null));
-        register(cid = cid.next(), new HomeostaticRegulation(cid));
+        register(cid = cid.next(), new HomeostaticRegulation(cid, learningSettings));
         register(cid = cid.next(), new Valuation(cid));
 
         // Wire each component to the Creature + persister + self-ref.

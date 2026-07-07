@@ -187,7 +187,7 @@ public class CreatureActor implements Creature {
         factories.put(EffectorCortex.class,        EffectorCortex::new);
         factories.put(PartialAppraisal.class,      id -> new PartialAppraisal(id, effective));
         factories.put(FullAppraisal.class,         id -> new FullAppraisal(id, effective, mlExt));
-        factories.put(HomeostaticRegulation.class, HomeostaticRegulation::new);
+        factories.put(HomeostaticRegulation.class, id -> new HomeostaticRegulation(id, effective));
         factories.put(Valuation.class,             Valuation::new);
         return factories;
     }

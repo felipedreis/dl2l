@@ -12,6 +12,5 @@ public interface EmotionalSystem {
     double getLevel(String emotion);
 
     Emotion getMaxArousal();
-    Emotion getMaxComplexArousal();
 
 }
