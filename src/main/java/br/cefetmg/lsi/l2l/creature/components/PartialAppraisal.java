@@ -106,16 +106,15 @@ public class PartialAppraisal extends CreatureComponent {
         persist(changeEmotional, changeAdrenergic, behaviouralState);
     }
 
-    private double normalizedBehaviouralEfficiency(double arousal, int perceptionsCount) {
-        double efficiency;
-        if (arousal < Constants.MIN_AROUSAL_LEVEL) {
-            efficiency = 5.55 * arousal / 90.0;
-        } else if (perceptionsCount < Constants.COMPLEX_TASK) {
-            efficiency = (arousal * (5.714  - (0.816 * arousal))) / 9.303;
+    // Mapa §4.1.4 / Diamond et al. (2006) Yerkes-Dodson curves, normalised to [0, 1]:
+    //   Simple task  (0–1 objects): monotonic Eq 4.1 — 16(1−e^{−0.4A}) / 16  (asymptote = 16)
+    //   Complex task (≥2 objects):  inverted-U Eq 4.2 — A·(280/49 − (40/49)·A) / 10  (peak = 10 at A*=3.5)
+    // Both map into [MIN_STEP, MAX_STEP] via FullAppraisal.
+    double normalizedBehaviouralEfficiency(double arousal, int perceptionsCount) {
+        if (perceptionsCount < Constants.COMPLEX_TASK) {
+            return (16 * (1 - Math.exp(-0.4 * arousal))) / 16.0;
         } else {
-            efficiency =  ( 16 * (1 - Math.exp(-0.4 * arousal)) ) / 15.0;
+            return (arousal * (280.0/49 - (40.0/49) * arousal)) / 10.0;
         }
-
-        return efficiency;
     }
 }
