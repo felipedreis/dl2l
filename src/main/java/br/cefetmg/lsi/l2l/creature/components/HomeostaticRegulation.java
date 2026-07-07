@@ -66,6 +66,18 @@ public class HomeostaticRegulation extends CreatureComponent {
         return new ExpectancyContext(drive, creature.emotions().getLevel(drive));
     }
 
+    /**
+     * The <em>realized</em> arousal change of a regulation event: post-level minus the pre-level
+     * captured in {@code ctx}. This is the true outcome the creature experienced — unlike the
+     * <em>intended</em> delta, it is 0 when the drive was already at its floor/ceiling and was
+     * clamped. Rewarding the realized change (not the intended one) is what stops a creature from
+     * being reinforced for e.g. sleeping when it is not sleepy, and makes consummatory reward
+     * genuinely depend on the drive level (more hunger relieved when starving than when sated).
+     */
+    private static double realizedDelta(ExpectancyContext ctx, Emotion regulated) {
+        return regulated.getLevel() - ctx.dominantDriveLevel();
+    }
+
     private EmotionalState emotionalSnapshot() {
         EmotionalState s = new EmotionalState();
         s.setHunger(creature.emotions().getLevel(Constants.HUNGER));
@@ -102,7 +114,7 @@ public class HomeostaticRegulation extends CreatureComponent {
         ExpectancyContext ctx = contextFor(Constants.HUNGER);
         Emotion regulated = creature.emotions().regulate(Constants.HUNGER, -s.nutritiveValue);
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
-                s.origin, s.objectType, ActionType.EAT, regulated, -s.nutritiveValue, ctx);
+                s.origin, s.objectType, ActionType.EAT, regulated, realizedDelta(ctx, regulated), ctx);
         creature.valuation().tell(emitted);
         return emitted;
     }
@@ -116,7 +128,7 @@ public class HomeostaticRegulation extends CreatureComponent {
         ExpectancyContext ctx = contextFor(Constants.SLEEP);
         Emotion regulated = creature.emotions().regulate(Constants.SLEEP, -s.delta);
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(), id, Self.get(),
-                ActionType.SLEEP, regulated, -s.delta, ctx);
+                ActionType.SLEEP, regulated, realizedDelta(ctx, regulated), ctx);
         creature.valuation().tell(emitted);
         if (regulated.getLevel() <= 0) {
             logger.info(String.format("HomeostaticRegulation[%s]: sleep drive exhausted, sending WakeUp", id));
@@ -130,7 +142,7 @@ public class HomeostaticRegulation extends CreatureComponent {
         Emotion regulated = creature.emotions().regulate(Constants.PAIN, s.painIntensity);
         if (s.action == null) return null;
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
-                s.origin, s.objectType, s.action, regulated, s.painIntensity, ctx);
+                s.origin, s.objectType, s.action, regulated, realizedDelta(ctx, regulated), ctx);
         creature.valuation().tell(emitted);
         return emitted;
     }
@@ -142,7 +154,7 @@ public class HomeostaticRegulation extends CreatureComponent {
         Emotion regulated = creature.emotions().regulate(Constants.PAIN, -effectiveDelta);
         if (s.action == null) return null;
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
-                s.origin, s.objectType, s.action, regulated, -effectiveDelta, ctx);
+                s.origin, s.objectType, s.action, regulated, realizedDelta(ctx, regulated), ctx);
         creature.valuation().tell(emitted);
         return emitted;
     }
@@ -152,7 +164,7 @@ public class HomeostaticRegulation extends CreatureComponent {
         Emotion regulated = creature.emotions().regulate(Constants.TEDIUM, s.delta);
         if (s.action != ActionType.WANDER && s.action != ActionType.OBSERVE) return null;
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
-                id, Self.get(), s.action, regulated, s.delta, ctx);
+                id, Self.get(), s.action, regulated, realizedDelta(ctx, regulated), ctx);
         creature.valuation().tell(emitted);
         return emitted;
     }

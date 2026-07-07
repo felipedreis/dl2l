@@ -10,10 +10,8 @@ import br.cefetmg.lsi.l2l.creature.bd.NoOpPersister;
 import br.cefetmg.lsi.l2l.creature.components.*;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioningActor;
-import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ContinuousDriveExpectancy;
-import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.DiscreteDriveExpectancy;
-import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyMode;
 import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyPredictor;
+import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyPredictors;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystemActor;
 
@@ -65,9 +63,7 @@ public final class TestingCreature implements Creature {
         this.position = position;
         this.worldBoundaries = worldBoundaries;
         this.learningSettings = learningSettings;
-        this.expectancy = learningSettings.getExpectancyMode() == ExpectancyMode.CONTINUOUS
-                ? new ContinuousDriveExpectancy()
-                : new DiscreteDriveExpectancy();
+        this.expectancy = ExpectancyPredictors.forMode(learningSettings.getExpectancyMode());
     }
 
     @Override

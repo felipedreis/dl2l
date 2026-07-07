@@ -2,6 +2,7 @@ package br.cefetmg.lsi.l2l.creature.components;
 
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.SequentialId;
+import br.cefetmg.lsi.l2l.creature.bd.NeuromodulatorStateLog;
 import br.cefetmg.lsi.l2l.stimuli.DopaminergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.NeuromodulatorState;
 import br.cefetmg.lsi.l2l.stimuli.NeuromodulatorTick;
@@ -27,6 +28,7 @@ public class NeuromodulatorSystem extends CreatureComponent {
     private double dopamine = 0.0;
     private double serotonin = 0.0;
     private double lastPhasicDopamine = 0.0;
+    private long publishSeq = 0;
 
     public NeuromodulatorSystem(SequentialId id) {
         super(id);
@@ -38,23 +40,38 @@ public class NeuromodulatorSystem extends CreatureComponent {
         List<Stimulus> stimuli = (List<Stimulus>) message;
 
         for (Stimulus stimulus : stimuli) {
-            if (stimulus instanceof DopaminergicStimulus da) {
-                lastPhasicDopamine = da.rpe;
-                dopamine = clampFloor(dopamine + da.rpe);
-            } else if (stimulus instanceof SerotonergicStimulus serotonergic) {
-                serotonin = clampFloor(serotonin + serotonergic.satiety);
-            } else if (stimulus instanceof NeuromodulatorTick tick) {
-                dopamine  = clampFloor(dopamine  * Constants.DOPAMINE_DECAY  + baseline(Constants.DOPAMINE_BASELINE,  tick.circadianPhase));
-                serotonin = clampFloor(serotonin * Constants.SEROTONIN_DECAY + baseline(Constants.SEROTONIN_BASELINE, tick.circadianPhase));
+            switch (stimulus) {
+                case DopaminergicStimulus da -> onDopamine(da);
+                case SerotonergicStimulus serotonergic -> onSerotonin(serotonergic);
+                case NeuromodulatorTick tick -> onTick(tick);
+                default -> { /* not a neuromodulator message — ignore */ }
             }
         }
 
         publishState();
     }
 
+    /** Phasic dopamine release: add the reward-prediction-error quantum to the tonic pool. */
+    private void onDopamine(DopaminergicStimulus da) {
+        lastPhasicDopamine = da.rpe;
+        dopamine = clampFloor(dopamine + da.rpe);
+    }
+
+    /** Serotonin release: add the satiety quantum to the tonic pool. */
+    private void onSerotonin(SerotonergicStimulus serotonergic) {
+        serotonin = clampFloor(serotonin + serotonergic.satiety);
+    }
+
+    /** Per-cycle reuptake (multiplicative decay) plus circadian-modulated baseline synthesis. */
+    private void onTick(NeuromodulatorTick tick) {
+        dopamine  = clampFloor(dopamine  * Constants.DOPAMINE_DECAY  + baseline(Constants.DOPAMINE_BASELINE,  tick.circadianPhase));
+        serotonin = clampFloor(serotonin * Constants.SEROTONIN_DECAY + baseline(Constants.SEROTONIN_BASELINE, tick.circadianPhase));
+    }
+
     private void publishState() {
         creature.fullAppraisal().tell(
                 new NeuromodulatorState(id, nextStimulusId(), dopamine, serotonin));
+        persist(new NeuromodulatorStateLog(id.key, publishSeq++, dopamine, serotonin));
     }
 
     /** Baseline synthesis: a constant floor modulated by the circadian phase. */

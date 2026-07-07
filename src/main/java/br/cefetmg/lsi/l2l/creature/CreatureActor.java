@@ -13,10 +13,9 @@ import br.cefetmg.lsi.l2l.creature.bd.CreatureState;
 import br.cefetmg.lsi.l2l.creature.components.*;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioningActor;
-import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ContinuousDriveExpectancy;
-import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.DiscreteDriveExpectancy;
 import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyMode;
 import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyPredictor;
+import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyPredictors;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystemActor;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
@@ -139,9 +138,7 @@ public class CreatureActor implements Creature {
         final ExpectancyMode expMode = effective.getExpectancyMode();
         expectancy = TypedActor.get(TypedActor.context())
                 .typedActorOf(new TypedProps<>(ExpectancyPredictor.class,
-                        (Creator<ExpectancyPredictor>) () -> expMode == ExpectancyMode.CONTINUOUS
-                                ? new ContinuousDriveExpectancy()
-                                : new DiscreteDriveExpectancy()),
+                        (Creator<ExpectancyPredictor>) () -> ExpectancyPredictors.forMode(expMode)),
                         "expectancy");
 
         if (effective.isConsolidationEnabled()) {

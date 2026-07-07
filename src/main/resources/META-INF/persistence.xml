@@ -37,6 +37,7 @@
 
     <!-- Issue #57: neuromodulatory expectancy / reward-prediction-error log -->
     <class>br.cefetmg.lsi.l2l.creature.bd.ExpectancyState</class>
+    <class>br.cefetmg.lsi.l2l.creature.bd.NeuromodulatorStateLog</class>
 
     <properties>
         <property name="javax.persistence.jdbc.url" value="jdbc:postgresql://dl2l-db:5432/l2l"/>

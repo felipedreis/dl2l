@@ -94,10 +94,12 @@ public class Simulation {
 
         // Issue #57 — neuromodulatory expectancy loop (default-off).
         boolean expectancyEnabled = ls.hasPath("expectancyEnabled") && ls.getBoolean("expectancyEnabled");
-        ExpectancyMode expectancyMode = ls.hasPath("expectancyMode")
-                ? ExpectancyMode.valueOf(ls.getString("expectancyMode").toUpperCase())
-                : ExpectancyMode.DISCRETE;
         boolean neuromodulationEnabled = ls.hasPath("neuromodulationEnabled") && ls.getBoolean("neuromodulationEnabled");
+
+        ExpectancyMode expectancyMode = ExpectancyMode.DISCRETE;
+        if (ls.hasPath("expectancyMode")) {
+            expectancyMode = ExpectancyMode.valueOf(ls.getString("expectancyMode").toUpperCase());
+        }
 
         return new LearningSettings(circadianEnabled, consolidationEnabled, enabledFilters,
                 expectancyEnabled, expectancyMode, neuromodulationEnabled);

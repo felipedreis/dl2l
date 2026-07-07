@@ -15,7 +15,8 @@ public class RandomFilter implements ActionFilter{
     Random random;
 
     public RandomFilter(){
-        random = new Random(System.currentTimeMillis());
+        // Self-seeding Random() avoids correlated streams when many filters are created together.
+        random = new Random();
     }
 
     @Override

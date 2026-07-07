@@ -34,7 +34,9 @@ public class ActionProbabilityFilter implements ActionFilter {
     private double restBias = 0.0;       // additive up-weight fraction for quieting actions; 0.0 = none
 
     public ActionProbabilityFilter(OperantConditioning operantConditioning) {
-        this(operantConditioning, new Random(System.currentTimeMillis()));
+        // No-arg Random() self-seeds from an atomic uniquifier ^ nanoTime, so filters created in the
+        // same millisecond are not correlated (unlike seeding with currentTimeMillis).
+        this(operantConditioning, new Random());
     }
 
     /** Seedable constructor for deterministic tests of the sampling distribution. */
