@@ -91,4 +91,10 @@ public interface Constants {
     // Upper bound of Mapa's homeostatic equilibrium band [MIN_AROUSAL_LEVEL, 2.0];
     // drives inside the band contribute to serotonergic satiety.
     double EQUILIBRIUM_BAND_UPPER = 2.0;
+
+    // --- Neuromodulator behavioural gains (applied in ActionProbabilityFilter) ---
+    // Tonic dopamine raises the softmax temperature (flatter → more exploration): T = 1 + gain·tanh(daTonic).
+    double DA_EXPLORATION_GAIN = 2.0;
+    // Tonic serotonin up-weights quieting actions (SLEEP/OBSERVE/WANDER): factor = 1 + gain·satiety.
+    double SEROTONIN_REST_GAIN = 1.0;
 }

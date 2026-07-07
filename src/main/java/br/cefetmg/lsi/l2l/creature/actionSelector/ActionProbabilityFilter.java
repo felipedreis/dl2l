@@ -1,5 +1,6 @@
 package br.cefetmg.lsi.l2l.creature.actionSelector;
 
+import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
 import br.cefetmg.lsi.l2l.creature.common.Action;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
@@ -15,14 +16,46 @@ import java.util.stream.Collectors;
 
 /**
  * Created by felipe on 24/08/17.
+ *
+ * <p>Probabilistic (striatal) action chooser. Tonic neuromodulators bias the sampling distribution
+ * at selection time via {@link #setModulation(double, double)} — dopamine raises the softmax
+ * temperature (exploration), serotonin up-weights quieting actions (rest/observe/wander). The
+ * learned operant table is never modified by this bias; the default state (temperature 1, no bias)
+ * reproduces the pre-neuromodulation behaviour exactly.
  */
 public class ActionProbabilityFilter implements ActionFilter {
+    private static final Set<ActionType> QUIETING_ACTIONS =
+            EnumSet.of(ActionType.SLEEP, ActionType.OBSERVE, ActionType.WANDER);
+
     private Random random;
     private OperantConditioning operantConditioning;
 
+    private double temperature = 1.0;   // softmax temperature; 1.0 = unmodulated
+    private double restBias = 0.0;       // additive up-weight fraction for quieting actions; 0.0 = none
+
     public ActionProbabilityFilter(OperantConditioning operantConditioning) {
+        this(operantConditioning, new Random(System.currentTimeMillis()));
+    }
+
+    /** Seedable constructor for deterministic tests of the sampling distribution. */
+    ActionProbabilityFilter(OperantConditioning operantConditioning, Random random) {
         this.operantConditioning = operantConditioning;
-        this.random = new Random(System.currentTimeMillis());
+        this.random = random;
+    }
+
+    /**
+     * Set the tonic neuromodulator gains for the next selection. {@code daTonic} raises the
+     * temperature (flatter distribution → exploration); {@code serotoninTonic} raises the rest bias.
+     * Serotonin is de-scaled by the pool's leak so the effective term is the underlying satiety ∈ [0,1].
+     */
+    public void setModulation(double daTonic, double serotoninTonic) {
+        this.temperature = 1.0 + Constants.DA_EXPLORATION_GAIN * Math.tanh(Math.max(0.0, daTonic));
+        double satiety = clamp01(serotoninTonic * (1.0 - Constants.SEROTONIN_DECAY));
+        this.restBias = Constants.SEROTONIN_REST_GAIN * satiety;
+    }
+
+    private static double clamp01(double v) {
+        return v < 0 ? 0 : (v > 1 ? 1 : v);
     }
 
     @Override
@@ -63,6 +96,15 @@ public class ActionProbabilityFilter implements ActionFilter {
 
                     double probability = getActionProbability(actionsProbability,
                             actToDisambiguate.type);
+
+                    // Tonic dopamine: soften/sharpen via temperature (p^(1/T)); T=1 leaves it unchanged.
+                    if (temperature != 1.0) {
+                        probability = Math.pow(probability, 1.0 / temperature);
+                    }
+                    // Tonic serotonin: up-weight quieting actions (rest/observe/wander).
+                    if (restBias != 0.0 && QUIETING_ACTIONS.contains(actToDisambiguate.type)) {
+                        probability *= (1.0 + restBias);
+                    }
 
                     probabilities[i] = probability;
                     sumOfProbabilities += probability;
