@@ -7,4 +7,7 @@ package br.cefetmg.lsi.l2l.creature.components;
 public interface CircadianClock {
     void tick();
     double driveRate();
+
+    /** Current oscillator phase in radians; used to modulate neuromodulator baseline synthesis. */
+    double phase();
 }

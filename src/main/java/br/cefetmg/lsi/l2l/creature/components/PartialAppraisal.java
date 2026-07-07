@@ -11,6 +11,8 @@ import br.cefetmg.lsi.l2l.stimuli.AdrenergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.EmotionalStimulus;
 import br.cefetmg.lsi.l2l.stimuli.ProprioceptiveStimulus;
 import br.cefetmg.lsi.l2l.stimuli.AdenosinergicStimulus;
+import br.cefetmg.lsi.l2l.stimuli.NeuromodulatorTick;
+import br.cefetmg.lsi.l2l.stimuli.SerotonergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.Stimulus;
 import br.cefetmg.lsi.l2l.world.Self;
 
@@ -61,6 +63,15 @@ public class PartialAppraisal extends CreatureComponent {
             creature.homeostatic().tell(sleepDrive);
         }
 
+        // Neuromodulator pacemaker: tonic serotonin (satiety) release + per-cycle reuptake tick.
+        // Emitted whenever the pool is in use (expectancy feeds dopamine; neuromodulation reads tonic).
+        if (learningSettings.isNeuromodulationEnabled() || learningSettings.isExpectancyEnabled()) {
+            creature.neuromodulators().tell(
+                    new SerotonergicStimulus(this.id, nextStimulusId(), computeSatiety()));
+            creature.neuromodulators().tell(
+                    new NeuromodulatorTick(this.id, nextStimulusId(), circadian.phase()));
+        }
+
         List<Stimulus> propStimuli = (List) stimuli.stream()
                 .filter(s -> s instanceof ProprioceptiveStimulus)
                 .collect(Collectors.toList());
@@ -104,6 +115,22 @@ public class PartialAppraisal extends CreatureComponent {
         behaviouralState.setChangeStimulusState(changeEmotional);
 
         persist(changeEmotional, changeAdrenergic, behaviouralState);
+    }
+
+    /**
+     * Serotonergic satiety signal ∈ [0, 1]: the mean depth of the four active drives inside Mapa's
+     * homeostatic equilibrium band {@code [MIN_AROUSAL_LEVEL, EQUILIBRIUM_BAND_UPPER]}. Low arousal
+     * (well-regulated) → high satiety → tonic serotonin rises (patience/quieting). Unmet needs → 0.
+     */
+    private double computeSatiety() {
+        double span = Constants.EQUILIBRIUM_BAND_UPPER - Constants.MIN_AROUSAL_LEVEL;
+        String[] active = {Constants.HUNGER, Constants.SLEEP, Constants.PAIN, Constants.TEDIUM};
+        double sum = 0.0;
+        for (String drive : active) {
+            double depth = (Constants.EQUILIBRIUM_BAND_UPPER - creature.emotions().getLevel(drive)) / span;
+            sum += Math.max(0.0, Math.min(1.0, depth));
+        }
+        return sum / active.length;
     }
 
     // Mapa §4.1.4 / Diamond et al. (2006) Yerkes-Dodson curves, normalised to [0, 1]:

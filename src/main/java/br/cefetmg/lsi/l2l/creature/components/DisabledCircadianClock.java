@@ -14,4 +14,9 @@ public class DisabledCircadianClock implements CircadianClock {
     public double driveRate() {
         return 0.0;
     }
+
+    @Override
+    public double phase() {
+        return 0.0;
+    }
 }
