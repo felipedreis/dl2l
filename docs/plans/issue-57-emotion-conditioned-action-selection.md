@@ -1,5 +1,11 @@
 # Issue #57 — Emotion-conditioned action selection: learned tendencies + optional innate bias
 
+> **SUPERSEDED.** After design discussion this narrow plan was repurposed into the deeper
+> neuromodulatory expectancy loop. See **`issue-57-neuromodulatory-expectancy.md`** for the
+> implemented plan and `docs/reports/issue-57-neuromodulatory-expectancy.md` for results.
+> Retained for history; the `affectBasic`-keyed operant idea here became the symbolic expectancy
+> predictor there.
+
 ## Context
 
 Issue #57 (roadmap Finding C, Task 3): the dominant emotion (`toRegulate`) is threaded through every
