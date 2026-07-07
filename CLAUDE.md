@@ -173,4 +173,7 @@ Before implementing a feature:
     e. You should collect the data and analyse it with python
     f. You should finally create a report in docs/reports folder 
     g. The report should have the following sections: Purpose, Assumptions, Hypothesis, Results and Analysis 
-    h. You should include all the graphs and figures needed in your report 
+    h. You should include all the graphs and figures needed in your report
+    i. Upload all data collected during the experiment to `felipedreis/dl2l-experiments` on HuggingFace
+       under the prefix `p{issue-number}/` (e.g. `p55/` for issue #55). Use `hf upload` or
+       `ml/scripts/upload_hf.py`. Never discard experiment data — it must be preserved on HF.
