@@ -189,6 +189,7 @@ public class CreatureActor implements Creature {
         factories.put(FullAppraisal.class,         id -> new FullAppraisal(id, effective, mlExt));
         factories.put(HomeostaticRegulation.class, id -> new HomeostaticRegulation(id, effective));
         factories.put(Valuation.class,             Valuation::new);
+        factories.put(NeuromodulatorSystem.class,  NeuromodulatorSystem::new);
         return factories;
     }
 
@@ -258,6 +259,7 @@ public class CreatureActor implements Creature {
     public ComponentRef fullAppraisal()   { return refOf(FullAppraisal.class); }
     public ComponentRef homeostatic()     { return refOf(HomeostaticRegulation.class); }
     public ComponentRef valuation()       { return refOf(Valuation.class); }
+    public ComponentRef neuromodulators() { return refOf(NeuromodulatorSystem.class); }
 
     @Override
     public EmotionalSystem emotions() {

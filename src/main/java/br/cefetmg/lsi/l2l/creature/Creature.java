@@ -35,6 +35,9 @@ public interface Creature {
     ComponentRef homeostatic();
     ComponentRef valuation();
 
+    /// Neuromodulator pool (dopamine / serotonin) — untyped, message-driven
+    ComponentRef neuromodulators();
+
     EmotionalSystem emotions();
 
     OperantConditioning operantConditioning();
