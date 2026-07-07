@@ -3,6 +3,7 @@ package br.cefetmg.lsi.l2l.stimuli;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.creature.components.Emotion;
+import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyContext;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
 /**
@@ -20,14 +21,21 @@ public class EvaluationStimulus extends Stimulus {
 
     public final ActionType executedAction;
 
+    /**
+     * Snapshot of the dominant regulated drive's state at decision time (pre-interaction level),
+     * used by the {@link ExpectancyContext}-keyed expectancy predictor in Valuation.
+     */
+    public final ExpectancyContext expectancyContext;
+
     public EvaluationStimulus(SequentialId origin, SequentialId stimulusId, SequentialId objectId,
                               WorldObjectType type, ActionType executedAction, Emotion regulatedEmotion,
-                              double arousalVariation) {
+                              double arousalVariation, ExpectancyContext expectancyContext) {
         super(origin, stimulusId);
         this.objectId = objectId;
         this.type = type;
         this.executedAction = executedAction;
         this.regulatedEmotion = regulatedEmotion;
         this.arousalVariation = arousalVariation;
+        this.expectancyContext = expectancyContext;
     }
 }

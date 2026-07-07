@@ -13,6 +13,10 @@ import br.cefetmg.lsi.l2l.creature.bd.CreatureState;
 import br.cefetmg.lsi.l2l.creature.components.*;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioningActor;
+import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ContinuousDriveExpectancy;
+import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.DiscreteDriveExpectancy;
+import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyMode;
+import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyPredictor;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystemActor;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
@@ -64,6 +68,8 @@ public class CreatureActor implements Creature {
     private EmotionalSystem emotionalSystem;
 
     private OperantConditioning operantConditioning;
+
+    private ExpectancyPredictor expectancy;
 
     private MemorySystem memory;
 
@@ -129,6 +135,15 @@ public class CreatureActor implements Creature {
         // Register under this creature's key so components can find it via learningSettings(id.key).
         ext.configure(id.key, effective);
 
+        // Symbolic expectancy predictor (TypedActor facade — serialises the single writer, Valuation).
+        final ExpectancyMode expMode = effective.getExpectancyMode();
+        expectancy = TypedActor.get(TypedActor.context())
+                .typedActorOf(new TypedProps<>(ExpectancyPredictor.class,
+                        (Creator<ExpectancyPredictor>) () -> expMode == ExpectancyMode.CONTINUOUS
+                                ? new ContinuousDriveExpectancy()
+                                : new DiscreteDriveExpectancy()),
+                        "expectancy");
+
         if (effective.isConsolidationEnabled()) {
             boolean jepaMode = effective.isFilterEnabled(ActionSelectionType.WORLD_MODEL);
             if (jepaMode) {
@@ -188,7 +203,7 @@ public class CreatureActor implements Creature {
         factories.put(PartialAppraisal.class,      id -> new PartialAppraisal(id, effective));
         factories.put(FullAppraisal.class,         id -> new FullAppraisal(id, effective, mlExt));
         factories.put(HomeostaticRegulation.class, id -> new HomeostaticRegulation(id, effective));
-        factories.put(Valuation.class,             Valuation::new);
+        factories.put(Valuation.class,             id -> new Valuation(id, effective));
         factories.put(NeuromodulatorSystem.class,  NeuromodulatorSystem::new);
         return factories;
     }
@@ -269,6 +284,11 @@ public class CreatureActor implements Creature {
     @Override
     public OperantConditioning operantConditioning() {
         return operantConditioning;
+    }
+
+    @Override
+    public ExpectancyPredictor expectancy() {
+        return expectancy;
     }
 
     @Override

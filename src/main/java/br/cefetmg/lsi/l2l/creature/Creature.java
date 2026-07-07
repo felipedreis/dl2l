@@ -3,6 +3,7 @@ package br.cefetmg.lsi.l2l.creature;
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.creature.components.EmotionalSystem;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
+import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyPredictor;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 
 /**
@@ -42,6 +43,9 @@ public interface Creature {
 
     OperantConditioning operantConditioning();
     MemorySystem memory();
+
+    /// Symbolic reward-expectancy predictor (baseline for the dopaminergic RPE)
+    ExpectancyPredictor expectancy();
 
     // Sleep-gated adapter consolidation
     ComponentRef memoryConsolidator();
