@@ -3,6 +3,9 @@
 **Status:** implemented + validated. **Branch:** `feat/issue-57-emotion-conditioned-action-selection`.
 **Data:** `felipedreis/dl2l-experiments` prefix `p57/`.
 
+> **Addendum (affects, eat-loop, thriving creature) is at the bottom of this report** — it supersedes
+> the earlier pilot's behavioural conclusions. Read [§ Addendum](#addendum--affects-eat-loop-and-a-thriving-creature) for the final state.
+
 ## Purpose
 
 Issue #57 was repurposed from "emotion-conditioned action selection" into the deeper mechanism it
@@ -124,3 +127,55 @@ cd docker && docker compose -f docker-compose-exp-p57-discrete.yml up   # UI at 
 # dump expectancy_state / chosen_action_state / neuromodulator_state_log -> ml/data_p57/<arm>/
 python3 analysis/exp_p57_expectancy.py                                   # figures -> ml/data_p57/figures/
 ```
+
+---
+
+## Addendum — affects, eat-loop, and a thriving creature
+
+A follow-up investigation (small dense 800×600 world, 1 creature) probed whether the over-sleeping /
+non-foraging was environmental. It was **not** — it exposed three deeper issues and their fixes, ending
+in a creature that actually survives and behaves.
+
+### 1. Affects are not lethal drives
+A creature was dying of **tedium = 7** (boredom) while well-fed. Per the roadmap §2 taxonomy, tedium
+and pain are **affects**, not basic drives. Fixes:
+- **Death is drive-only:** `getMaxDriveArousal()` over `{hunger, sleep}` gates the death check; affects
+  can never be lethal.
+- **Tedium = reward-absence affect:** removed from the metabolic drift; it rises passively (slowed by
+  serotonergic contentment) and is relieved by phasic **dopamine** (RPE>0 — eating/novelty), regulated
+  entirely inside `NeuromodulatorSystem`.
+- **Pain = nociception affect:** also removed from the metabolic drift (it was drifting up with no
+  injury and causing a spurious ~95% AVOID spiral). It now stays at MIN in a hazard-free world.
+
+The sympathetic metabolic drift now applies to **basic drives only** (hunger, and sleep when circadian
+is off).
+
+### 2. The eat loop never nourished (pre-existing bug)
+Even when foraging, the creature starved: `mouth_interactions` was always 0 and hunger climbed
+unchecked. Root cause: `Mouth` sent the `DestructiveStimulus` to the holder with **no reply-to sender**,
+so the eaten fruit's `EnergeticStimulus` reply went to **dead letters**. Fixed with a sender-aware
+`ComponentRef.tell(msg, sender)`; the Mouth now replies-to `self()`, so the reply returns to it →
+`NutritiveStimulus` → hunger relief. Eating finally works.
+
+### 3. Boredom drives exploration, not staring
+With everything else fixed, a content creature fixated (OBSERVE) on visible fruit. The tedium tendency
+is now `{WANDER}` (explore for novelty) and WANDER is always an available action, so a content creature
+**explores** instead of staring.
+
+### Result — a thriving, active organism (small dense world, 1 creature)
+
+| metric | before this arc | after |
+|---|---|---|
+| survival | dies of tedium (~10 s) / hunger | **alive indefinitely** (42k+ actions) |
+| eating | 0 nutrition ever | **eats continuously** (hunger ~0.7) |
+| pain | drifts to 7 → AVOID spiral | **0.18 (MIN)** |
+| tedium | 7 → death | **~0.5** (active, never bored) |
+| action mix | ~83% SLEEP or ~88% OBSERVE/SLEEP | **WANDER 40% · APPROACH 40% · EAT 19%** |
+
+The creature forages when hungry, eats successfully, and explores when content — ~99% of actions are
+active/moving. Data: HF `p57/` (`data_p57_thriving`). Tests: 175 green.
+
+### Follow-ups
+- Re-run the formal 3-arm comparison (baseline/discrete/continuous) with these fixes for updated H1/H2
+  statistics (the eat-loop fix + affect redesign change the dynamics materially).
+- Geometry-stream backpressure (`DropHead`) still drops frames under object flood — deferred.
