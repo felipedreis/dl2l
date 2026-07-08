@@ -179,3 +179,25 @@ active/moving. Data: HF `p57/` (`data_p57_thriving`). Tests: 175 green.
 - Re-run the formal 3-arm comparison (baseline/discrete/continuous) with these fixes for updated H1/H2
   statistics (the eat-loop fix + affect redesign change the dynamics materially).
 - Geometry-stream backpressure (`DropHead`) still drops frames under object flood — deferred.
+
+### Ablation — ActionTendency WITH vs WITHOUT (all fixes on, 5 trials each)
+
+Same "everything fixed" build; the only difference is `actionTendencyEnabled`. Small dense world, 1
+creature, capped at ~8–11k actions. **Both arms survive** now (eat-loop fixed, affects non-lethal) —
+the difference is entirely in behaviour:
+
+| action (mean %) | WITHOUT tendency | WITH tendency |
+|---|---|---|
+| SLEEP | **84.0** | **0.4** |
+| APPROACH | 5.2 | 24.8 |
+| EAT | 2.4 | 13.4 |
+| WANDER | 1.3 | 61.5 |
+| foraging (APPROACH+EAT) | 7.6 | 38.2 |
+| successful eats (count) | 61 | 177 |
+
+![Tendency ablation](figures/p57/tendency_ablation.png)
+
+Even with everything else fixed, **without ActionTendency the creature defaults to ~84% SLEEP** — it
+survives passively (eating enough to keep hunger low) but is essentially inactive. **With ActionTendency**
+it forages and explores (WANDER 62%, APPROACH 25%, EAT 13%) and eats ~3× as much. The dominant-drive→
+action coupling is what converts a viable-but-passive creature into an active, foraging, exploring one.
