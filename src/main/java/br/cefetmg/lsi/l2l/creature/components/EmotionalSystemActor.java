@@ -19,6 +19,10 @@ public class EmotionalSystemActor implements EmotionalSystem {
     static final Set<String> ACTIVE = Set.of(
             Constants.HUNGER, Constants.SLEEP, Constants.PAIN, Constants.TEDIUM);
 
+    // Basic drives (bodily needs) are lethal at MAX_AROUSAL; affects (pain, tedium) are evaluative
+    // signals that are regulated and steer behaviour but never cause death. See roadmap §2.
+    static final Set<String> DRIVES = Set.of(Constants.HUNGER, Constants.SLEEP);
+
     private List<Emotion> simpleEmotions;
 
     public EmotionalSystemActor(){
@@ -64,6 +68,14 @@ public class EmotionalSystemActor implements EmotionalSystem {
     public Emotion getMaxArousal() {
         return simpleEmotions.stream()
                 .filter(e -> ACTIVE.contains(e.getName()))
+                .max(Comparator.comparing(Emotion::getLevel))
+                .get();
+    }
+
+    @Override
+    public Emotion getMaxDriveArousal() {
+        return simpleEmotions.stream()
+                .filter(e -> DRIVES.contains(e.getName()))
                 .max(Comparator.comparing(Emotion::getLevel))
                 .get();
     }

@@ -51,10 +51,17 @@ public class NeuromodulatorSystem extends CreatureComponent {
         publishState();
     }
 
-    /** Phasic dopamine release: add the reward-prediction-error quantum to the tonic pool. */
+    /**
+     * Phasic dopamine release: add the reward-prediction-error quantum to the tonic pool, and — since
+     * tedium is the affective readout of the reward system — a positive prediction error (a rewarding
+     * or novel event) relieves boredom.
+     */
     private void onDopamine(DopaminergicStimulus da) {
         lastPhasicDopamine = da.rpe;
         dopamine = clampFloor(dopamine + da.rpe);
+        if (da.rpe > 0) {
+            creature.emotions().regulate(Constants.TEDIUM, -Constants.DA_TEDIUM_RELIEF * da.rpe);
+        }
     }
 
     /** Serotonin release: add the satiety quantum to the tonic pool. */
@@ -62,10 +69,22 @@ public class NeuromodulatorSystem extends CreatureComponent {
         serotonin = clampFloor(serotonin + serotonergic.satiety);
     }
 
-    /** Per-cycle reuptake (multiplicative decay) plus circadian-modulated baseline synthesis. */
+    /**
+     * Per-cycle reuptake (multiplicative decay) plus circadian-modulated baseline synthesis, then the
+     * passive boredom rise: with no reward arriving, tedium creeps up — slowed by serotonergic
+     * contentment (a content creature tolerates monotony longer).
+     */
     private void onTick(NeuromodulatorTick tick) {
         dopamine  = clampFloor(dopamine  * Constants.DOPAMINE_DECAY  + baseline(Constants.DOPAMINE_BASELINE,  tick.circadianPhase));
         serotonin = clampFloor(serotonin * Constants.SEROTONIN_DECAY + baseline(Constants.SEROTONIN_BASELINE, tick.circadianPhase));
+
+        double satiety = clamp01(serotonin * (1.0 - Constants.SEROTONIN_DECAY));
+        double rise = Constants.BOREDOM_RISE_RATE / (1.0 + Constants.SEROTONIN_BOREDOM_TOLERANCE * satiety);
+        creature.emotions().regulate(Constants.TEDIUM, rise);
+    }
+
+    private static double clamp01(double v) {
+        return v < 0 ? 0 : (v > 1 ? 1 : v);
     }
 
     private void publishState() {

@@ -266,6 +266,10 @@ public class FullAppraisal extends CreatureComponent {
     }
 
     private void dispatchTediumStimulus(ActionType selectedAction) {
+        // When the neuromodulator loop is active, tedium is a reward-absence affect regulated by the
+        // NeuromodulatorSystem (dopamine relief + serotonin-slowed passive rise), so the legacy
+        // action-based tedium drift is suppressed to avoid double-regulation.
+        if (learningSettings.isNeuromodulatorLoopActive()) return;
         if (selectedAction == ActionType.SLEEP) return;
 
         double delta;

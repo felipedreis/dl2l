@@ -47,8 +47,8 @@ public class HomeostaticRegulationTest {
                 "HUNGER must be raised by adrenergic even with circadian on");
         assertTrue(h.creature().emotions().getLevel(Constants.PAIN)   > painBefore,
                 "PAIN must be raised by adrenergic even with circadian on");
-        assertTrue(h.creature().emotions().getLevel(Constants.TEDIUM) > tediumBefore,
-                "TEDIUM must be raised by adrenergic even with circadian on");
+        assertEquals(tediumBefore, h.creature().emotions().getLevel(Constants.TEDIUM), 1e-9,
+                "TEDIUM is an affect regulated by the reward system, not by metabolic drift");
     }
 
     @Test

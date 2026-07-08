@@ -50,7 +50,9 @@ public class PartialAppraisal extends CreatureComponent {
 
         Emotion maxEmotion = creature.emotions().getMaxArousal();
 
-        if (maxEmotion.getLevel() >= Constants.MAX_AROUSAL_LEVEL)
+        // Death is a basic-drive deficit (starvation / terminal sleep deprivation); affects
+        // (pain, tedium) are never lethal. The dominant emotion above still drives action selection.
+        if (creature.emotions().getMaxDriveArousal().getLevel() >= Constants.MAX_AROUSAL_LEVEL)
             creature.kill();
 
         AdrenergicStimulus adrenergic = new AdrenergicStimulus(this.id, nextStimulusId(), Constants.DELTA);
@@ -65,7 +67,7 @@ public class PartialAppraisal extends CreatureComponent {
 
         // Neuromodulator pacemaker: tonic serotonin (satiety) release + per-cycle reuptake tick.
         // Emitted whenever the pool is in use (expectancy feeds dopamine; neuromodulation reads tonic).
-        if (learningSettings.isNeuromodulationEnabled() || learningSettings.isExpectancyEnabled()) {
+        if (learningSettings.isNeuromodulatorLoopActive()) {
             creature.neuromodulators().tell(
                     new SerotonergicStimulus(this.id, nextStimulusId(), computeSatiety()));
             creature.neuromodulators().tell(

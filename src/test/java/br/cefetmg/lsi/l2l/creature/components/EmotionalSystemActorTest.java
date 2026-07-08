@@ -140,6 +140,40 @@ public class EmotionalSystemActorTest {
         assertTrue(max.getLevel() > Constants.MIN_AROUSAL_LEVEL + 2.5);
     }
 
+    // --- Drive-scoped death (affects are non-lethal) ---
+
+    @Test
+    void get_max_drive_arousal_ignores_affects() {
+        // Tedium (an affect) is maxed out, but drive arousal must ignore it — only hunger/sleep count.
+        emotions.regulate(Constants.TEDIUM, Constants.MAX_AROUSAL_LEVEL);
+        emotions.regulate(Constants.HUNGER, 1.0);
+
+        Emotion maxAll   = emotions.getMaxArousal();       // includes affects → tedium
+        Emotion maxDrive = emotions.getMaxDriveArousal();  // drives only → hunger
+
+        assertEquals(Constants.TEDIUM, maxAll.getName(), "dominant emotion for action selection is the maxed tedium");
+        assertEquals(Constants.HUNGER, maxDrive.getName(), "drive arousal must ignore the affect tedium");
+        assertTrue(maxDrive.getLevel() < Constants.MAX_AROUSAL_LEVEL,
+                "a maxed affect must not push drive arousal to the lethal threshold");
+    }
+
+    @Test
+    void maxed_pain_and_tedium_do_not_reach_drive_death_threshold() {
+        emotions.regulate(Constants.PAIN,   Constants.MAX_AROUSAL_LEVEL);
+        emotions.regulate(Constants.TEDIUM, Constants.MAX_AROUSAL_LEVEL);
+
+        assertTrue(emotions.getMaxDriveArousal().getLevel() < Constants.MAX_AROUSAL_LEVEL,
+                "affects pinned at max must not trigger the drive-based death check");
+    }
+
+    @Test
+    void get_max_drive_arousal_tracks_hunger_and_sleep() {
+        emotions.regulate(Constants.SLEEP, 4.0);
+        assertEquals(Constants.SLEEP, emotions.getMaxDriveArousal().getName());
+        emotions.regulate(Constants.HUNGER, 5.0);
+        assertEquals(Constants.HUNGER, emotions.getMaxDriveArousal().getName());
+    }
+
     // --- Hunger regulation ---
 
     @Test

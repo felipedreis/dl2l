@@ -97,4 +97,12 @@ public interface Constants {
     double DA_EXPLORATION_GAIN = 2.0;
     // Tonic serotonin up-weights quieting actions (SLEEP/OBSERVE/WANDER): factor = 1 + gain·satiety.
     double SEROTONIN_REST_GAIN = 1.0;
+
+    // --- Tedium as a reward-absence affect (regulated by the neuromodulator system) ---
+    // Passive boredom accrual per cognitive cycle when no reward arrives.
+    double BOREDOM_RISE_RATE = 5e-3;
+    // Tedium relief per unit of positive reward-prediction error (a rewarding/novel event).
+    double DA_TEDIUM_RELIEF = 1.0;
+    // How strongly serotonergic contentment (satiety) slows the passive boredom rise.
+    double SEROTONIN_BOREDOM_TOLERANCE = 1.0;
 }

@@ -99,13 +99,16 @@ public class HomeostaticRegulation extends CreatureComponent {
     }
 
     private Stimulus handleAdrenergic(AdrenergicStimulus s) {
+        // Tedium is an affect (boredom), not a metabolic need, so it is excluded from the sympathetic
+        // metabolic drift — it is regulated by the reward system (see NeuromodulatorSystem).
         if (learningSettings.isCircadianEnabled()) {
             // Circadian clock owns sleep pressure via AdenosinergicStimulus; exclude SLEEP here.
             creature.emotions().regulate(Constants.HUNGER, s.delta);
             creature.emotions().regulate(Constants.PAIN,   s.delta);
-            creature.emotions().regulate(Constants.TEDIUM, s.delta);
         } else {
-            creature.emotions().regulateAll(s.delta);
+            creature.emotions().regulate(Constants.HUNGER, s.delta);
+            creature.emotions().regulate(Constants.SLEEP,  s.delta);
+            creature.emotions().regulate(Constants.PAIN,   s.delta);
         }
         return null;
     }

@@ -102,4 +102,41 @@ public class NeuromodulatorSystemTest {
         }
         assertEquals(0.0, publishedDopamine(h), 1e-9);
     }
+
+    // --- Tedium as a reward-absence affect regulated by the pool ---
+
+    @Test
+    void positive_dopamine_relieves_tedium() {
+        TestingHarness h = TestingHarness.builder().build();
+        h.creature().emotions().regulate(Constants.TEDIUM, 3.0);
+        double before = h.creature().emotions().getLevel(Constants.TEDIUM);
+
+        h.inject(NeuromodulatorSystem.class, dopamine(1.0)); // rpe>0 → relief = DA_TEDIUM_RELIEF*rpe
+
+        double after = h.creature().emotions().getLevel(Constants.TEDIUM);
+        assertEquals(before - Constants.DA_TEDIUM_RELIEF * 1.0, after, 1e-9);
+        assertTrue(after < before, "a rewarding event should relieve boredom");
+    }
+
+    @Test
+    void negative_dopamine_does_not_relieve_tedium() {
+        TestingHarness h = TestingHarness.builder().build();
+        h.creature().emotions().regulate(Constants.TEDIUM, 3.0);
+        double before = h.creature().emotions().getLevel(Constants.TEDIUM);
+
+        h.inject(NeuromodulatorSystem.class, dopamine(-1.0)); // worse than expected → no relief
+
+        assertEquals(before, h.creature().emotions().getLevel(Constants.TEDIUM), 1e-9);
+    }
+
+    @Test
+    void tick_raises_tedium_passively() {
+        TestingHarness h = TestingHarness.builder().build();
+        double before = h.creature().emotions().getLevel(Constants.TEDIUM);
+
+        h.inject(NeuromodulatorSystem.class, tick(0.0));
+
+        assertTrue(h.creature().emotions().getLevel(Constants.TEDIUM) > before,
+                "with no reward, boredom should creep up each cycle");
+    }
 }

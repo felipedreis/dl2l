@@ -109,6 +109,15 @@ public class LearningSettings implements Serializable {
         return neuromodulationEnabled;
     }
 
+    /**
+     * Whether the neuromodulator loop is running at all (expectancy produces dopamine, and/or
+     * neuromodulation reads tonic levels). When active, the reward-absence tedium model regulates
+     * tedium and the legacy action-based tedium drift is suppressed.
+     */
+    public boolean isNeuromodulatorLoopActive() {
+        return expectancyEnabled || neuromodulationEnabled;
+    }
+
     /** Whether the innate ActionTendency prior biases action selection by the dominant emotion. */
     public boolean isActionTendencyEnabled() {
         return actionTendencyEnabled;
