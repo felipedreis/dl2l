@@ -29,4 +29,14 @@ public final class AkkaComponentRef implements ComponentRef {
     public void tell(Object msg) {
         ref.tell(msg, sender);
     }
+
+    @Override
+    public void tell(Object msg, ComponentRef replyTo) {
+        // Route the Akka reply-to sender so responses (e.g. EnergeticStimulus from an eaten Fruit)
+        // reach the requesting component instead of dead letters.
+        ActorRef sender = (replyTo instanceof AkkaComponentRef)
+                ? ((AkkaComponentRef) replyTo).actorRef()
+                : this.sender;
+        ref.tell(msg, sender);
+    }
 }
