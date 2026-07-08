@@ -236,12 +236,19 @@ public class FullAppraisal extends CreatureComponent {
                 break;
 
             case APPROACH:
+                // Narrow focus as creature nears target; wide field at max range, locked at contact.
+                // Implements the attentional feedback loop: approach → narrower field → fewer distractors.
                 angle = perception.angle;
+                focus = Constants.MIN_VISION_FIELD_OPENING
+                        + (Constants.MAX_VISION_FIELD_OPENING - Constants.MIN_VISION_FIELD_OPENING)
+                        * Math.min(perception.distance / Constants.DEFAULT_VISION_FIELD_RADIUS, 1.0);
                 break;
 
             case EAT:
                 speed = 0;
                 angle = perception.angle;
+                // Locked on target at contact (distance=0); same as interpolation result at d=0.
+                focus = Constants.MIN_VISION_FIELD_OPENING;
                 break;
 
             case WANDER:
@@ -258,6 +265,8 @@ public class FullAppraisal extends CreatureComponent {
 
             case SLEEP:
                 speed = 0;
+                // 0.0 = eye literally closed; gate enforced in Eye.onReceive (< MIN check).
+                focus = 0.0;
                 break;
         }
 
