@@ -39,6 +39,9 @@
     <class>br.cefetmg.lsi.l2l.creature.bd.ExpectancyState</class>
     <class>br.cefetmg.lsi.l2l.creature.bd.NeuromodulatorStateLog</class>
 
+    <!-- Post-#57: orexin/cortisol endocrine system -->
+    <class>br.cefetmg.lsi.l2l.creature.bd.EndocrineStateLog</class>
+
     <properties>
         <property name="javax.persistence.jdbc.url" value="jdbc:postgresql://dl2l-db:5432/l2l"/>
         <property name="javax.persistence.jdbc.password" value="postgres"/>

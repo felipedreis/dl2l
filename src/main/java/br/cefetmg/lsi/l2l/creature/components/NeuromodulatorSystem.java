@@ -6,6 +6,7 @@ import br.cefetmg.lsi.l2l.creature.bd.NeuromodulatorStateLog;
 import br.cefetmg.lsi.l2l.stimuli.DopaminergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.NeuromodulatorState;
 import br.cefetmg.lsi.l2l.stimuli.NeuromodulatorTick;
+import br.cefetmg.lsi.l2l.stimuli.OrexinergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.SerotonergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.Stimulus;
 
@@ -27,7 +28,9 @@ public class NeuromodulatorSystem extends CreatureComponent {
 
     private double dopamine = 0.0;
     private double serotonin = 0.0;
+    private double orexin = 0.0;
     private double lastPhasicDopamine = 0.0;
+    private double lastCircadianPhase = 0.0;
     private long publishSeq = 0;
 
     public NeuromodulatorSystem(SequentialId id) {
@@ -43,6 +46,7 @@ public class NeuromodulatorSystem extends CreatureComponent {
             switch (stimulus) {
                 case DopaminergicStimulus da -> onDopamine(da);
                 case SerotonergicStimulus serotonergic -> onSerotonin(serotonergic);
+                case OrexinergicStimulus ox -> onOrexin(ox);
                 case NeuromodulatorTick tick -> onTick(tick);
                 default -> { /* not a neuromodulator message — ignore */ }
             }
@@ -69,6 +73,11 @@ public class NeuromodulatorSystem extends CreatureComponent {
         serotonin = clampFloor(serotonin + serotonergic.satiety);
     }
 
+    /** Orexin release: accumulate into the pool; decay happens each tick (same pattern as DA). */
+    private void onOrexin(OrexinergicStimulus ox) {
+        orexin = clampFloor(orexin + ox.release);
+    }
+
     /**
      * Per-cycle reuptake (multiplicative decay) plus circadian-modulated baseline synthesis, then the
      * passive boredom rise: with no reward arriving, tedium creeps up — slowed by serotonergic
@@ -77,6 +86,8 @@ public class NeuromodulatorSystem extends CreatureComponent {
     private void onTick(NeuromodulatorTick tick) {
         dopamine  = clampFloor(dopamine  * Constants.DOPAMINE_DECAY  + baseline(Constants.DOPAMINE_BASELINE,  tick.circadianPhase));
         serotonin = clampFloor(serotonin * Constants.SEROTONIN_DECAY + baseline(Constants.SEROTONIN_BASELINE, tick.circadianPhase));
+        orexin    = clampFloor(orexin    * Constants.OREXIN_DECAY);
+        lastCircadianPhase = tick.circadianPhase;
 
         double satiety = clamp01(serotonin * (1.0 - Constants.SEROTONIN_DECAY));
         double rise = Constants.BOREDOM_RISE_RATE / (1.0 + Constants.SEROTONIN_BOREDOM_TOLERANCE * satiety);
@@ -89,8 +100,8 @@ public class NeuromodulatorSystem extends CreatureComponent {
 
     private void publishState() {
         creature.fullAppraisal().tell(
-                new NeuromodulatorState(id, nextStimulusId(), dopamine, serotonin));
-        persist(new NeuromodulatorStateLog(id.key, publishSeq++, dopamine, serotonin));
+                new NeuromodulatorState(id, nextStimulusId(), dopamine, serotonin, orexin));
+        persist(new NeuromodulatorStateLog(id.key, publishSeq++, dopamine, serotonin, orexin, lastCircadianPhase));
     }
 
     /** Baseline synthesis: a constant floor modulated by the circadian phase. */
@@ -105,5 +116,6 @@ public class NeuromodulatorSystem extends CreatureComponent {
     // Package-private accessors for unit tests (the production readout is the published message).
     double dopamine()  { return dopamine; }
     double serotonin() { return serotonin; }
+    double orexin()    { return orexin; }
     double lastPhasicDopamine() { return lastPhasicDopamine; }
 }

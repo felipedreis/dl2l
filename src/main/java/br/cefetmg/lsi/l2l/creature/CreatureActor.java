@@ -202,6 +202,7 @@ public class CreatureActor implements Creature {
         factories.put(HomeostaticRegulation.class, id -> new HomeostaticRegulation(id, effective));
         factories.put(Valuation.class,             id -> new Valuation(id, effective));
         factories.put(NeuromodulatorSystem.class,  NeuromodulatorSystem::new);
+        factories.put(EndocrineSystem.class,       EndocrineSystem::new);
         return factories;
     }
 
@@ -272,6 +273,7 @@ public class CreatureActor implements Creature {
     public ComponentRef homeostatic()     { return refOf(HomeostaticRegulation.class); }
     public ComponentRef valuation()       { return refOf(Valuation.class); }
     public ComponentRef neuromodulators() { return refOf(NeuromodulatorSystem.class); }
+    public ComponentRef endocrine()       { return refOf(EndocrineSystem.class); }
 
     @Override
     public EmotionalSystem emotions() {

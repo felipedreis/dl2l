@@ -36,8 +36,11 @@ public interface Creature {
     ComponentRef homeostatic();
     ComponentRef valuation();
 
-    /// Neuromodulator pool (dopamine / serotonin) — untyped, message-driven
+    /// Neuromodulator pool (dopamine / serotonin / orexin) — untyped, message-driven
     ComponentRef neuromodulators();
+
+    /// Endocrine system (cortisol / HPA axis) — untyped, message-driven
+    ComponentRef endocrine();
 
     EmotionalSystem emotions();
 

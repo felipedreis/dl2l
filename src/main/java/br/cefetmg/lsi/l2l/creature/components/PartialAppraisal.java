@@ -8,10 +8,12 @@ import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
 import br.cefetmg.lsi.l2l.creature.common.Perception;
 import br.cefetmg.lsi.l2l.stimuli.AdrenergicStimulus;
-import br.cefetmg.lsi.l2l.stimuli.EmotionalStimulus;
-import br.cefetmg.lsi.l2l.stimuli.ProprioceptiveStimulus;
 import br.cefetmg.lsi.l2l.stimuli.AdenosinergicStimulus;
+import br.cefetmg.lsi.l2l.stimuli.CortisolStimulus;
+import br.cefetmg.lsi.l2l.stimuli.EmotionalStimulus;
 import br.cefetmg.lsi.l2l.stimuli.NeuromodulatorTick;
+import br.cefetmg.lsi.l2l.stimuli.OrexinergicStimulus;
+import br.cefetmg.lsi.l2l.stimuli.ProprioceptiveStimulus;
 import br.cefetmg.lsi.l2l.stimuli.SerotonergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.Stimulus;
 import br.cefetmg.lsi.l2l.world.Self;
@@ -27,6 +29,7 @@ public class PartialAppraisal extends CreatureComponent {
 
     private final LearningSettings learningSettings;
     private CircadianClock circadian;
+    private double previousCircadianPhase = 0.0;
 
     public PartialAppraisal(SequentialId id, LearningSettings learningSettings) {
         super(id);
@@ -72,6 +75,24 @@ public class PartialAppraisal extends CreatureComponent {
                     new SerotonergicStimulus(this.id, nextStimulusId(), computeSatiety()));
             creature.neuromodulators().tell(
                     new NeuromodulatorTick(this.id, nextStimulusId(), circadian.phase()));
+        }
+
+        // Orexin: per-cycle release inversely proportional to sleep pressure.
+        if (learningSettings.isOrexinEnabled()) {
+            double sleepPressure = creature.emotions().getLevel(Constants.SLEEP);
+            double orexinRelease = Math.max(0.0, 1.0 - sleepPressure / Constants.MAX_AROUSAL_LEVEL);
+            creature.neuromodulators().tell(
+                    new OrexinergicStimulus(this.id, nextStimulusId(), orexinRelease));
+        }
+
+        // Cortisol morning pulse: fires once per circadian period when the phase wraps.
+        if (learningSettings.isEndocrineEnabled()) {
+            double currentPhase = circadian.phase();
+            if (currentPhase < previousCircadianPhase) {
+                creature.endocrine().tell(
+                        new CortisolStimulus(this.id, nextStimulusId(), Constants.CORTISOL_MORNING_PULSE));
+            }
+            previousCircadianPhase = currentPhase;
         }
 
         List<Stimulus> propStimuli = (List) stimuli.stream()

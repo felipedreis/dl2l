@@ -102,9 +102,12 @@ public class Simulation {
         }
 
         boolean actionTendencyEnabled = ls.hasPath("actionTendencyEnabled") && ls.getBoolean("actionTendencyEnabled");
+        boolean orexinEnabled         = ls.hasPath("orexinEnabled")         && ls.getBoolean("orexinEnabled");
+        boolean endocrineEnabled      = ls.hasPath("endocrineEnabled")      && ls.getBoolean("endocrineEnabled");
 
         return new LearningSettings(circadianEnabled, consolidationEnabled, enabledFilters,
-                expectancyEnabled, expectancyMode, neuromodulationEnabled, actionTendencyEnabled);
+                expectancyEnabled, expectancyMode, neuromodulationEnabled, actionTendencyEnabled,
+                orexinEnabled, endocrineEnabled);
     }
 
     public Long getNumHolders() {

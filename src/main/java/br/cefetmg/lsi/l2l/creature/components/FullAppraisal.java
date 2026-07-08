@@ -28,6 +28,7 @@ import br.cefetmg.lsi.l2l.creature.bd.SleepEpisodeState;
 import br.cefetmg.lsi.l2l.creature.ml.SleepStarted;
 import br.cefetmg.lsi.l2l.stimuli.CorticalStimulus;
 import br.cefetmg.lsi.l2l.stimuli.EmotionalStimulus;
+import br.cefetmg.lsi.l2l.stimuli.EndocrineState;
 import br.cefetmg.lsi.l2l.stimuli.NeuromodulatorState;
 import br.cefetmg.lsi.l2l.stimuli.Stimulus;
 import br.cefetmg.lsi.l2l.stimuli.TediumStimulus;
@@ -60,6 +61,10 @@ public class FullAppraisal extends CreatureComponent {
     private ActionProbabilityFilter affordanceFilter;
     private double daTonic = 0.0;
     private double serotoninTonic = 0.0;
+    private double orexinTonic = 0.0;
+
+    // Endocrine: cached for logging; STRESS is regulated directly by EndocrineSystem.
+    private double endocrineStress = 0.0;
 
     private long cognitiveCycle = 0;
     private boolean inSleep = false;
@@ -126,11 +131,15 @@ public class FullAppraisal extends CreatureComponent {
         for (Object aStimuli : stimuli) {
             Stimulus stimulus = (Stimulus) aStimuli;
 
-            if (stimulus instanceof NeuromodulatorState) {
-                // Cache the slow-varying tonic levels for the next action selection.
-                NeuromodulatorState nm = (NeuromodulatorState) stimulus;
-                daTonic = nm.dopamineTonic;
+            if (stimulus instanceof NeuromodulatorState nm) {
+                daTonic        = nm.dopamineTonic;
                 serotoninTonic = nm.serotoninTonic;
+                orexinTonic    = nm.orexinTonic;
+                continue;
+            }
+
+            if (stimulus instanceof EndocrineState es) {
+                endocrineStress = es.stressLevel;
                 continue;
             }
 
@@ -313,6 +322,9 @@ public class FullAppraisal extends CreatureComponent {
         List<Action> actions = new ArrayList<>();
         for (Perception perception : perceptions) {
             actions.addAll(actionsForPerception(perception));
+        }
+        if (learningSettings.isOrexinEnabled() && orexinTonic >= Constants.OREXIN_SLEEP_GATE_THRESHOLD) {
+            actions.removeIf(a -> a.type == ActionType.SLEEP);
         }
         return actions;
     }

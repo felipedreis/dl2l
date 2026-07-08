@@ -107,4 +107,24 @@ public interface Constants {
     double DA_TEDIUM_RELIEF = 1.0;
     // How strongly serotonergic contentment (satiety) slows the passive boredom rise.
     double SEROTONIN_BOREDOM_TOLERANCE = 1.0;
+
+    // --- Orexin (wakefulness stabiliser) ---
+    // Per-tick multiplicative decay of orexin tonic level (slow, so tonic is stable across cycles).
+    double OREXIN_DECAY                = 0.97;
+    // Below this tonic orexin level SLEEP is allowed back into the action set.
+    double OREXIN_SLEEP_GATE_THRESHOLD = 0.4;
+
+    // --- Cortisol / HPA axis ---
+    // Very slow decay: half-life ≈ 1386 cycles (~23 min at 1 cycle/s).
+    double CORTISOL_DECAY              = 0.9995;
+    // Circadian morning pulse magnitude (fires once per circadian period on phase wrap).
+    double CORTISOL_MORNING_PULSE      = 0.5;
+    // Per-handler stressor contribution: cortisol added = stressorMagnitude * GAIN.
+    double CORTISOL_STRESSOR_GAIN      = 0.3;
+    // Drive/affect arousal level above which a HomeostaticRegulation handler emits cortisol.
+    double STRESS_ACTIVATION_THRESHOLD = 4.0;
+    // Cortisol accumulation level above which the STRESS affect activates.
+    double CORTISOL_STRESS_THRESHOLD   = 3.0;
+    // Conversion factor: cortisol excess → stress arousal delta.
+    double CORTISOL_STRESS_GAIN        = 0.5;
 }
