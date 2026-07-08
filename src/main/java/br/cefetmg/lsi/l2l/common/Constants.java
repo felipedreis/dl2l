@@ -112,15 +112,19 @@ public interface Constants {
     // Per-tick multiplicative decay of orexin tonic level (slow, so tonic is stable across cycles).
     double OREXIN_DECAY                = 0.97;
     // Below this tonic orexin level SLEEP is allowed back into the action set.
-    double OREXIN_SLEEP_GATE_THRESHOLD = 0.4;
+    // Fixed point at full release = 1/(1-OREXIN_DECAY) ≈ 33.3.
+    // At sleep pressure = 50% of MAX (3.5), release = 0.5 → fixed point ≈ 16.7.
+    // Gate at 15 opens SLEEP around that point, giving ~10% hysteresis.
+    double OREXIN_SLEEP_GATE_THRESHOLD = 15.0;
 
     // --- Cortisol / HPA axis ---
-    // Very slow decay: half-life ≈ 1386 cycles (~23 min at 1 cycle/s).
-    double CORTISOL_DECAY              = 0.9995;
+    // Half-life ≈ 346 ticks (~1.7 circadian periods); morning pulse equilibrium ≈ 1.52 < threshold.
+    double CORTISOL_DECAY              = 0.998;
     // Circadian morning pulse magnitude (fires once per circadian period on phase wrap).
     double CORTISOL_MORNING_PULSE      = 0.5;
     // Per-handler stressor contribution: cortisol added = stressorMagnitude * GAIN.
-    double CORTISOL_STRESSOR_GAIN      = 0.3;
+    // Reduced from 0.3 to prevent runaway accumulation from transient sleep-pressure peaks.
+    double CORTISOL_STRESSOR_GAIN      = 0.05;
     // Drive/affect arousal level above which a HomeostaticRegulation handler emits cortisol.
     double STRESS_ACTIVATION_THRESHOLD = 4.0;
     // Cortisol accumulation level above which the STRESS affect activates.

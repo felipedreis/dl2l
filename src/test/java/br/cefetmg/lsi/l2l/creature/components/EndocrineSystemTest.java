@@ -53,13 +53,13 @@ public class EndocrineSystemTest {
         h.inject(EndocrineSystem.class, cortisol(5.0));
         double initial = lastState(h).cortisolTonic;
 
-        // After 300 empty batches the decay should be minimal (CORTISOL_DECAY ≈ 0.9995)
-        for (int i = 0; i < 300; i++) {
+        // After 100 batches the decay should be gradual (CORTISOL_DECAY=0.998 → ~82% remains).
+        for (int i = 0; i < 100; i++) {
             h.inject(EndocrineSystem.class, cortisol(0.0));
         }
         double remaining = lastState(h).cortisolTonic;
-        assertTrue(remaining > initial * 0.8,
-                "cortisol should still be above 80% of initial after 300 cycles; was " + remaining);
+        assertTrue(remaining > initial * 0.75,
+                "cortisol should still be above 75% of initial after 100 cycles; was " + remaining);
     }
 
     @Test
