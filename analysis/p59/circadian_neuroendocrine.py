@@ -35,7 +35,7 @@ import pandas as pd
 CONTAINER               = "db"
 DB_USER                 = "postgres"
 DB_NAME                 = "l2l"
-OREXIN_GATE             = 0.4
+OREXIN_GATE             = 15.0
 CORTISOL_STRESS_THRESHOLD = 3.0
 PHASE_BINS              = 60      # bins across [0, 2π] for Fig 1
 TICK_BIN_SIZE           = 200     # ticks per window for Fig 2 (= one circadian period)

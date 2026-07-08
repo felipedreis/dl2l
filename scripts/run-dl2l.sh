@@ -7,4 +7,4 @@ DATA_DIR=$4
 SIMULATION=$5
 CONFIG=$6
 
-java -Dconfig.file=$CONFIG -jar dl2l.jar --host $HOST --port $PORT --roles "$ROLE" --save $DATA_DIR --simulation $SIMULATION
+java -Xmx2g -Dconfig.file=$CONFIG -jar dl2l.jar --host $HOST --port $PORT --roles "$ROLE" --save $DATA_DIR --simulation $SIMULATION

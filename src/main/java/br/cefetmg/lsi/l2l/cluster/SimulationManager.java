@@ -9,11 +9,13 @@ import br.cefetmg.lsi.l2l.cluster.settings.Simulation;
 import br.cefetmg.lsi.l2l.cluster.settings.WorldObjectSetting;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import org.apache.commons.collections4.ListUtils;
+import scala.concurrent.duration.Duration;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 import static akka.cluster.ClusterEvent.*;
@@ -47,9 +49,19 @@ public class SimulationManager extends UntypedActor {
         this.maxHolders = settings.getNumHolders();
     }
 
+    private static final class MaxRuntimeExpired {}
+
     @Override
     public void preStart() throws Exception {
         cluster.subscribe(self(), MemberUp.class, MemberJoined.class, MemberExited.class);
+        int maxRuntime = settings.getMaxRuntimeMinutes();
+        if (maxRuntime > 0) {
+            context().system().scheduler().scheduleOnce(
+                    Duration.create(maxRuntime, TimeUnit.MINUTES),
+                    self(), new MaxRuntimeExpired(),
+                    context().dispatcher(), self());
+            logger.info("Simulation runtime limited to " + maxRuntime + " minutes");
+        }
     }
 
     @Override
@@ -81,6 +93,9 @@ public class SimulationManager extends UntypedActor {
 
             if (holdersDone.size() == maxHolders)
                 stopSimulation();
+        } else if (message instanceof MaxRuntimeExpired) {
+            logger.info("Maximum runtime reached — stopping simulation");
+            stopSimulation();
         }
     }
 
