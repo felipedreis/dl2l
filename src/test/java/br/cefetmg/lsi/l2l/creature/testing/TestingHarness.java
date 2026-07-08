@@ -11,6 +11,7 @@ import br.cefetmg.lsi.l2l.creature.components.Eye;
 import br.cefetmg.lsi.l2l.creature.components.FullAppraisal;
 import br.cefetmg.lsi.l2l.creature.components.HomeostaticRegulation;
 import br.cefetmg.lsi.l2l.creature.components.Mouth;
+import br.cefetmg.lsi.l2l.creature.components.NeuromodulatorSystem;
 import br.cefetmg.lsi.l2l.creature.components.Nose;
 import br.cefetmg.lsi.l2l.creature.components.PartialAppraisal;
 import br.cefetmg.lsi.l2l.creature.components.SensoryCortex;
@@ -66,6 +67,7 @@ public final class TestingHarness {
     public RecordingComponentRef fullRecorder()          { return recorderOf(FullAppraisal.class); }
     public RecordingComponentRef homeostaticRecorder()   { return recorderOf(HomeostaticRegulation.class); }
     public RecordingComponentRef valuationRecorder()     { return recorderOf(Valuation.class); }
+    public RecordingComponentRef neuromodulatorRecorder(){ return recorderOf(NeuromodulatorSystem.class); }
 
     public ExternalSink holderSink()             { return creature.holderSink(); }
     public ExternalSink memoryConsolidatorSink() { return creature.memoryConsolidatorSink(); }

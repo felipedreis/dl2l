@@ -24,4 +24,9 @@ public class ActiveCircadianClock implements CircadianClock {
     public double driveRate() {
         return Constants.BASE_SLEEP_DRIVE + Constants.CIRCADIAN_AMPLITUDE * Math.sin(phase);
     }
+
+    @Override
+    public double phase() {
+        return phase;
+    }
 }

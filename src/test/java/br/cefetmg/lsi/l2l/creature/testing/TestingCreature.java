@@ -10,6 +10,8 @@ import br.cefetmg.lsi.l2l.creature.bd.NoOpPersister;
 import br.cefetmg.lsi.l2l.creature.components.*;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioningActor;
+import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyPredictor;
+import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyPredictors;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystemActor;
 
@@ -35,6 +37,7 @@ public final class TestingCreature implements Creature {
     private final EmotionalSystem emotionalSystem = new EmotionalSystemActor();
     private final OperantConditioning operantConditioning = new OperantConditioningActor();
     private final MemorySystem memory = new MemorySystemActor();
+    private final ExpectancyPredictor expectancy;
 
     private Point position;
     private boolean alive;
@@ -60,6 +63,7 @@ public final class TestingCreature implements Creature {
         this.position = position;
         this.worldBoundaries = worldBoundaries;
         this.learningSettings = learningSettings;
+        this.expectancy = ExpectancyPredictors.forMode(learningSettings.getExpectancyMode());
     }
 
     @Override
@@ -82,7 +86,8 @@ public final class TestingCreature implements Creature {
         // FullAppraisal: pass null for MLServiceExtension.Impl so WORLD_MODEL is skipped.
         register(cid = cid.next(), new FullAppraisal(cid, learningSettings, null));
         register(cid = cid.next(), new HomeostaticRegulation(cid, learningSettings));
-        register(cid = cid.next(), new Valuation(cid));
+        register(cid = cid.next(), new Valuation(cid, learningSettings));
+        register(cid = cid.next(), new NeuromodulatorSystem(cid));
 
         // Wire each component to the Creature + persister + self-ref.
         components.forEach((cls, component) -> {
@@ -143,12 +148,17 @@ public final class TestingCreature implements Creature {
     public ComponentRef homeostatic()     { return refs.get(HomeostaticRegulation.class); }
     @Override
     public ComponentRef valuation()       { return refs.get(Valuation.class); }
+    @Override
+    public ComponentRef neuromodulators() { return refs.get(NeuromodulatorSystem.class); }
 
     @Override
     public EmotionalSystem emotions() { return emotionalSystem; }
 
     @Override
     public OperantConditioning operantConditioning() { return operantConditioning; }
+
+    @Override
+    public ExpectancyPredictor expectancy() { return expectancy; }
 
     @Override
     public MemorySystem memory() { return memory; }

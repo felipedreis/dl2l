@@ -9,6 +9,7 @@ import br.cefetmg.lsi.l2l.creature.bd.EmotionalState;
 import br.cefetmg.lsi.l2l.creature.bd.InternalDynamicState;
 import br.cefetmg.lsi.l2l.creature.bd.RegulationBatchStat;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
+import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyContext;
 import br.cefetmg.lsi.l2l.creature.ml.WakeUp;
 import br.cefetmg.lsi.l2l.stimuli.*;
 import br.cefetmg.lsi.l2l.world.Self;
@@ -60,6 +61,23 @@ public class HomeostaticRegulation extends CreatureComponent {
                 sameDriveCollision, drivesTouchedMask, batchChange));
     }
 
+    /** Capture the regulated drive's pre-interaction level as the expectancy-predictor context. */
+    private ExpectancyContext contextFor(String drive) {
+        return new ExpectancyContext(drive, creature.emotions().getLevel(drive));
+    }
+
+    /**
+     * The <em>realized</em> arousal change of a regulation event: post-level minus the pre-level
+     * captured in {@code ctx}. This is the true outcome the creature experienced — unlike the
+     * <em>intended</em> delta, it is 0 when the drive was already at its floor/ceiling and was
+     * clamped. Rewarding the realized change (not the intended one) is what stops a creature from
+     * being reinforced for e.g. sleeping when it is not sleepy, and makes consummatory reward
+     * genuinely depend on the drive level (more hunger relieved when starving than when sated).
+     */
+    private static double realizedDelta(ExpectancyContext ctx, Emotion regulated) {
+        return regulated.getLevel() - ctx.dominantDriveLevel();
+    }
+
     private EmotionalState emotionalSnapshot() {
         EmotionalState s = new EmotionalState();
         s.setHunger(creature.emotions().getLevel(Constants.HUNGER));
@@ -81,21 +99,23 @@ public class HomeostaticRegulation extends CreatureComponent {
     }
 
     private Stimulus handleAdrenergic(AdrenergicStimulus s) {
-        if (learningSettings.isCircadianEnabled()) {
-            // Circadian clock owns sleep pressure via AdenosinergicStimulus; exclude SLEEP here.
-            creature.emotions().regulate(Constants.HUNGER, s.delta);
-            creature.emotions().regulate(Constants.PAIN,   s.delta);
-            creature.emotions().regulate(Constants.TEDIUM, s.delta);
-        } else {
-            creature.emotions().regulateAll(s.delta);
+        // Sympathetic metabolic drift applies to basic drives only. The affects are driven by their
+        // own pathways, not a metabolic clock: pain by nociception (injury), tedium by the reward
+        // system (boredom = reward absence). So neither is raised here.
+        creature.emotions().regulate(Constants.HUNGER, s.delta);
+        if (!learningSettings.isCircadianEnabled()) {
+            // Circadian clock owns sleep pressure via AdenosinergicStimulus when enabled; otherwise
+            // sleep drifts metabolically here.
+            creature.emotions().regulate(Constants.SLEEP, s.delta);
         }
         return null;
     }
 
     private Stimulus handleNutritive(NutritiveStimulus s) {
+        ExpectancyContext ctx = contextFor(Constants.HUNGER);
         Emotion regulated = creature.emotions().regulate(Constants.HUNGER, -s.nutritiveValue);
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
-                s.origin, s.objectType, ActionType.EAT, regulated, -s.nutritiveValue);
+                s.origin, s.objectType, ActionType.EAT, regulated, realizedDelta(ctx, regulated), ctx);
         creature.valuation().tell(emitted);
         return emitted;
     }
@@ -106,9 +126,10 @@ public class HomeostaticRegulation extends CreatureComponent {
     }
 
     private Stimulus handleCholinergic(CholinergicStimulus s) {
+        ExpectancyContext ctx = contextFor(Constants.SLEEP);
         Emotion regulated = creature.emotions().regulate(Constants.SLEEP, -s.delta);
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(), id, Self.get(),
-                ActionType.SLEEP, regulated, -s.delta);
+                ActionType.SLEEP, regulated, realizedDelta(ctx, regulated), ctx);
         creature.valuation().tell(emitted);
         if (regulated.getLevel() <= 0) {
             logger.info(String.format("HomeostaticRegulation[%s]: sleep drive exhausted, sending WakeUp", id));
@@ -118,30 +139,33 @@ public class HomeostaticRegulation extends CreatureComponent {
     }
 
     private Stimulus handleNociceptive(NociceptiveStimulus s) {
+        ExpectancyContext ctx = contextFor(Constants.PAIN);
         Emotion regulated = creature.emotions().regulate(Constants.PAIN, s.painIntensity);
         if (s.action == null) return null;
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
-                s.origin, s.objectType, s.action, regulated, s.painIntensity);
+                s.origin, s.objectType, s.action, regulated, realizedDelta(ctx, regulated), ctx);
         creature.valuation().tell(emitted);
         return emitted;
     }
 
     private Stimulus handleAnalgesic(AnalgesicStimulus s) {
+        ExpectancyContext ctx = contextFor(Constants.PAIN);
         double currentPain = creature.emotions().getLevel(Constants.PAIN);
         double effectiveDelta = Math.min(s.delta, Math.max(0, currentPain));
         Emotion regulated = creature.emotions().regulate(Constants.PAIN, -effectiveDelta);
         if (s.action == null) return null;
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
-                s.origin, s.objectType, s.action, regulated, -effectiveDelta);
+                s.origin, s.objectType, s.action, regulated, realizedDelta(ctx, regulated), ctx);
         creature.valuation().tell(emitted);
         return emitted;
     }
 
     private Stimulus handleTedium(TediumStimulus s) {
+        ExpectancyContext ctx = contextFor(Constants.TEDIUM);
         Emotion regulated = creature.emotions().regulate(Constants.TEDIUM, s.delta);
         if (s.action != ActionType.WANDER && s.action != ActionType.OBSERVE) return null;
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
-                id, Self.get(), s.action, regulated, s.delta);
+                id, Self.get(), s.action, regulated, realizedDelta(ctx, regulated), ctx);
         creature.valuation().tell(emitted);
         return emitted;
     }

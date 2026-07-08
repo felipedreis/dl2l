@@ -6,6 +6,7 @@ import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionProbabilityFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionSelection;
+import br.cefetmg.lsi.l2l.creature.actionSelector.ActionTendencyFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.MemoryFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.RandomFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.TargetDistanceFilter;
@@ -27,6 +28,7 @@ import br.cefetmg.lsi.l2l.creature.bd.SleepEpisodeState;
 import br.cefetmg.lsi.l2l.creature.ml.SleepStarted;
 import br.cefetmg.lsi.l2l.stimuli.CorticalStimulus;
 import br.cefetmg.lsi.l2l.stimuli.EmotionalStimulus;
+import br.cefetmg.lsi.l2l.stimuli.NeuromodulatorState;
 import br.cefetmg.lsi.l2l.stimuli.Stimulus;
 import br.cefetmg.lsi.l2l.stimuli.TediumStimulus;
 import br.cefetmg.lsi.l2l.world.PlantType;
@@ -54,6 +56,11 @@ public class FullAppraisal extends CreatureComponent {
     private WorldModelFilter worldModelFilter;  // kept for updateInternalState calls; null when no dual encoder
     private ModelContract contract;
 
+    // Neuromodulation: cached tonic levels (eventually-consistent) and the filter they modulate.
+    private ActionProbabilityFilter affordanceFilter;
+    private double daTonic = 0.0;
+    private double serotoninTonic = 0.0;
+
     private long cognitiveCycle = 0;
     private boolean inSleep = false;
     private int sleepDwellTicks = 0;
@@ -79,11 +86,19 @@ public class FullAppraisal extends CreatureComponent {
         }
 
         List<ActionFilter> filterList = new ArrayList<>();
+        // Innate emotion→action coupling runs first as a coarse prior (soft, pass-through when empty),
+        // so e.g. a hungry creature pursues EAT/APPROACH instead of SLEEP before the learned filters.
+        if (learningSettings.isActionTendencyEnabled()) {
+            filterList.add(new ActionTendencyFilter(learningSettings.getActionTendencies()));
+        }
         for (ActionSelectionType type : LearningSettings.MASTER_FILTER_ORDER) {
             if (!learningSettings.isFilterEnabled(type)) continue;
             switch (type) {
                 case TARGET_DISTANCE -> filterList.add(new TargetDistanceFilter());
-                case AFFORDANCE      -> filterList.add(new ActionProbabilityFilter(creature.operantConditioning()));
+                case AFFORDANCE      -> {
+                    affordanceFilter = new ActionProbabilityFilter(creature.operantConditioning());
+                    filterList.add(affordanceFilter);
+                }
                 case MEMORY          -> filterList.add(new MemoryFilter(memorySystem));
                 case WORLD_MODEL     -> {
                     if (worldModelAvailable) {
@@ -111,6 +126,14 @@ public class FullAppraisal extends CreatureComponent {
         for (Object aStimuli : stimuli) {
             Stimulus stimulus = (Stimulus) aStimuli;
 
+            if (stimulus instanceof NeuromodulatorState) {
+                // Cache the slow-varying tonic levels for the next action selection.
+                NeuromodulatorState nm = (NeuromodulatorState) stimulus;
+                daTonic = nm.dopamineTonic;
+                serotoninTonic = nm.serotoninTonic;
+                continue;
+            }
+
             if (stimulus instanceof EmotionalStimulus) {
                 cognitiveCycle++;
                 memorySystem.tickDecisionCycle();
@@ -120,6 +143,12 @@ public class FullAppraisal extends CreatureComponent {
                 // before action selection so inference can condition on it.
                 if (worldModelFilter != null) {
                     worldModelFilter.updateInternalState(encodeInternalState());
+                }
+
+                // Tonic neuromodulators bias the affordance sampler (exploration / rest) at
+                // selection time; a no-op when neuromodulation is disabled.
+                if (learningSettings.isNeuromodulationEnabled() && affordanceFilter != null) {
+                    affordanceFilter.setModulation(daTonic, serotoninTonic);
                 }
 
                 List<Action> possibleActions = definePossibleActions(emotional.getPerceptions());
@@ -237,6 +266,10 @@ public class FullAppraisal extends CreatureComponent {
     }
 
     private void dispatchTediumStimulus(ActionType selectedAction) {
+        // When the neuromodulator loop is active, tedium is a reward-absence affect regulated by the
+        // NeuromodulatorSystem (dopamine relief + serotonin-slowed passive rise), so the legacy
+        // action-based tedium drift is suppressed to avoid double-regulation.
+        if (learningSettings.isNeuromodulatorLoopActive()) return;
         if (selectedAction == ActionType.SLEEP) return;
 
         double delta;
@@ -297,11 +330,15 @@ public class FullAppraisal extends CreatureComponent {
     }
 
     private List<Action> actionsAtDistance(Perception perception) {
+        // WANDER is always available so an exploratory (bored-but-content) creature can leave a
+        // perceived object and explore, rather than only staring at it (OBSERVE). Kept last so the
+        // priority-first filters still see APPROACH first.
         return Arrays.asList(
             new Action(ActionType.APPROACH, perception),
             new Action(ActionType.AVOID, perception),
             new Action(ActionType.SLEEP, perception),
-            new Action(ActionType.OBSERVE, perception)
+            new Action(ActionType.OBSERVE, perception),
+            new Action(ActionType.WANDER, perception)
         );
     }
 
@@ -312,7 +349,8 @@ public class FullAppraisal extends CreatureComponent {
         return Arrays.asList(
             new Action(ActionType.EAT, perception),
             new Action(ActionType.AVOID, perception),
-            new Action(restOrEscape, perception)
+            new Action(restOrEscape, perception),
+            new Action(ActionType.WANDER, perception)
         );
     }
 }

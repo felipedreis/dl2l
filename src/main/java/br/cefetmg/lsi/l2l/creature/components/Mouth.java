@@ -32,7 +32,9 @@ public class Mouth extends CreatureComponent{
 
                 if(somatic.actionType == ActionType.EAT || somatic.actionType == ActionType.PLAY) {
                     DestructiveStimulus destructive = new DestructiveStimulus(id, somatic.target, nextStimulusId());
-                    creature.holder().tell(destructive);
+                    // Reply-to self() so the eaten object's EnergeticStimulus reaches this Mouth
+                    // (otherwise the reply goes to dead letters and eating never nourishes).
+                    creature.holder().tell(destructive, self());
                 }
 
             } else if(stimulus instanceof MechanicalStimulus) {

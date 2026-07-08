@@ -1,6 +1,7 @@
 package br.cefetmg.lsi.l2l.cluster.settings;
 
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
+import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyMode;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -144,6 +145,49 @@ public class LearningSettingsTest {
         assertTrue(ls.isCircadianEnabled());
         assertTrue(ls.isConsolidationEnabled());
         assertEquals(LearningSettings.MASTER_FILTER_ORDER, ls.getEnabledFilters());
+    }
+
+    // -----------------------------------------------------------------------
+    // Neuromodulatory expectancy loop (issue #57)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void defaults_disable_expectancy_and_neuromodulation() {
+        LearningSettings ls = new LearningSettings();
+        assertFalse(ls.isExpectancyEnabled());
+        assertFalse(ls.isNeuromodulationEnabled());
+        assertEquals(ExpectancyMode.DISCRETE, ls.getExpectancyMode());
+    }
+
+    @Test
+    void three_arg_constructor_keeps_expectancy_off() {
+        LearningSettings ls = new LearningSettings(true, false, LearningSettings.MASTER_FILTER_ORDER);
+        assertFalse(ls.isExpectancyEnabled());
+        assertFalse(ls.isNeuromodulationEnabled());
+    }
+
+    @Test
+    void simulation_parses_expectancy_settings_from_config() {
+        String hocon = "simulation {\n"
+                + "  holders = 1\n"
+                + "  positionFactory = \"br.cefetmg.lsi.l2l.world.RandomPositionFactory\"\n"
+                + "  reposition = false\n"
+                + "  creatureSettings = [{quantity = 1}]\n"
+                + "  worldObjectSettings = []\n"
+                + "  worldSize = { width = 100, height = 100 }\n"
+                + "  learningSettings {\n"
+                + "    expectancyEnabled      = true\n"
+                + "    expectancyMode         = CONTINUOUS\n"
+                + "    neuromodulationEnabled = true\n"
+                + "  }\n"
+                + "}";
+
+        com.typesafe.config.Config config = com.typesafe.config.ConfigFactory.parseString(hocon);
+        LearningSettings ls = new Simulation(config).getLearningSettings();
+
+        assertTrue(ls.isExpectancyEnabled());
+        assertEquals(ExpectancyMode.CONTINUOUS, ls.getExpectancyMode());
+        assertTrue(ls.isNeuromodulationEnabled());
     }
 
     @Test

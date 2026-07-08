@@ -8,4 +8,14 @@ package br.cefetmg.lsi.l2l.creature;
  */
 public interface ComponentRef {
     void tell(Object msg);
+
+    /**
+     * Send {@code msg} with a reply-to {@code sender}, so a request that expects a response (e.g. a
+     * {@code DestructiveStimulus} whose target replies with an {@code EnergeticStimulus}) can route
+     * the reply back to {@code sender}. Defaults to a sender-less {@link #tell(Object)} for sinks that
+     * don't model Akka sender semantics (e.g. test stubs).
+     */
+    default void tell(Object msg, ComponentRef sender) {
+        tell(msg);
+    }
 }
