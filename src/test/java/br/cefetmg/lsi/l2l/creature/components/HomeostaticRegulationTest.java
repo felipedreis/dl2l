@@ -44,9 +44,9 @@ public class HomeostaticRegulationTest {
         assertEquals(sleepBefore,  h.creature().emotions().getLevel(Constants.SLEEP),  1e-9,
                 "SLEEP must not be raised by metabolic drift when circadian is enabled");
         assertTrue(h.creature().emotions().getLevel(Constants.HUNGER) > hungerBefore,
-                "HUNGER must be raised by adrenergic even with circadian on");
-        assertTrue(h.creature().emotions().getLevel(Constants.PAIN)   > painBefore,
-                "PAIN must be raised by adrenergic even with circadian on");
+                "HUNGER (a basic drive) must be raised by the metabolic drift");
+        assertEquals(painBefore, h.creature().emotions().getLevel(Constants.PAIN), 1e-9,
+                "PAIN is an affect driven by nociception, not by metabolic drift");
         assertEquals(tediumBefore, h.creature().emotions().getLevel(Constants.TEDIUM), 1e-9,
                 "TEDIUM is an affect regulated by the reward system, not by metabolic drift");
     }
