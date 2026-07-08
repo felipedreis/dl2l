@@ -71,7 +71,7 @@ public final class TestingCreature implements Creature {
         if (initialised) return;
         initialised = true;
         alive = true;
-        visionFieldOpening = Constants.MIN_VISION_FIELD_OPENING;
+        visionFieldOpening = Constants.MAX_VISION_FIELD_OPENING;
         olfactoryFieldRadius = Constants.MIN_OLFACTORY_FIELD_RADIUS;
 
         // Instantiate every component and its dispatcher.

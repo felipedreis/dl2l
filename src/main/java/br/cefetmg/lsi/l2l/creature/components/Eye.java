@@ -1,5 +1,6 @@
 package br.cefetmg.lsi.l2l.creature.components;
 
+import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
@@ -30,6 +31,10 @@ public class Eye extends CreatureComponent {
             ChangeStimulusState change;
 
             if (stimulus instanceof LuminousStimulus) {
+                // Eye is closed during SLEEP (focus == 0.0); suppress perception entirely.
+                if (creature.getVisionFieldOpening() < Constants.MIN_VISION_FIELD_OPENING) {
+                    continue;
+                }
                 LuminousStimulus luminous = (LuminousStimulus) stimulus;
                 double angle = creature.getPosition().angleAlpha(luminous.getPoint());
                 double distance = creature.getPosition().distance(luminous.getPoint());
