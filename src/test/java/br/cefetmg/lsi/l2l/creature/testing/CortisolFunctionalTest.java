@@ -5,6 +5,7 @@ import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
 import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyMode;
 import br.cefetmg.lsi.l2l.stimuli.CortisolStimulus;
+import br.cefetmg.lsi.l2l.stimuli.EndocrineTick;
 import br.cefetmg.lsi.l2l.stimuli.EndocrineState;
 import org.junit.jupiter.api.Test;
 
@@ -14,9 +15,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Functional (whole-pipeline) tests for the cortisol/endocrine system through a TestingCreature:
- * (1) circadian morning pulse fires exactly once per circadian period (phase wrap);
- * (2) stressor pathway fires when a drive arousal exceeds STRESS_ACTIVATION_THRESHOLD;
- * (3) no cortisol messages when endocrineEnabled=false.
+ * (1) EndocrineTick is delivered to EndocrineSystem each cognitive cycle;
+ * (2) stressor pathway fires only after CORTISOL_STRESSOR_SUSTAIN_TICKS consecutive ticks above threshold;
+ * (3) transient stress (fewer than SUSTAIN_TICKS ticks) does not trigger CortisolStimulus;
+ * (4) no endocrine messages when endocrineEnabled=false.
  */
 class CortisolFunctionalTest {
 
@@ -45,51 +47,55 @@ class CortisolFunctionalTest {
     }
 
     // ---------------------------------------------------------------------------------------
-    // 1. Circadian morning pulse
+    // 1. EndocrineTick pacemaker
     // ---------------------------------------------------------------------------------------
 
     @Test
-    void morning_cortisol_pulse_delivered_after_circadian_wrap() {
+    void endocrine_tick_delivered_each_cycle() {
         TestingHarness h = TestingHarness.builder().learningSettings(endocrineOn()).build();
 
-        // Run one full circadian period + 1 extra tick to guarantee a wrap occurs.
-        for (int i = 0; i < Constants.CIRCADIAN_PERIOD_TICKS + 1; i++) h.tick();
+        h.tick();
 
-        assertTrue(h.endocrineRecorder().hasAny(CortisolStimulus.class),
-                "a CortisolStimulus morning pulse must arrive at EndocrineSystem after one full circadian period");
+        assertTrue(h.endocrineRecorder().hasAny(EndocrineTick.class),
+                "PartialAppraisal must deliver an EndocrineTick to EndocrineSystem each cognitive cycle");
         assertTrue(h.fullRecorder().hasAny(EndocrineState.class),
-                "EndocrineSystem must publish EndocrineState to FullAppraisal after processing the morning pulse");
-    }
-
-    @Test
-    void no_cortisol_before_first_circadian_wrap() {
-        TestingHarness h = TestingHarness.builder().learningSettings(endocrineOn()).build();
-
-        // Run only half a period — phase has not wrapped yet.
-        for (int i = 0; i < Constants.CIRCADIAN_PERIOD_TICKS / 2; i++) h.tick();
-
-        assertFalse(h.endocrineRecorder().hasAny(CortisolStimulus.class),
-                "no CortisolStimulus should arrive before the first circadian phase wrap");
+                "EndocrineSystem must publish EndocrineState to FullAppraisal after processing the tick");
     }
 
     // ---------------------------------------------------------------------------------------
-    // 2. Stressor pathway
+    // 2. Stressor sustained-deprivation gate
     // ---------------------------------------------------------------------------------------
 
     @Test
-    void stressor_cortisol_emitted_when_hunger_exceeds_threshold() {
+    void stressor_cortisol_emitted_after_sustain_ticks() {
         TestingHarness h = TestingHarness.builder().learningSettings(endocrineOn()).build();
 
-        // Drive hunger above the stress activation threshold and run one tick so
-        // HomeostaticRegulation processes the adrenergic drift and calls emitCortisolIfStressed.
+        // Drive hunger above the stress activation threshold.
         double targetHunger = Constants.STRESS_ACTIVATION_THRESHOLD + 1.0;
         double currentHunger = h.creature().emotions().getLevel(Constants.HUNGER);
         h.creature().emotions().regulate(Constants.HUNGER, targetHunger - currentHunger);
 
-        h.tick();
+        // Run exactly CORTISOL_STRESSOR_SUSTAIN_TICKS — streak reaches the gate on the last tick.
+        for (int i = 0; i < Constants.CORTISOL_STRESSOR_SUSTAIN_TICKS; i++) h.tick();
 
         assertTrue(h.endocrineRecorder().hasAny(CortisolStimulus.class),
-                "HomeostaticRegulation must emit CortisolStimulus when hunger exceeds STRESS_ACTIVATION_THRESHOLD");
+                "HomeostaticRegulation must emit CortisolStimulus after "
+                + Constants.CORTISOL_STRESSOR_SUSTAIN_TICKS + " consecutive above-threshold ticks");
+    }
+
+    @Test
+    void stressor_cortisol_not_emitted_before_sustain_ticks() {
+        TestingHarness h = TestingHarness.builder().learningSettings(endocrineOn()).build();
+
+        double targetHunger = Constants.STRESS_ACTIVATION_THRESHOLD + 1.0;
+        double currentHunger = h.creature().emotions().getLevel(Constants.HUNGER);
+        h.creature().emotions().regulate(Constants.HUNGER, targetHunger - currentHunger);
+
+        // Run one fewer tick than required — streak has not yet reached the gate.
+        for (int i = 0; i < Constants.CORTISOL_STRESSOR_SUSTAIN_TICKS - 1; i++) h.tick();
+
+        assertFalse(h.endocrineRecorder().hasAny(CortisolStimulus.class),
+                "HomeostaticRegulation must NOT emit CortisolStimulus before the sustain gate fires");
     }
 
     // ---------------------------------------------------------------------------------------
@@ -97,11 +103,13 @@ class CortisolFunctionalTest {
     // ---------------------------------------------------------------------------------------
 
     @Test
-    void no_cortisol_messages_when_endocrine_disabled() {
+    void no_endocrine_messages_when_disabled() {
         TestingHarness h = TestingHarness.builder().learningSettings(endocrineOff()).build();
 
         for (int i = 0; i < Constants.CIRCADIAN_PERIOD_TICKS + 5; i++) h.tick();
 
+        assertFalse(h.endocrineRecorder().hasAny(EndocrineTick.class),
+                "no EndocrineTick should be sent when endocrineEnabled=false");
         assertFalse(h.endocrineRecorder().hasAny(CortisolStimulus.class),
                 "no CortisolStimulus should be emitted when endocrineEnabled=false");
     }

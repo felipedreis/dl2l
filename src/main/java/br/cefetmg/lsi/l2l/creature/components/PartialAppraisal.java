@@ -9,8 +9,8 @@ import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
 import br.cefetmg.lsi.l2l.creature.common.Perception;
 import br.cefetmg.lsi.l2l.stimuli.AdrenergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.AdenosinergicStimulus;
-import br.cefetmg.lsi.l2l.stimuli.CortisolStimulus;
 import br.cefetmg.lsi.l2l.stimuli.EmotionalStimulus;
+import br.cefetmg.lsi.l2l.stimuli.EndocrineTick;
 import br.cefetmg.lsi.l2l.stimuli.NeuromodulatorTick;
 import br.cefetmg.lsi.l2l.stimuli.OrexinergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.ProprioceptiveStimulus;
@@ -29,7 +29,6 @@ public class PartialAppraisal extends CreatureComponent {
 
     private final LearningSettings learningSettings;
     private CircadianClock circadian;
-    private double previousCircadianPhase = 0.0;
 
     public PartialAppraisal(SequentialId id, LearningSettings learningSettings) {
         super(id);
@@ -85,14 +84,10 @@ public class PartialAppraisal extends CreatureComponent {
                     new OrexinergicStimulus(this.id, nextStimulusId(), orexinRelease));
         }
 
-        // Cortisol morning pulse: fires once per circadian period when the phase wraps.
+        // Endocrine pacemaker: per-cycle tick drives cortisol decay + circadian synthesis in EndocrineSystem.
         if (learningSettings.isEndocrineEnabled()) {
-            double currentPhase = circadian.phase();
-            if (currentPhase < previousCircadianPhase) {
-                creature.endocrine().tell(
-                        new CortisolStimulus(this.id, nextStimulusId(), Constants.CORTISOL_MORNING_PULSE));
-            }
-            previousCircadianPhase = currentPhase;
+            creature.endocrine().tell(
+                    new EndocrineTick(this.id, nextStimulusId(), circadian.phase()));
         }
 
         List<Stimulus> propStimuli = (List) stimuli.stream()

@@ -118,17 +118,27 @@ public interface Constants {
     double OREXIN_SLEEP_GATE_THRESHOLD = 15.0;
 
     // --- Cortisol / HPA axis ---
-    // Half-life ≈ 346 ticks (~1.7 circadian periods); morning pulse equilibrium ≈ 1.52 < threshold.
-    double CORTISOL_DECAY              = 0.998;
-    // Circadian morning pulse magnitude (fires once per circadian period on phase wrap).
-    double CORTISOL_MORNING_PULSE      = 0.5;
-    // Per-handler stressor contribution: cortisol added = stressorMagnitude * GAIN.
-    // Reduced from 0.3 to prevent runaway accumulation from transient sleep-pressure peaks.
-    double CORTISOL_STRESSOR_GAIN      = 0.05;
-    // Drive/affect arousal level above which a HomeostaticRegulation handler emits cortisol.
-    double STRESS_ACTIVATION_THRESHOLD = 4.0;
+    // Per-cycle multiplicative decay (adrenal clearance). Half-life ≈ 346 ticks ≈ 1.7 periods.
+    double CORTISOL_DECAY                  = 0.998;
+    // Circadian baseline synthesis added each tick regardless of phase.
+    // Resting equilibrium (baseline only, k=1): solve 0.003/(1+c) = 0.002*c → c ≈ 0.82 (< 3.0). ✓
+    double CORTISOL_CIRCADIAN_BASELINE     = 0.003;
+    // Circadian amplitude; synthesis peaks at phase = π/2. Peak equilibrium ≈ 2.1 (< 3.0). ✓
+    double CORTISOL_CIRCADIAN_AMPLITUDE    = 0.01;
+    // Phase offset so that peak synthesis occurs at phase = π/2 (morning of the circadian day).
+    double CORTISOL_MORNING_OFFSET         = 0.0;
+    // Glucocorticoid negative-feedback gain k. Synthesis = input / (1 + k * cortisol).
+    // At k=1 the synthesis rate halves when cortisol = 1.0 and approaches zero as cortisol grows.
+    double CORTISOL_FEEDBACK_GAIN          = 1.0;
+    // Per-handler stressor contribution: cortisol added = excess * GAIN / (1 + k * cortisol).
+    double CORTISOL_STRESSOR_GAIN          = 0.05;
+    // Number of consecutive above-threshold ticks before HomeostaticRegulation emits cortisol.
+    // Prevents routine foraging hunger (transient, ~1 period) from triggering HPA activation.
+    int    CORTISOL_STRESSOR_SUSTAIN_TICKS = 10;
+    // Drive/affect arousal level above which a HomeostaticRegulation handler increments the streak.
+    double STRESS_ACTIVATION_THRESHOLD     = 4.0;
     // Cortisol accumulation level above which the STRESS affect activates.
-    double CORTISOL_STRESS_THRESHOLD   = 3.0;
+    double CORTISOL_STRESS_THRESHOLD       = 3.0;
     // Conversion factor: cortisol excess → stress arousal delta.
-    double CORTISOL_STRESS_GAIN        = 0.5;
+    double CORTISOL_STRESS_GAIN            = 0.5;
 }

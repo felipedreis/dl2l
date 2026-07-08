@@ -16,7 +16,9 @@ import br.cefetmg.lsi.l2l.stimuli.CortisolStimulus;
 import br.cefetmg.lsi.l2l.world.Self;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Created by felipe on 02/01/17.
@@ -24,6 +26,8 @@ import java.util.List;
 public class HomeostaticRegulation extends CreatureComponent {
 
     private final LearningSettings learningSettings;
+    // Consecutive above-threshold tick count per drive; reset to 0 when drive drops below threshold.
+    private final Map<String, Integer> stressorStreak = new HashMap<>();
 
     public HomeostaticRegulation(SequentialId id, LearningSettings learningSettings) {
         super(id);
@@ -104,12 +108,12 @@ public class HomeostaticRegulation extends CreatureComponent {
         // own pathways, not a metabolic clock: pain by nociception (injury), tedium by the reward
         // system (boredom = reward absence). So neither is raised here.
         creature.emotions().regulate(Constants.HUNGER, s.delta);
-        emitCortisolIfStressed(creature.emotions().getLevel(Constants.HUNGER));
+        emitCortisolIfStressed(Constants.HUNGER, creature.emotions().getLevel(Constants.HUNGER));
         if (!learningSettings.isCircadianEnabled()) {
             // Circadian clock owns sleep pressure via AdenosinergicStimulus when enabled; otherwise
             // sleep drifts metabolically here.
             creature.emotions().regulate(Constants.SLEEP, s.delta);
-            emitCortisolIfStressed(creature.emotions().getLevel(Constants.SLEEP));
+            emitCortisolIfStressed(Constants.SLEEP, creature.emotions().getLevel(Constants.SLEEP));
         }
         return null;
     }
@@ -125,7 +129,7 @@ public class HomeostaticRegulation extends CreatureComponent {
 
     private Stimulus handleAdenosinergic(AdenosinergicStimulus s) {
         creature.emotions().regulate(Constants.SLEEP, s.delta);
-        emitCortisolIfStressed(creature.emotions().getLevel(Constants.SLEEP));
+        emitCortisolIfStressed(Constants.SLEEP, creature.emotions().getLevel(Constants.SLEEP));
         return null;
     }
 
@@ -145,7 +149,7 @@ public class HomeostaticRegulation extends CreatureComponent {
     private Stimulus handleNociceptive(NociceptiveStimulus s) {
         ExpectancyContext ctx = contextFor(Constants.PAIN);
         Emotion regulated = creature.emotions().regulate(Constants.PAIN, s.painIntensity);
-        emitCortisolIfStressed(regulated.getLevel());
+        emitCortisolIfStressed(Constants.PAIN, regulated.getLevel());
         if (s.action == null) return null;
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
                 s.origin, s.objectType, s.action, regulated, realizedDelta(ctx, regulated), ctx);
@@ -175,12 +179,17 @@ public class HomeostaticRegulation extends CreatureComponent {
         return emitted;
     }
 
-    private void emitCortisolIfStressed(double arousalLevel) {
+    private void emitCortisolIfStressed(String driveName, double arousalLevel) {
         if (!learningSettings.isEndocrineEnabled()) return;
-        double stressorMagnitude = Math.max(0.0, arousalLevel - Constants.STRESS_ACTIVATION_THRESHOLD);
-        if (stressorMagnitude > 0) {
-            creature.endocrine().tell(
-                    new CortisolStimulus(id, nextStimulusId(), stressorMagnitude * Constants.CORTISOL_STRESSOR_GAIN));
+        double excess = arousalLevel - Constants.STRESS_ACTIVATION_THRESHOLD;
+        if (excess > 0) {
+            int streak = stressorStreak.merge(driveName, 1, Integer::sum);
+            if (streak >= Constants.CORTISOL_STRESSOR_SUSTAIN_TICKS) {
+                creature.endocrine().tell(
+                        new CortisolStimulus(id, nextStimulusId(), excess * Constants.CORTISOL_STRESSOR_GAIN));
+            }
+        } else {
+            stressorStreak.put(driveName, 0);
         }
     }
 

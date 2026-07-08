@@ -4,8 +4,10 @@ import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
+import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyMode;
 import br.cefetmg.lsi.l2l.creature.testing.TestingHarness;
 import br.cefetmg.lsi.l2l.stimuli.AdrenergicStimulus;
+import br.cefetmg.lsi.l2l.stimuli.CortisolStimulus;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -80,5 +82,45 @@ public class HomeostaticRegulationTest {
             assertEquals(Constants.MIN_AROUSAL_LEVEL, h.creature().emotions().getLevel(Constants.CURIOSITY), 1e-9);
             assertEquals(Constants.MIN_AROUSAL_LEVEL, h.creature().emotions().getLevel(Constants.FERTILITY), 1e-9);
         }
+    }
+
+    private static LearningSettings endocrineOn() {
+        return new LearningSettings(
+                true, false,
+                List.of(ActionSelectionType.TARGET_DISTANCE, ActionSelectionType.RANDOM),
+                false, ExpectancyMode.DISCRETE,
+                false,  // neuromodulationEnabled
+                false,  // actionTendencyEnabled
+                false,  // orexinEnabled
+                true    // endocrineEnabled
+        );
+    }
+
+    @Test
+    void stressor_streak_gate_fires_only_after_sustain_ticks() {
+        // Inject SUSTAIN_TICKS-1 above-threshold adrenergic stimuli — gate must not fire.
+        TestingHarness hBelow = TestingHarness.builder().learningSettings(endocrineOn()).build();
+        SequentialId sid = new SequentialId(777L);
+        for (int i = 0; i < Constants.CORTISOL_STRESSOR_SUSTAIN_TICKS - 1; i++) {
+            double high = Constants.STRESS_ACTIVATION_THRESHOLD + 1.0;
+            double cur  = hBelow.creature().emotions().getLevel(Constants.HUNGER);
+            hBelow.creature().emotions().regulate(Constants.HUNGER, high - cur);
+            hBelow.inject(HomeostaticRegulation.class,
+                    new AdrenergicStimulus(sid, sid.next(), 0.0));
+        }
+        assertFalse(hBelow.endocrineRecorder().hasAny(CortisolStimulus.class),
+                "CortisolStimulus must NOT be emitted before streak reaches CORTISOL_STRESSOR_SUSTAIN_TICKS");
+
+        // One more injection — streak reaches threshold, gate fires.
+        TestingHarness hAt = TestingHarness.builder().learningSettings(endocrineOn()).build();
+        for (int i = 0; i < Constants.CORTISOL_STRESSOR_SUSTAIN_TICKS; i++) {
+            double high = Constants.STRESS_ACTIVATION_THRESHOLD + 1.0;
+            double cur  = hAt.creature().emotions().getLevel(Constants.HUNGER);
+            hAt.creature().emotions().regulate(Constants.HUNGER, high - cur);
+            hAt.inject(HomeostaticRegulation.class,
+                    new AdrenergicStimulus(sid, sid.next(), 0.0));
+        }
+        assertTrue(hAt.endocrineRecorder().hasAny(CortisolStimulus.class),
+                "CortisolStimulus must be emitted once streak reaches CORTISOL_STRESSOR_SUSTAIN_TICKS");
     }
 }
