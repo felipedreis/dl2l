@@ -37,7 +37,9 @@ public class LearningSettings implements Serializable {
             Constants.HUNGER, EnumSet.of(ActionType.EAT, ActionType.APPROACH, ActionType.WANDER),
             Constants.SLEEP,  EnumSet.of(ActionType.SLEEP, ActionType.WANDER),
             Constants.PAIN,   EnumSet.of(ActionType.ESCAPE, ActionType.AVOID, ActionType.WANDER),
-            Constants.TEDIUM, EnumSet.of(ActionType.WANDER, ActionType.OBSERVE)
+            // Boredom drives exploration (WANDER for novelty), not passive staring (OBSERVE): a
+            // content-but-bored creature explores rather than fixating on whatever is in view.
+            Constants.TEDIUM, EnumSet.of(ActionType.WANDER)
     );
 
     private final boolean circadianEnabled;

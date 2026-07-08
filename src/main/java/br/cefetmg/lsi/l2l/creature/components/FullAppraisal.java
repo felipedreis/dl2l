@@ -330,11 +330,15 @@ public class FullAppraisal extends CreatureComponent {
     }
 
     private List<Action> actionsAtDistance(Perception perception) {
+        // WANDER is always available so an exploratory (bored-but-content) creature can leave a
+        // perceived object and explore, rather than only staring at it (OBSERVE). Kept last so the
+        // priority-first filters still see APPROACH first.
         return Arrays.asList(
             new Action(ActionType.APPROACH, perception),
             new Action(ActionType.AVOID, perception),
             new Action(ActionType.SLEEP, perception),
-            new Action(ActionType.OBSERVE, perception)
+            new Action(ActionType.OBSERVE, perception),
+            new Action(ActionType.WANDER, perception)
         );
     }
 
@@ -345,7 +349,8 @@ public class FullAppraisal extends CreatureComponent {
         return Arrays.asList(
             new Action(ActionType.EAT, perception),
             new Action(ActionType.AVOID, perception),
-            new Action(restOrEscape, perception)
+            new Action(restOrEscape, perception),
+            new Action(ActionType.WANDER, perception)
         );
     }
 }
