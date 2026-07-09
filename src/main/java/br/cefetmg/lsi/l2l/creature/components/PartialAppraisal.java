@@ -20,7 +20,6 @@ import br.cefetmg.lsi.l2l.world.Self;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Created by felipe on 02/01/17.
@@ -48,71 +47,143 @@ public class PartialAppraisal extends CreatureComponent {
 
     @Override
     public void onReceive(Object message) {
-        List stimuli;
+        @SuppressWarnings("unchecked")
+        List<Stimulus> stimuli = message instanceof List<?> list
+                ? (List<Stimulus>) list
+                : List.of();
 
-        if(message instanceof List)
-            stimuli = (List) message;
-        else
-            stimuli = new ArrayList();
+        checkDeath();
+        AdrenergicStimulus adrenergic = tickMetabolicPacemaker();
+        tickNeuromodulators();
+        releaseOrexin();
+        tickEndocrine();
 
-        Emotion maxEmotion = emotionalSystem.getMaxArousal();
+        List<ProprioceptiveStimulus> propStimuli = new ArrayList<>();
+        for (Stimulus stimulus : stimuli) {
+            switch (stimulus) {
+                case ProprioceptiveStimulus ps -> propStimuli.add(ps);
+                default -> {}
+            }
+        }
 
-        // Death is a basic-drive deficit (starvation / terminal sleep deprivation); affects
-        // (pain, tedium) are never lethal. The dominant emotion above still drives action selection.
+        EmotionalStimulus emotional = buildEmotionalStimulus(propStimuli);
+        creature.fullAppraisal().tell(emotional);
+        persistCycle(emotional, propStimuli, adrenergic);
+    }
+
+    /**
+     * Checks whether any basic drive has reached the lethal ceiling and kills the creature if so.
+     *
+     * <p>Death is a basic-drive deficit (starvation, terminal sleep deprivation, extreme pain).
+     * Affects (tedium, stress) are never lethal — they have their own regulatory ceilings.
+     * The dominant drive is still used to build the emotional stimulus so FullAppraisal can
+     * record the final action before the creature is removed from the simulation.
+     */
+    private void checkDeath() {
         if (emotionalSystem.getMaxDriveArousal().getLevel() >= Constants.MAX_AROUSAL_LEVEL)
             creature.kill();
+    }
 
+    /**
+     * Advances the circadian clock and, every {@code HOMEO_BATCH_SIZE} cognitive cycles,
+     * flushes one batched {@link AdrenergicStimulus} (hunger drift) and one
+     * {@link AdenosinergicStimulus} (sleep pressure) to HomeostaticRegulation.
+     *
+     * <p>Sending one stimulus per batch rather than per cycle reduces the message rate
+     * from ≈134/s to ≈7/s, preventing the stale-backlog problem where thousands of
+     * AdenosinergicStimuli built up ahead of CholinergicStimuli and drove sleep to MAX
+     * before clearing could happen. Since {@code DELTA} is constant, the batched delta
+     * ({@code DELTA × HOMEO_BATCH_SIZE}) is biologically identical to sending N individual ones.
+     * Sleep-drive rate is accumulated because it varies with circadian phase.
+     *
+     * @return the {@link AdrenergicStimulus} sent this cycle, or {@code null} if the batch is not yet full
+     */
+    private AdrenergicStimulus tickMetabolicPacemaker() {
         circadian.tick();
         double sleepDriveRate = circadian.driveRate();
         if (sleepDriveRate > 0) accumulatedSleepDrive += sleepDriveRate;
 
-        AdrenergicStimulus adrenergic = null;
         if (++metabolicBatchCycle >= Constants.HOMEO_BATCH_SIZE) {
-            adrenergic = flushMetabolicBatch();
+            return flushMetabolicBatch();
         }
+        return null;
+    }
 
-        // Neuromodulator pacemaker: tonic serotonin (satiety) release + per-cycle reuptake tick.
-        // Emitted whenever the pool is in use (expectancy feeds dopamine; neuromodulation reads tonic).
-        if (learningSettings.isNeuromodulatorLoopActive()) {
-            creature.neuromodulators().tell(
-                    new SerotonergicStimulus(this.id, nextStimulusId(), computeSatiety()));
-            creature.neuromodulators().tell(
-                    new NeuromodulatorTick(this.id, nextStimulusId(), circadian.phase()));
+    /**
+     * Emits the tonic serotonin signal and the per-cycle neuromodulator reuptake tick.
+     *
+     * <p>Serotonin encodes global homeostatic satiety: how well-regulated the creature is
+     * across all four active drives. High tonic serotonin slows exploratory drive (patience),
+     * while low serotonin signals unmet needs and increases urgency. The {@link NeuromodulatorTick}
+     * drives passive reuptake (decay) in {@link NeuromodulatorSystem}, keeping tonics bounded
+     * even without receptor stimulation.
+     */
+    private void tickNeuromodulators() {
+        if (!learningSettings.isNeuromodulatorLoopActive()) return;
+        creature.neuromodulators().tell(
+                new SerotonergicStimulus(this.id, nextStimulusId(), computeSatiety()));
+        creature.neuromodulators().tell(
+                new NeuromodulatorTick(this.id, nextStimulusId(), circadian.phase()));
+    }
+
+    /**
+     * Releases orexin in inverse proportion to current sleep pressure.
+     *
+     * <p>Orexin (hypocretin) is the primary wakefulness-promoting neuromodulator. Its tonic
+     * level is high when the creature is well-rested (low sleep arousal) and falls as sleep
+     * pressure builds. {@link br.cefetmg.lsi.l2l.creature.components.FullAppraisal} uses the
+     * orexin tonic to gate SLEEP out of the action set: when orexin ≥
+     * {@code OREXIN_SLEEP_GATE_THRESHOLD} the creature is too alert to sleep; the gate opens
+     * only when sleep pressure exceeds ≈50% of MAX_AROUSAL.
+     */
+    private void releaseOrexin() {
+        if (!learningSettings.isOrexinEnabled()) return;
+        double sleepPressure = emotionalSystem.getLevel(Constants.SLEEP);
+        double orexinRelease = Math.max(0.0, 1.0 - sleepPressure / Constants.MAX_AROUSAL_LEVEL);
+        creature.neuromodulators().tell(
+                new OrexinergicStimulus(this.id, nextStimulusId(), orexinRelease));
+    }
+
+    /**
+     * Sends the per-cycle pacemaker tick to the HPA-axis (cortisol) subsystem.
+     *
+     * <p>Each {@link EndocrineTick} carries the current circadian phase so
+     * {@link EndocrineSystem} can apply both passive adrenal clearance ({@code cortisol *= DECAY})
+     * and circadian-modulated synthesis with saturating negative feedback in one step.
+     * Separating the tick from the stressor stimulus ({@link br.cefetmg.lsi.l2l.stimuli.CortisolStimulus})
+     * ensures cortisol decays even when no stressor is active, mirroring the biological
+     * HPA axis's autonomous circadian rhythm.
+     */
+    private void tickEndocrine() {
+        if (!learningSettings.isEndocrineEnabled()) return;
+        creature.endocrine().tell(
+                new EndocrineTick(this.id, nextStimulusId(), circadian.phase()));
+    }
+
+    /**
+     * Converts the batch of proprioceptive stimuli into an {@link EmotionalStimulus} for
+     * {@link FullAppraisal}.
+     *
+     * <p>Each {@link ProprioceptiveStimulus} carries the type, distance, and angle of one
+     * visible object. When no objects are perceived the creature is treated as perceiving
+     * itself at distance 0 (Mapa's "self-perception" fallback), which keeps the action-
+     * selection pipeline alive with WANDER/SLEEP available even in an empty visual field.
+     * Behavioural efficiency (Yerkes-Dodson) is computed here because it depends on both
+     * the dominant arousal level and the perceptual load (number of objects in view).
+     */
+    private EmotionalStimulus buildEmotionalStimulus(List<ProprioceptiveStimulus> propStimuli) {
+        List<Perception> perceptions = new ArrayList<>();
+        for (ProprioceptiveStimulus ps : propStimuli) {
+            perceptions.add(new Perception(ps.getObjectType(), ps.getTargetId(),
+                    ps.getDistance(), ps.getAngle()));
         }
-
-        // Orexin: per-cycle release inversely proportional to sleep pressure.
-        if (learningSettings.isOrexinEnabled()) {
-            double sleepPressure = emotionalSystem.getLevel(Constants.SLEEP);
-            double orexinRelease = Math.max(0.0, 1.0 - sleepPressure / Constants.MAX_AROUSAL_LEVEL);
-            creature.neuromodulators().tell(
-                    new OrexinergicStimulus(this.id, nextStimulusId(), orexinRelease));
-        }
-
-        // Endocrine pacemaker: per-cycle tick drives cortisol decay + circadian synthesis in EndocrineSystem.
-        if (learningSettings.isEndocrineEnabled()) {
-            creature.endocrine().tell(
-                    new EndocrineTick(this.id, nextStimulusId(), circadian.phase()));
-        }
-
-        List<Stimulus> propStimuli = (List) stimuli.stream()
-                .filter(s -> s instanceof ProprioceptiveStimulus)
-                .collect(Collectors.toList());
-
-        List<Perception> perceptions = propStimuli.stream()
-                .map((Stimulus stimulus) -> {
-                    ProprioceptiveStimulus proprioceptive = (ProprioceptiveStimulus) stimulus;
-
-                    return new Perception(proprioceptive.getObjectType(), proprioceptive.getTargetId(),
-                            proprioceptive.getDistance(), proprioceptive.getAngle());
-                })
-                .collect(Collectors.toList());
 
         if (perceptions.isEmpty()) {
             double visionFieldAngle = creature.getVisionFieldPosition();
             perceptions.add(new Perception(Self.get(), id.father(), 0, visionFieldAngle));
         }
 
-
+        Emotion maxEmotion = emotionalSystem.getMaxArousal();
         double behaviouralEfficiency = normalizedBehaviouralEfficiency(maxEmotion.getLevel(), perceptions.size());
 
         logger.info(String.format("PartialAppraisal[%s]: arousal=%.3f perceptions=%d behaviouralEfficiency=%.3f",
@@ -120,18 +191,28 @@ public class PartialAppraisal extends CreatureComponent {
         perceptions.forEach(p -> logger.fine(String.format("PartialAppraisal[%s]:   perception type=%s angle=%.3f dist=%.1f",
                 id, p.objectType, p.angle, p.distance)));
 
-        EmotionalStimulus emotional = new EmotionalStimulus(this.id, nextStimulusId(), perceptions, maxEmotion, behaviouralEfficiency);
+        return new EmotionalStimulus(this.id, nextStimulusId(), perceptions, maxEmotion, behaviouralEfficiency);
+    }
 
-        creature.fullAppraisal().tell(emotional);
-
-
+    /**
+     * Persists the cognitive cycle's observability records to the database.
+     *
+     * <p>Three records are written: the emotional change (proprioception → emotional stimulus),
+     * the behavioural efficiency snapshot, and — when a metabolic batch was flushed this cycle —
+     * the adrenergic change record. The adrenergic record is conditional because batching means
+     * most cycles produce no metabolic stimulus.
+     */
+    private void persistCycle(EmotionalStimulus emotional,
+                               List<ProprioceptiveStimulus> propStimuli,
+                               AdrenergicStimulus adrenergic) {
+        List<Stimulus> rawStimuli = new ArrayList<>(propStimuli);
         ChangeStimulusState changeEmotional = new ChangeStimulusStateBuilder(this, id)
-                .buildMultipleReceivedOneEmitted(propStimuli, emotional);
+                .buildMultipleReceivedOneEmitted(rawStimuli, emotional);
 
         BehaviouralEfficiencyState behaviouralState = new BehaviouralEfficiencyState();
-        behaviouralState.setBehaviouralEfficiency(behaviouralEfficiency);
-        behaviouralState.setNumberOfObjects(perceptions.size());
-        behaviouralState.setComplexTask(perceptions.size() >= Constants.COMPLEX_TASK);
+        behaviouralState.setBehaviouralEfficiency(emotional.behaviouralEfficiency);
+        behaviouralState.setNumberOfObjects(emotional.getPerceptions().size());
+        behaviouralState.setComplexTask(emotional.getPerceptions().size() >= Constants.COMPLEX_TASK);
         behaviouralState.setChangeStimulusState(changeEmotional);
 
         if (adrenergic != null) {
