@@ -26,6 +26,7 @@ import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.creature.memory.ShortTermMemory;
 import br.cefetmg.lsi.l2l.creature.bd.SleepEpisodeState;
 import br.cefetmg.lsi.l2l.creature.ml.SleepStarted;
+import br.cefetmg.lsi.l2l.stimuli.CholinergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.CorticalStimulus;
 import br.cefetmg.lsi.l2l.stimuli.EmotionalStimulus;
 import br.cefetmg.lsi.l2l.stimuli.EndocrineState;
@@ -189,6 +190,10 @@ public class FullAppraisal extends CreatureComponent {
 
                 // Update sleep state and fire consolidation signals.
                 if (action.type == ActionType.SLEEP) {
+                    // Sleep recovery: CholinergicStimulus clears adenosine each SLEEP tick.
+                    // Previously emitted by Body on speed=0, but that also fired on EAT and
+                    // OBSERVE. Now gated here where the action type is known.
+                    creature.homeostatic().tell(new CholinergicStimulus(id, nextStimulusId()));
                     if (!inSleep) {
                         inSleep = true;
                         sleepDwellTicks = 0;

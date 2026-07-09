@@ -109,13 +109,22 @@ public interface Constants {
     double SEROTONIN_BOREDOM_TOLERANCE = 1.0;
 
     // --- Orexin (wakefulness stabiliser) ---
-    // Per-tick multiplicative decay of orexin tonic level (slow, so tonic is stable across cycles).
-    double OREXIN_DECAY                = 0.97;
+    // Per-tick multiplicative decay of orexin tonic level.
+    // τ = 1/(1-OREXIN_DECAY). At 0.90 → τ = 10 ticks; gate opens within ~9 ticks at 80% sleep
+    // pressure, giving a responsive but not flickering gate. Previous value 0.97 (τ=33) was too
+    // sluggish: even at 80% sleep pressure the gate took ~38 ticks to open from full-alert.
+    double OREXIN_DECAY                = 0.90;
     // Below this tonic orexin level SLEEP is allowed back into the action set.
-    // Fixed point at full release = 1/(1-OREXIN_DECAY) ≈ 33.3.
-    // At sleep pressure = 50% of MAX (3.5), release = 0.5 → fixed point ≈ 16.7.
-    // Gate at 15 opens SLEEP around that point, giving ~10% hysteresis.
-    double OREXIN_SLEEP_GATE_THRESHOLD = 15.0;
+    // Fixed point at full release (sleep=0) = 1/(1-0.90) = 10.0.
+    // At 50% sleep pressure: release=0.5 → fixed point = 5.0 (= gate) → gate opens at 50%.
+    // At 60% sleep pressure: fixed point = 4.0 < gate → gate open; convergence ~9 ticks.
+    double OREXIN_SLEEP_GATE_THRESHOLD = 5.0;
+
+    // --- Drive-deprivation RPE rate limiting ---
+    // Negative EvaluationStimulus to Valuation is emitted at most once per N adrenergic ticks
+    // when the corresponding drive is above EQUILIBRIUM_BAND_UPPER. Prevents flooding Valuation
+    // with one RPE event per cognitive cycle during sustained deprivation.
+    int DEPRIVATION_RPE_INTERVAL = 10;
 
     // --- Cortisol / HPA axis ---
     // Per-cycle multiplicative decay (adrenal clearance). Half-life ≈ 346 ticks ≈ 1.7 periods.

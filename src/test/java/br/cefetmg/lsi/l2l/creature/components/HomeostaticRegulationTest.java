@@ -6,8 +6,10 @@ import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
 import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyMode;
 import br.cefetmg.lsi.l2l.creature.testing.TestingHarness;
+import br.cefetmg.lsi.l2l.stimuli.AdenosinergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.AdrenergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.CortisolStimulus;
+import br.cefetmg.lsi.l2l.stimuli.EvaluationStimulus;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -84,6 +86,15 @@ public class HomeostaticRegulationTest {
         }
     }
 
+    private static LearningSettings expectancyOn() {
+        return new LearningSettings(
+                true, true,
+                List.of(ActionSelectionType.TARGET_DISTANCE, ActionSelectionType.RANDOM),
+                true, ExpectancyMode.DISCRETE,
+                false, false, false, false
+        );
+    }
+
     private static LearningSettings endocrineOn() {
         return new LearningSettings(
                 true, false,
@@ -94,6 +105,49 @@ public class HomeostaticRegulationTest {
                 false,  // orexinEnabled
                 true    // endocrineEnabled
         );
+    }
+
+    @Test
+    void deprivation_rpe_not_emitted_when_drive_below_equilibrium_band() {
+        TestingHarness h = TestingHarness.builder().learningSettings(expectancyOn()).build();
+        // Hunger starts at MIN_AROUSAL_LEVEL (0.18) < EQUILIBRIUM_BAND_UPPER (2.0); no RPE.
+        SequentialId sid = new SequentialId(888L);
+        for (int i = 0; i < Constants.DEPRIVATION_RPE_INTERVAL; i++) {
+            h.inject(HomeostaticRegulation.class, new AdrenergicStimulus(sid, sid.next(), Constants.DELTA));
+        }
+        assertFalse(h.valuationRecorder().hasAny(EvaluationStimulus.class),
+                "No deprivation EvaluationStimulus expected when drive is below EQUILIBRIUM_BAND_UPPER");
+    }
+
+    @Test
+    void deprivation_rpe_emitted_when_drive_above_equilibrium_band() {
+        TestingHarness h = TestingHarness.builder().learningSettings(expectancyOn()).build();
+        // Push hunger well above the equilibrium band.
+        h.creature().emotions().regulate(Constants.HUNGER, Constants.EQUILIBRIUM_BAND_UPPER + 1.0);
+        SequentialId sid = new SequentialId(888L);
+
+        // Cycle counter starts at 0; first tick (cycle=0) satisfies 0 % INTERVAL == 0 → fires.
+        h.inject(HomeostaticRegulation.class, new AdrenergicStimulus(sid, sid.next(), 0.0));
+        assertTrue(h.valuationRecorder().hasAny(EvaluationStimulus.class),
+                "Deprivation EvaluationStimulus must be emitted on cycle 0 when drive > EQUILIBRIUM_BAND_UPPER");
+
+        // The EvaluationStimulus carries positive arousalVariation → reward = -delta < 0 → negative RPE.
+        EvaluationStimulus eval = (EvaluationStimulus) h.valuationRecorder().lastOf(EvaluationStimulus.class);
+        assertTrue(eval.arousalVariation >= 0,
+                "arousalVariation must be non-negative (drive went up) so Valuation emits negative RPE");
+    }
+
+    @Test
+    void deprivation_rpe_emitted_for_sleep_via_adenosinergic() {
+        TestingHarness h = TestingHarness.builder().learningSettings(expectancyOn()).build();
+        h.creature().emotions().regulate(Constants.SLEEP, Constants.EQUILIBRIUM_BAND_UPPER + 1.0);
+        SequentialId sid = new SequentialId(888L);
+        for (int i = 0; i < Constants.DEPRIVATION_RPE_INTERVAL; i++) {
+            h.inject(HomeostaticRegulation.class,
+                    new AdenosinergicStimulus(sid, sid.next(), Constants.BASE_SLEEP_DRIVE));
+        }
+        assertTrue(h.valuationRecorder().hasAny(EvaluationStimulus.class),
+                "Deprivation EvaluationStimulus must fire for SLEEP drive via AdenosinergicStimulus");
     }
 
     @Test

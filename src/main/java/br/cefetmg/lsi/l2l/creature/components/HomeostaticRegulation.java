@@ -28,6 +28,9 @@ public class HomeostaticRegulation extends CreatureComponent {
     private final LearningSettings learningSettings;
     // Consecutive above-threshold tick count per drive; reset to 0 when drive drops below threshold.
     private final Map<String, Integer> stressorStreak = new HashMap<>();
+    // Cycle counters for rate-limiting drive-deprivation RPE events (one per N adrenergic ticks).
+    private int hungerDeprivationCycle = 0;
+    private int sleepDeprivationCycle  = 0;
 
     public HomeostaticRegulation(SequentialId id, LearningSettings learningSettings) {
         super(id);
@@ -107,13 +110,14 @@ public class HomeostaticRegulation extends CreatureComponent {
         // Sympathetic metabolic drift applies to basic drives only. The affects are driven by their
         // own pathways, not a metabolic clock: pain by nociception (injury), tedium by the reward
         // system (boredom = reward absence). So neither is raised here.
-        creature.emotions().regulate(Constants.HUNGER, s.delta);
-        emitCortisolIfStressed(Constants.HUNGER, creature.emotions().getLevel(Constants.HUNGER));
+        Emotion hungerAfter = creature.emotions().regulate(Constants.HUNGER, s.delta);
+        emitCortisolIfStressed(Constants.HUNGER, hungerAfter.getLevel());
+        emitDeprivationRpe(Constants.HUNGER, hungerAfter, s.delta, hungerDeprivationCycle++);
         if (!learningSettings.isCircadianEnabled()) {
             // Circadian clock owns sleep pressure via AdenosinergicStimulus when enabled; otherwise
             // sleep drifts metabolically here.
-            creature.emotions().regulate(Constants.SLEEP, s.delta);
-            emitCortisolIfStressed(Constants.SLEEP, creature.emotions().getLevel(Constants.SLEEP));
+            Emotion sleepAfter = creature.emotions().regulate(Constants.SLEEP, s.delta);
+            emitCortisolIfStressed(Constants.SLEEP, sleepAfter.getLevel());
         }
         return null;
     }
@@ -128,8 +132,9 @@ public class HomeostaticRegulation extends CreatureComponent {
     }
 
     private Stimulus handleAdenosinergic(AdenosinergicStimulus s) {
-        creature.emotions().regulate(Constants.SLEEP, s.delta);
-        emitCortisolIfStressed(Constants.SLEEP, creature.emotions().getLevel(Constants.SLEEP));
+        Emotion sleepAfter = creature.emotions().regulate(Constants.SLEEP, s.delta);
+        emitCortisolIfStressed(Constants.SLEEP, sleepAfter.getLevel());
+        emitDeprivationRpe(Constants.SLEEP, sleepAfter, s.delta, sleepDeprivationCycle++);
         return null;
     }
 
@@ -177,6 +182,25 @@ public class HomeostaticRegulation extends CreatureComponent {
                 id, Self.get(), s.action, regulated, realizedDelta(ctx, regulated), ctx);
         creature.valuation().tell(emitted);
         return emitted;
+    }
+
+    /**
+     * Drive-deprivation negative RPE: when a drive rises above the homeostatic equilibrium band
+     * without being relieved, that is a worse-than-expected outcome. Emit an EvaluationStimulus
+     * to Valuation so the expectancy path computes a negative RPE and suppresses DA.
+     * Rate-limited to one event per DEPRIVATION_RPE_INTERVAL ticks to avoid flooding Valuation.
+     */
+    private void emitDeprivationRpe(String driveName, Emotion regulated, double delta, int cycle) {
+        if (!learningSettings.isExpectancyEnabled()) return;
+        if (regulated.getLevel() <= Constants.EQUILIBRIUM_BAND_UPPER) return;
+        if (cycle % Constants.DEPRIVATION_RPE_INTERVAL != 0) return;
+
+        ExpectancyContext ctx = new ExpectancyContext(driveName, regulated.getLevel());
+        // arousalVariation = +delta (drive went up); reward = -delta (negative).
+        // Valuation computes rpe = reward − expected ≤ 0 → DA dips.
+        Stimulus eval = new EvaluationStimulus(id, nextStimulusId(),
+                id, Self.get(), ActionType.WANDER, regulated, delta, ctx);
+        creature.valuation().tell(eval);
     }
 
     private void emitCortisolIfStressed(String driveName, double arousalLevel) {
