@@ -1,0 +1,76 @@
+{
+  "title": "DL2L Live Overview",
+  "uid": "dl2l-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "5s",
+  "time": { "from": "now-30m", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "trial",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "Prometheus" },
+        "query": "label_values(dl2l_creature_arousal, trial)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": false,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Arousal by creature",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "dl2l_creature_arousal{trial=~\"$trial\"}",
+          "legendFormat": "{{creature}} ({{trial}})"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Memory count by creature",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "dl2l_creature_memory_count{trial=~\"$trial\"}",
+          "legendFormat": "{{creature}} ({{trial}})"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Live creature count (population proxy)",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "count(count by (creature) (dl2l_creature_arousal{trial=~\"$trial\"}))",
+          "legendFormat": "creatures"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Neuromodulators (avg across creatures)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "avg(dl2l_creature_dopamine{trial=~\"$trial\"})", "legendFormat": "dopamine" },
+        { "expr": "avg(dl2l_creature_serotonin{trial=~\"$trial\"})", "legendFormat": "serotonin" },
+        { "expr": "avg(dl2l_creature_orexin{trial=~\"$trial\"})", "legendFormat": "orexin" }
+      ]
+    }
+  ]
+}

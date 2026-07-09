@@ -1,0 +1,43 @@
+# Long-lived observability stack — separate from the per-trial experiment stacks.
+# Bring up once and leave running across an entire experiment batch:
+#   cd docker && docker compose -f docker-compose-observability.yml up -d
+# Bring down when you're done watching:
+#   cd docker && docker compose -f docker-compose-observability.yml down
+version: "3.1"
+services:
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - source: ./observability/prometheus.yml
+        target: /etc/prometheus/prometheus.yml
+        read_only: true
+        type: bind
+      - dl2l-prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana
+    depends_on:
+      - prometheus
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+    volumes:
+      - source: ./observability/grafana/provisioning
+        target: /etc/grafana/provisioning
+        read_only: true
+        type: bind
+      - source: ./observability/grafana/dashboards
+        target: /var/lib/grafana/dashboards
+        read_only: true
+        type: bind
+      - dl2l-grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+
+volumes:
+  dl2l-prometheus-data:
+  dl2l-grafana-data:

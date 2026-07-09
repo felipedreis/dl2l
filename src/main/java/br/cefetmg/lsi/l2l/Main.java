@@ -10,6 +10,7 @@ import br.cefetmg.lsi.l2l.cluster.SimulationManager;
 import br.cefetmg.lsi.l2l.cluster.settings.Simulation;
 import br.cefetmg.lsi.l2l.cluster.GUIActor;
 import br.cefetmg.lsi.l2l.cluster.CollisionDetectorActor;
+import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
 import br.cefetmg.lsi.l2l.web.GeometrySourceProvider;
 import br.cefetmg.lsi.l2l.web.GeometryWebService;
 import com.typesafe.config.Config;
@@ -70,10 +71,17 @@ public class Main {
             for(int i = 1; i < roles.length; ++i)
                 roleParam += (", " + roles[i]);
 
-            Config config = ConfigFactory.parseString("akka.cluster.roles = [" + roleParam + "]")
+            String simulationName = configFile.getName();
+            String trialId = System.getenv().getOrDefault("TRIAL_ID", "local");
+
+            Config config = ConfigFactory.parseString(
+                    "akka.cluster.roles = [" + roleParam + "]\n" +
+                    "dl2l.metrics.simulation-name = \"" + simulationName + "\"\n" +
+                    "dl2l.metrics.trial-id = \"" + trialId + "\"")
                     .withFallback(ConfigFactory.load());
 
             ActorSystem system = ActorSystem.create("l2l", config);
+            MetricsExtension.of(system); // starts the /metrics endpoint on every node, regardless of role
 
             logger.info("System started at host " + host + ":" + port + " with roles " + Arrays.toString(roles));
 

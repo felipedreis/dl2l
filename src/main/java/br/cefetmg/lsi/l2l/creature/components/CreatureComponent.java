@@ -5,6 +5,7 @@ import br.cefetmg.lsi.l2l.creature.ComponentRef;
 import br.cefetmg.lsi.l2l.creature.Creature;
 import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
 import br.cefetmg.lsi.l2l.creature.bd.Persister;
+import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
 
 import java.util.List;
 import java.util.logging.Logger;
@@ -27,6 +28,9 @@ public abstract class CreatureComponent {
 
     protected final Logger logger;
 
+    /** Per-JVM Micrometer registry; null in test harnesses that don't wire one. */
+    protected MetricsExtension.Impl metricsExt;
+
     private SequentialId nextStimulusId;
 
     private Persister persister;
@@ -39,15 +43,22 @@ public abstract class CreatureComponent {
         this.logger = Logger.getLogger(this.getClass().getName());
     }
 
+    /** Overload for callers (tests) that don't have a MetricsExtension to wire in. */
+    public final void init(Creature creature, Persister persister, ComponentRef selfRef) {
+        init(creature, persister, selfRef, null);
+    }
+
     /**
      * Called by the runtime adapter ({@link ComponentActor} in production, the test
      * harness in tests) before any message is delivered. Subclasses may override
      * {@link #preStart()} for extra wiring.
      */
-    public final void init(Creature creature, Persister persister, ComponentRef selfRef) {
+    public final void init(Creature creature, Persister persister, ComponentRef selfRef,
+                            MetricsExtension.Impl metricsExt) {
         this.creature = creature;
         this.persister = persister;
         this.selfRef = selfRef;
+        this.metricsExt = metricsExt;
         try {
             preStart();
         } catch (Exception e) {

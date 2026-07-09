@@ -139,6 +139,18 @@
             <version>2.15.2</version>
         </dependency>
 
+        <!-- Micrometer: in-process metrics, scraped by Prometheus -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <version>1.12.5</version>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+            <version>1.12.5</version>
+        </dependency>
+
         <!-- DJL: load species TorchScript models once per JVM node -->
         <dependency>
             <groupId>ai.djl</groupId>

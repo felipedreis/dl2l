@@ -2,6 +2,7 @@ package br.cefetmg.lsi.l2l.creature.memory;
 
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.SequentialId;
+import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -16,7 +17,19 @@ public class MemorySystemActor implements MemorySystem {
     private final HashMap<SequentialId, List<ShortTermMemory>> byId = new HashMap<>();
     private final ArrayDeque<Engram> engrams = new ArrayDeque<>();
 
+    private final SequentialId creatureId;
+    private final MetricsExtension.Impl metricsExt;
+
     private long decisionCycle = 0;
+
+    public MemorySystemActor() {
+        this(null, null);
+    }
+
+    public MemorySystemActor(SequentialId creatureId, MetricsExtension.Impl metricsExt) {
+        this.creatureId = creatureId;
+        this.metricsExt = metricsExt;
+    }
 
     @Override
     public void addShortTermMemory(ShortTermMemory stm) {
@@ -30,6 +43,10 @@ public class MemorySystemActor implements MemorySystem {
                 bucket.remove(evicted);
                 if (bucket.isEmpty()) byId.remove(evicted.id());
             }
+        }
+
+        if (metricsExt != null) {
+            metricsExt.setGauge("dl2l_creature_memory_count", creatureId.toString(), all.size());
         }
     }
 

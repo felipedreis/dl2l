@@ -102,6 +102,13 @@ public class NeuromodulatorSystem extends CreatureComponent {
         creature.fullAppraisal().tell(
                 new NeuromodulatorState(id, nextStimulusId(), dopamine, serotonin, orexin));
         persist(new NeuromodulatorStateLog(id.key, publishSeq++, dopamine, serotonin, orexin, lastCircadianPhase));
+
+        if (metricsExt != null) {
+            String creatureId = id.toString();
+            metricsExt.setGauge("dl2l_creature_dopamine", creatureId, dopamine);
+            metricsExt.setGauge("dl2l_creature_serotonin", creatureId, serotonin);
+            metricsExt.setGauge("dl2l_creature_orexin", creatureId, orexin);
+        }
     }
 
     /** Baseline synthesis: a constant floor modulated by the circadian phase. */
