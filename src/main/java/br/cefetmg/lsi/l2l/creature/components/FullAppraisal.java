@@ -339,50 +339,48 @@ public class FullAppraisal extends CreatureComponent {
      */
     private CorticalStimulus produceCortical(Action action, double behaviouralEfficiency) {
         Perception perception = action.perception;
-        double angle = 0;
-        double focus = Math.max(Constants.MAX_VISION_FIELD_OPENING * behaviouralEfficiency, Constants.MIN_VISION_FIELD_OPENING);
-        double speed = Math.max(Constants.MAX_STEP * behaviouralEfficiency, Constants.MIN_STEP);
+        double defaultFocus = Math.max(Constants.MAX_VISION_FIELD_OPENING * behaviouralEfficiency, Constants.MIN_VISION_FIELD_OPENING);
+        double defaultSpeed = Math.max(Constants.MAX_STEP * behaviouralEfficiency, Constants.MIN_STEP);
 
-        switch (action.type) {
+        return switch (action.type) {
             case AVOID ->
                 // 45° offset from target direction (pass by, not head-on)
-                angle = perception.angle + Math.PI / 4;
+                cortical(action, perception.angle + Math.PI / 4, defaultFocus, defaultSpeed);
 
             case ESCAPE ->
                 // run directly away from threat
-                angle = perception.angle + Math.PI;
+                cortical(action, perception.angle + Math.PI, defaultFocus, defaultSpeed);
 
             case APPROACH -> {
                 // Narrow focus as creature nears target; wide field at max range, locked at contact.
-                angle = perception.angle;
-                focus = Constants.MIN_VISION_FIELD_OPENING
+                double focus = Constants.MIN_VISION_FIELD_OPENING
                         + (Constants.MAX_VISION_FIELD_OPENING - Constants.MIN_VISION_FIELD_OPENING)
                         * Math.min(perception.distance / Constants.DEFAULT_VISION_FIELD_RADIUS, 1.0);
+                yield cortical(action, perception.angle, focus, defaultSpeed);
             }
 
-            case EAT -> {
-                speed = 0;
-                angle = perception.angle;
-                focus = Constants.MIN_VISION_FIELD_OPENING;
-            }
+            case EAT ->
+                cortical(action, perception.angle, Constants.MIN_VISION_FIELD_OPENING, 0);
 
             case WANDER ->
                 // symmetric random turn ±MAX_ROTATE_ANGLE degrees around current heading
-                angle = perception.angle
-                        + (2 * new Random().nextDouble() - 1) * Math.toRadians(Constants.MAX_ROTATE_ANGLE);
+                cortical(action,
+                        perception.angle + (2 * new Random().nextDouble() - 1) * Math.toRadians(Constants.MAX_ROTATE_ANGLE),
+                        defaultFocus, defaultSpeed);
 
-            case OBSERVE -> {
-                speed = 0;
-                focus = Constants.MAX_VISION_FIELD_OPENING;
-                angle = perception.angle;
-            }
+            case OBSERVE ->
+                cortical(action, perception.angle, Constants.MAX_VISION_FIELD_OPENING, 0);
 
-            case SLEEP -> {
-                speed = 0;
-                focus = 0.0; // eye closed; gate enforced in Eye.onReceive (< MIN check)
-            }
-        }
+            case SLEEP ->
+                // focus=0.0: eye closed; gate enforced in Eye.onReceive (< MIN check)
+                cortical(action, 0, 0.0, 0);
 
+            // TURN, TOUCH, PLAY are not yet wired into action selection; fall back to defaults.
+            default -> cortical(action, perception.angle, defaultFocus, defaultSpeed);
+        };
+    }
+
+    private CorticalStimulus cortical(Action action, double angle, double focus, double speed) {
         return new CorticalStimulus(this.id, nextStimulusId(), action.type, action.perception.id, angle, focus, speed);
     }
 
