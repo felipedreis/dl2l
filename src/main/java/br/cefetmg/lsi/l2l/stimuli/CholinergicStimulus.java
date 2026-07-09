@@ -14,4 +14,9 @@ public class CholinergicStimulus extends Stimulus {
         super(origin, stimulusId);
         delta = Constants.CHOLINERGIC_DELTA;
     }
+
+    public CholinergicStimulus(SequentialId origin, SequentialId stimulusId, double delta) {
+        super(origin, stimulusId);
+        this.delta = delta;
+    }
 }

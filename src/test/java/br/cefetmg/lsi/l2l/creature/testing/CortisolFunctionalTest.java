@@ -75,12 +75,15 @@ class CortisolFunctionalTest {
         double currentHunger = h.creature().emotions().getLevel(Constants.HUNGER);
         h.creature().emotions().regulate(Constants.HUNGER, targetHunger - currentHunger);
 
-        // Run exactly CORTISOL_STRESSOR_SUSTAIN_TICKS — streak reaches the gate on the last tick.
-        for (int i = 0; i < Constants.CORTISOL_STRESSOR_SUSTAIN_TICKS; i++) h.tick();
+        // PartialAppraisal batches AdrenergicStimuli every HOMEO_BATCH_SIZE cognitive cycles to
+        // prevent queue backlog in HomeostaticRegulation. Each batch increments the stressor streak
+        // by 1. Need SUSTAIN_TICKS batches, so SUSTAIN_TICKS × HOMEO_BATCH_SIZE cognitive cycles.
+        int cyclesRequired = Constants.CORTISOL_STRESSOR_SUSTAIN_TICKS * Constants.HOMEO_BATCH_SIZE;
+        for (int i = 0; i < cyclesRequired; i++) h.tick();
 
         assertTrue(h.endocrineRecorder().hasAny(CortisolStimulus.class),
                 "HomeostaticRegulation must emit CortisolStimulus after "
-                + Constants.CORTISOL_STRESSOR_SUSTAIN_TICKS + " consecutive above-threshold ticks");
+                + Constants.CORTISOL_STRESSOR_SUSTAIN_TICKS + " consecutive above-threshold adrenergic batches");
     }
 
     @Test
@@ -91,8 +94,9 @@ class CortisolFunctionalTest {
         double currentHunger = h.creature().emotions().getLevel(Constants.HUNGER);
         h.creature().emotions().regulate(Constants.HUNGER, targetHunger - currentHunger);
 
-        // Run one fewer tick than required — streak has not yet reached the gate.
-        for (int i = 0; i < Constants.CORTISOL_STRESSOR_SUSTAIN_TICKS - 1; i++) h.tick();
+        // One fewer batch than required (SUSTAIN_TICKS × HOMEO_BATCH_SIZE − 1 cognitive cycles).
+        int cyclesRequired = Constants.CORTISOL_STRESSOR_SUSTAIN_TICKS * Constants.HOMEO_BATCH_SIZE;
+        for (int i = 0; i < cyclesRequired - 1; i++) h.tick();
 
         assertFalse(h.endocrineRecorder().hasAny(CortisolStimulus.class),
                 "HomeostaticRegulation must NOT emit CortisolStimulus before the sustain gate fires");

@@ -126,6 +126,16 @@ public interface Constants {
     // with one RPE event per cognitive cycle during sustained deprivation.
     int DEPRIVATION_RPE_INTERVAL = 10;
 
+    // --- Homeostatic message batching ---
+    // PartialAppraisal fires at ~134 Hz (eye-driven). Sending one AdrenergicStimulus and one
+    // AdenosinergicStimulus per cycle floods HomeostaticRegulation (processes ~25/s due to
+    // TypedActor overhead), creating a backlog of stale metabolic stimuli that push sleep to MAX
+    // before CholinergicStimuli from actual sleep episodes can clear it.
+    // Fix: accumulate deltas and send ONE batched message every HOMEO_BATCH_SIZE cycles.
+    // Rate drops to 134/20 × 2 ≈ 13/s (well below the 25/s processing capacity). The
+    // total biological effect (sum of deltas) is unchanged.
+    int HOMEO_BATCH_SIZE = 20;
+
     // --- Cortisol / HPA axis ---
     // Per-cycle multiplicative decay (adrenal clearance). Half-life ≈ 346 ticks ≈ 1.7 periods.
     double CORTISOL_DECAY                  = 0.998;

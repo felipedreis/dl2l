@@ -29,6 +29,12 @@ public class PartialAppraisal extends CreatureComponent {
 
     private final LearningSettings learningSettings;
     private CircadianClock circadian;
+    // Cached TypedActor proxy to avoid per-cycle CreatureActor round-trips (see HOMEO_BATCH_SIZE).
+    private EmotionalSystem cachedEmotions;
+    // Accumulated metabolic deltas; flushed as a single batched stimulus every HOMEO_BATCH_SIZE cycles.
+    private double accumulatedAdrenDelta  = 0;
+    private double accumulatedSleepDrive  = 0;
+    private int    metabolicBatchCycle    = 0;
 
     public PartialAppraisal(SequentialId id, LearningSettings learningSettings) {
         super(id);
@@ -39,6 +45,7 @@ public class PartialAppraisal extends CreatureComponent {
     public void preStart() throws Exception {
         super.preStart();
         circadian = learningSettings.isCircadianEnabled() ? new ActiveCircadianClock() : new DisabledCircadianClock();
+        cachedEmotions = creature.emotions();
     }
 
     @Override
@@ -50,21 +57,33 @@ public class PartialAppraisal extends CreatureComponent {
         else
             stimuli = new ArrayList();
 
-        Emotion maxEmotion = creature.emotions().getMaxArousal();
+        Emotion maxEmotion = cachedEmotions.getMaxArousal();
 
         // Death is a basic-drive deficit (starvation / terminal sleep deprivation); affects
         // (pain, tedium) are never lethal. The dominant emotion above still drives action selection.
-        if (creature.emotions().getMaxDriveArousal().getLevel() >= Constants.MAX_AROUSAL_LEVEL)
+        if (cachedEmotions.getMaxDriveArousal().getLevel() >= Constants.MAX_AROUSAL_LEVEL)
             creature.kill();
 
-        AdrenergicStimulus adrenergic = new AdrenergicStimulus(this.id, nextStimulusId(), Constants.DELTA);
-        creature.homeostatic().tell(adrenergic);
-
+        // Accumulate metabolic deltas; flush to HomeostaticRegulation every HOMEO_BATCH_SIZE
+        // cycles. This reduces the message rate from ~134/s to ~6/s, preventing the stale-
+        // message backlog that caused sleep pressure to overflow before CholinergicStimuli
+        // could clear it. Total biological effect (sum of deltas) is unchanged.
+        accumulatedAdrenDelta += Constants.DELTA;
         circadian.tick();
         double sleepDriveRate = circadian.driveRate();
-        if (sleepDriveRate > 0) {
-            AdenosinergicStimulus sleepDrive = new AdenosinergicStimulus(this.id, nextStimulusId(), sleepDriveRate);
-            creature.homeostatic().tell(sleepDrive);
+        if (sleepDriveRate > 0) accumulatedSleepDrive += sleepDriveRate;
+
+        AdrenergicStimulus adrenergic = null;
+        if (++metabolicBatchCycle >= Constants.HOMEO_BATCH_SIZE) {
+            metabolicBatchCycle = 0;
+            adrenergic = new AdrenergicStimulus(this.id, nextStimulusId(), accumulatedAdrenDelta);
+            creature.homeostatic().tell(adrenergic);
+            accumulatedAdrenDelta = 0;
+            if (accumulatedSleepDrive > 0) {
+                creature.homeostatic().tell(
+                        new AdenosinergicStimulus(this.id, nextStimulusId(), accumulatedSleepDrive));
+                accumulatedSleepDrive = 0;
+            }
         }
 
         // Neuromodulator pacemaker: tonic serotonin (satiety) release + per-cycle reuptake tick.
@@ -78,7 +97,7 @@ public class PartialAppraisal extends CreatureComponent {
 
         // Orexin: per-cycle release inversely proportional to sleep pressure.
         if (learningSettings.isOrexinEnabled()) {
-            double sleepPressure = creature.emotions().getLevel(Constants.SLEEP);
+            double sleepPressure = cachedEmotions.getLevel(Constants.SLEEP);
             double orexinRelease = Math.max(0.0, 1.0 - sleepPressure / Constants.MAX_AROUSAL_LEVEL);
             creature.neuromodulators().tell(
                     new OrexinergicStimulus(this.id, nextStimulusId(), orexinRelease));
@@ -123,8 +142,6 @@ public class PartialAppraisal extends CreatureComponent {
 
         ChangeStimulusState changeEmotional = new ChangeStimulusStateBuilder(this, id)
                 .buildMultipleReceivedOneEmitted(propStimuli, emotional);
-        ChangeStimulusState changeAdrenergic = new ChangeStimulusStateBuilder(this, id)
-                .buildOneReceivedOneEmitted(null, adrenergic);
 
         BehaviouralEfficiencyState behaviouralState = new BehaviouralEfficiencyState();
         behaviouralState.setBehaviouralEfficiency(behaviouralEfficiency);
@@ -132,7 +149,13 @@ public class PartialAppraisal extends CreatureComponent {
         behaviouralState.setComplexTask(perceptions.size() >= Constants.COMPLEX_TASK);
         behaviouralState.setChangeStimulusState(changeEmotional);
 
-        persist(changeEmotional, changeAdrenergic, behaviouralState);
+        if (adrenergic != null) {
+            ChangeStimulusState changeAdrenergic = new ChangeStimulusStateBuilder(this, id)
+                    .buildOneReceivedOneEmitted(null, adrenergic);
+            persist(changeEmotional, changeAdrenergic, behaviouralState);
+        } else {
+            persist(changeEmotional, behaviouralState);
+        }
     }
 
     /**
@@ -145,7 +168,7 @@ public class PartialAppraisal extends CreatureComponent {
         String[] active = {Constants.HUNGER, Constants.SLEEP, Constants.PAIN, Constants.TEDIUM};
         double sum = 0.0;
         for (String drive : active) {
-            double depth = (Constants.EQUILIBRIUM_BAND_UPPER - creature.emotions().getLevel(drive)) / span;
+            double depth = (Constants.EQUILIBRIUM_BAND_UPPER - cachedEmotions.getLevel(drive)) / span;
             sum += Math.max(0.0, Math.min(1.0, depth));
         }
         return sum / active.length;

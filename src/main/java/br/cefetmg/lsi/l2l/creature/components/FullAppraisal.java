@@ -71,6 +71,9 @@ public class FullAppraisal extends CreatureComponent {
     private boolean inSleep = false;
     private int sleepDwellTicks = 0;
     private long sleepOnsetCycle = 0;
+    // Counts consecutive SLEEP ticks; flushed to HomeostaticRegulation as a single batched
+    // CholinergicStimulus every HOMEO_BATCH_SIZE ticks (mirrors PartialAppraisal's batching).
+    private int sleepTickCount = 0;
 
     public FullAppraisal(SequentialId id, LearningSettings learningSettings, MLServiceExtension.Impl mlExt) {
         super(id);
@@ -193,7 +196,13 @@ public class FullAppraisal extends CreatureComponent {
                     // Sleep recovery: CholinergicStimulus clears adenosine each SLEEP tick.
                     // Previously emitted by Body on speed=0, but that also fired on EAT and
                     // OBSERVE. Now gated here where the action type is known.
-                    creature.homeostatic().tell(new CholinergicStimulus(id, nextStimulusId()));
+                    // Batched every HOMEO_BATCH_SIZE ticks to match PartialAppraisal's metabolic
+                    // batching and prevent queue starvation in HomeostaticRegulation.
+                    if (++sleepTickCount >= Constants.HOMEO_BATCH_SIZE) {
+                        creature.homeostatic().tell(new CholinergicStimulus(id, nextStimulusId(),
+                                sleepTickCount * Constants.CHOLINERGIC_DELTA));
+                        sleepTickCount = 0;
+                    }
                     if (!inSleep) {
                         inSleep = true;
                         sleepDwellTicks = 0;
@@ -205,6 +214,12 @@ public class FullAppraisal extends CreatureComponent {
                     }
                 } else {
                     if (inSleep) {
+                        // Flush any partial cholinergic batch on wake so accumulated clearing isn't lost.
+                        if (sleepTickCount > 0) {
+                            creature.homeostatic().tell(new CholinergicStimulus(id, nextStimulusId(),
+                                    sleepTickCount * Constants.CHOLINERGIC_DELTA));
+                            sleepTickCount = 0;
+                        }
                         logger.info(String.format("FullAppraisal[%s]: WAKE after %d sleep cycles at cycle %d",
                                 id, sleepDwellTicks, cognitiveCycle));
                         persist(new SleepEpisodeState(id.key, sleepOnsetCycle, cognitiveCycle, sleepDwellTicks));
