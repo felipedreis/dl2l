@@ -64,16 +64,8 @@ public class FullAppraisal extends CreatureComponent {
     private double serotoninTonic = 0.0;
     private double orexinTonic = 0.0;
 
-    // Endocrine: cached for logging; STRESS is regulated directly by EndocrineSystem.
-    private double endocrineStress = 0.0;
-
     private long cognitiveCycle = 0;
-    private boolean inSleep = false;
-    private int sleepDwellTicks = 0;
-    private long sleepOnsetCycle = 0;
-    // Counts consecutive SLEEP ticks; flushed to HomeostaticRegulation as a single batched
-    // CholinergicStimulus every HOMEO_BATCH_SIZE ticks (mirrors PartialAppraisal's batching).
-    private int sleepTickCount = 0;
+    private final SleepEpisode sleepEpisode = new SleepEpisode();
 
     public FullAppraisal(SequentialId id, LearningSettings learningSettings, MLServiceExtension.Impl mlExt) {
         super(id);
@@ -142,103 +134,113 @@ public class FullAppraisal extends CreatureComponent {
                 continue;
             }
 
-            if (stimulus instanceof EndocrineState es) {
-                endocrineStress = es.stressLevel;
+            if (stimulus instanceof EndocrineState) {
                 continue;
             }
 
-            if (stimulus instanceof EmotionalStimulus) {
-                cognitiveCycle++;
-                memorySystem.tickDecisionCycle();
-                EmotionalStimulus emotional = (EmotionalStimulus) stimulus;
-
-                // Dual-encoder: supply current homeostatic state to WorldModelFilter
-                // before action selection so inference can condition on it.
-                if (worldModelFilter != null) {
-                    worldModelFilter.updateInternalState(encodeInternalState());
-                }
-
-                // Tonic neuromodulators bias the affordance sampler (exploration / rest) at
-                // selection time; a no-op when neuromodulation is disabled.
-                if (learningSettings.isNeuromodulationEnabled() && affordanceFilter != null) {
-                    affordanceFilter.setModulation(daTonic, serotoninTonic);
-                }
-
-                List<Action> possibleActions = definePossibleActions(emotional.getPerceptions());
-                Action action = actionSelection.selectOne(possibleActions, emotional.getMaxEmotion());
-
-                ShortTermMemory stm = new ShortTermMemory(
-                        action.type, action.perception.id, emotional.maxEmotion,
-                        action.perception, cognitiveCycle);
-                memorySystem.addShortTermMemory(stm);
-
-                logger.info(String.format("FullAppraisal[%s]: selected=%s for=%s angle=%.3f dist=%.1f",
-                        id, action.type, action.perception.objectType,
-                        action.perception.angle, action.perception.distance));
-
-                dispatchTediumStimulus(action.type);
-
-                CorticalStimulus cortical = produceCortical(action, emotional.behaviouralEfficiency);
-
-                logger.info(String.format("FullAppraisal[%s]: cortical angle=%.3f speed=%.3f",
-                        id, cortical.angle, cortical.speed));
-
-                // Anti-micro-nap hysteresis: once asleep, hold SLEEP for at least
-                // MIN_SLEEP_TICKS cognitive cycles before allowing any wake transition.
-                if (inSleep && action.type != ActionType.SLEEP
-                        && sleepDwellTicks < Constants.MIN_SLEEP_TICKS) {
-                    action = new Action(ActionType.SLEEP, action.perception);
-                    cortical = produceCortical(action, emotional.behaviouralEfficiency);
-                }
-
-                // Update sleep state and fire consolidation signals.
-                if (action.type == ActionType.SLEEP) {
-                    // Sleep recovery: CholinergicStimulus clears adenosine each SLEEP tick.
-                    // Previously emitted by Body on speed=0, but that also fired on EAT and
-                    // OBSERVE. Now gated here where the action type is known.
-                    // Batched every HOMEO_BATCH_SIZE ticks to match PartialAppraisal's metabolic
-                    // batching and prevent queue starvation in HomeostaticRegulation.
-                    if (++sleepTickCount >= Constants.HOMEO_BATCH_SIZE) {
-                        creature.homeostatic().tell(new CholinergicStimulus(id, nextStimulusId(),
-                                sleepTickCount * Constants.CHOLINERGIC_DELTA));
-                        sleepTickCount = 0;
-                    }
-                    if (!inSleep) {
-                        inSleep = true;
-                        sleepDwellTicks = 0;
-                        sleepOnsetCycle = cognitiveCycle;
-                        logger.info(String.format("FullAppraisal[%s]: SLEEP onset at cycle %d", id, cognitiveCycle));
-                        creature.memoryConsolidator().tell(new SleepStarted(cognitiveCycle));
-                    } else {
-                        sleepDwellTicks++;
-                    }
-                } else {
-                    if (inSleep) {
-                        // Flush any partial cholinergic batch on wake so accumulated clearing isn't lost.
-                        if (sleepTickCount > 0) {
-                            creature.homeostatic().tell(new CholinergicStimulus(id, nextStimulusId(),
-                                    sleepTickCount * Constants.CHOLINERGIC_DELTA));
-                            sleepTickCount = 0;
-                        }
-                        logger.info(String.format("FullAppraisal[%s]: WAKE after %d sleep cycles at cycle %d",
-                                id, sleepDwellTicks, cognitiveCycle));
-                        persist(new SleepEpisodeState(id.key, sleepOnsetCycle, cognitiveCycle, sleepDwellTicks));
-                    }
-                    inSleep = false;
-                    sleepDwellTicks = 0;
-                }
-
-                creature.effectorCortex().tell(cortical);
-
-                long inferenceMs = (worldModelFilter != null)
-                        ? worldModelFilter.getLastInferenceDurationMs() : 0L;
-                ChangeStimulusState change = new ChangeStimulusStateBuilder(this, id)
-                        .buildOneReceivedOneEmitted(emotional, cortical);
-                ChosenActionState chosenActionState = new ChosenActionState(change,
-                        actionSelection.getLastUsedFilterType(), action.type, action.perception.id,
-                        inferenceMs);
-                persist(change, chosenActionState);
+            if (stimulus instanceof EmotionalStimulus emotional) {
+                handleEmotionalStimulus(emotional);
             }
+        }
+    }
+
+    private void handleEmotionalStimulus(EmotionalStimulus emotional) {
+        cognitiveCycle++;
+        memorySystem.tickDecisionCycle();
+
+        if (worldModelFilter != null) {
+            worldModelFilter.updateInternalState(encodeInternalState());
+        }
+
+        if (learningSettings.isNeuromodulationEnabled() && affordanceFilter != null) {
+            affordanceFilter.setModulation(daTonic, serotoninTonic);
+        }
+
+        List<Action> possibleActions = definePossibleActions(emotional.getPerceptions());
+        Action action = actionSelection.selectOne(possibleActions, emotional.getMaxEmotion());
+
+        ShortTermMemory stm = new ShortTermMemory(
+                action.type, action.perception.id, emotional.maxEmotion,
+                action.perception, cognitiveCycle);
+        memorySystem.addShortTermMemory(stm);
+
+        logger.info(String.format("FullAppraisal[%s]: selected=%s for=%s angle=%.3f dist=%.1f",
+                id, action.type, action.perception.objectType,
+                action.perception.angle, action.perception.distance));
+
+        dispatchTediumStimulus(action.type);
+
+        CorticalStimulus cortical = produceCortical(action, emotional.behaviouralEfficiency);
+
+        logger.info(String.format("FullAppraisal[%s]: cortical angle=%.3f speed=%.3f",
+                id, cortical.angle, cortical.speed));
+
+        // Anti-micro-nap hysteresis: once asleep, hold SLEEP for at least
+        // MIN_SLEEP_TICKS cognitive cycles before allowing any wake transition.
+        if (sleepEpisode.isActive() && action.type != ActionType.SLEEP
+                && sleepEpisode.dwellTicks < Constants.MIN_SLEEP_TICKS) {
+            action = new Action(ActionType.SLEEP, action.perception);
+            cortical = produceCortical(action, emotional.behaviouralEfficiency);
+        }
+
+        if (action.type == ActionType.SLEEP) {
+            sleepEpisode.batchTickCount++;
+            if (sleepEpisode.batchTickCount >= Constants.HOMEO_BATCH_SIZE) {
+                creature.homeostatic().tell(new CholinergicStimulus(id, nextStimulusId(),
+                        sleepEpisode.batchTickCount * Constants.CHOLINERGIC_DELTA));
+                sleepEpisode.batchTickCount = 0;
+            }
+            if (sleepEpisode.onSleepTick(cognitiveCycle)) {
+                logger.info(String.format("FullAppraisal[%s]: SLEEP onset at cycle %d", id, cognitiveCycle));
+                creature.memoryConsolidator().tell(new SleepStarted(cognitiveCycle));
+            }
+        } else if (sleepEpisode.isActive()) {
+            if (sleepEpisode.batchTickCount > 0) {
+                creature.homeostatic().tell(new CholinergicStimulus(id, nextStimulusId(),
+                        sleepEpisode.batchTickCount * Constants.CHOLINERGIC_DELTA));
+            }
+            logger.info(String.format("FullAppraisal[%s]: WAKE after %d sleep cycles at cycle %d",
+                    id, sleepEpisode.dwellTicks, cognitiveCycle));
+            persist(new SleepEpisodeState(id.key, sleepEpisode.onsetCycle, cognitiveCycle, sleepEpisode.dwellTicks));
+            sleepEpisode.onWake();
+        }
+
+        creature.effectorCortex().tell(cortical);
+
+        long inferenceMs = (worldModelFilter != null)
+                ? worldModelFilter.getLastInferenceDurationMs() : 0L;
+        ChangeStimulusState change = new ChangeStimulusStateBuilder(this, id)
+                .buildOneReceivedOneEmitted(emotional, cortical);
+        ChosenActionState chosenActionState = new ChosenActionState(change,
+                actionSelection.getLastUsedFilterType(), action.type, action.perception.id,
+                inferenceMs);
+        persist(change, chosenActionState);
+    }
+
+    private static final class SleepEpisode {
+        boolean active = false;
+        int dwellTicks = 0;
+        long onsetCycle = 0L;
+        int batchTickCount = 0;
+
+        boolean isActive() { return active; }
+
+        /** Returns true on the first tick (onset); increments dwellTicks on subsequent ticks. */
+        boolean onSleepTick(long currentCycle) {
+            if (!active) {
+                active = true;
+                dwellTicks = 0;
+                onsetCycle = currentCycle;
+                return true;
+            }
+            dwellTicks++;
+            return false;
+        }
+
+        void onWake() {
+            active = false;
+            dwellTicks = 0;
+            batchTickCount = 0;
         }
     }
 

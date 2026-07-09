@@ -33,9 +33,16 @@ public class EndocrineSystem extends CreatureComponent {
 
     private double cortisol = 0.0;
     private long publishSeq = 0;
+    private EmotionalSystem emotionalSystem;
 
     public EndocrineSystem(SequentialId id) {
         super(id);
+    }
+
+    @Override
+    public void preStart() throws Exception {
+        super.preStart();
+        emotionalSystem = creature.emotions();
     }
 
     @Override
@@ -44,10 +51,10 @@ public class EndocrineSystem extends CreatureComponent {
         List<Stimulus> stimuli = (List<Stimulus>) message;
 
         for (Stimulus stimulus : stimuli) {
-            if (stimulus instanceof EndocrineTick et) {
-                onTick(et);
-            } else if (stimulus instanceof CortisolStimulus cs) {
-                onCortisol(cs);
+            switch (stimulus) {
+                case EndocrineTick et   -> onTick(et);
+                case CortisolStimulus cs -> onCortisol(cs);
+                default                  -> {}
             }
         }
 
@@ -71,12 +78,12 @@ public class EndocrineSystem extends CreatureComponent {
     private void updateStress() {
         double stressLevel = Math.max(0.0,
                 (cortisol - Constants.CORTISOL_STRESS_THRESHOLD) * Constants.CORTISOL_STRESS_GAIN);
-        double currentStress = creature.emotions().getLevel(Constants.STRESS);
-        creature.emotions().regulate(Constants.STRESS, stressLevel - currentStress);
+        double currentStress = emotionalSystem.getLevel(Constants.STRESS);
+        emotionalSystem.regulate(Constants.STRESS, stressLevel - currentStress);
     }
 
     private void publishState() {
-        double stressLevel = creature.emotions().getLevel(Constants.STRESS);
+        double stressLevel = emotionalSystem.getLevel(Constants.STRESS);
         creature.fullAppraisal().tell(
                 new EndocrineState(id, nextStimulusId(), cortisol, stressLevel));
         persist(new EndocrineStateLog(id.key, publishSeq++, cortisol, stressLevel));
