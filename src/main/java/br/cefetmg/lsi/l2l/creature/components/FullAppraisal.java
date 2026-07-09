@@ -14,7 +14,6 @@ import br.cefetmg.lsi.l2l.creature.actionSelector.WorldModelFilter;
 import br.cefetmg.lsi.l2l.creature.ml.MLServiceExtension;
 import br.cefetmg.lsi.l2l.creature.ml.ModelContract;
 import br.cefetmg.lsi.l2l.creature.ml.WorldModelEngine;
-import java.util.List;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
@@ -26,8 +25,10 @@ import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.creature.memory.ShortTermMemory;
 import br.cefetmg.lsi.l2l.creature.bd.SleepEpisodeState;
 import br.cefetmg.lsi.l2l.creature.ml.SleepStarted;
+import br.cefetmg.lsi.l2l.stimuli.CholinergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.CorticalStimulus;
 import br.cefetmg.lsi.l2l.stimuli.EmotionalStimulus;
+import br.cefetmg.lsi.l2l.stimuli.EndocrineState;
 import br.cefetmg.lsi.l2l.stimuli.NeuromodulatorState;
 import br.cefetmg.lsi.l2l.stimuli.Stimulus;
 import br.cefetmg.lsi.l2l.stimuli.TediumStimulus;
@@ -49,22 +50,19 @@ public class FullAppraisal extends CreatureComponent {
     private final MLServiceExtension.Impl mlExt;
 
     private ActionSelection actionSelection;
-
     private MemorySystem memorySystem;
-
     private WorldModelEngine worldModelEngine;
-    private WorldModelFilter worldModelFilter;  // kept for updateInternalState calls; null when no dual encoder
+    private WorldModelFilter worldModelFilter;
     private ModelContract contract;
 
-    // Neuromodulation: cached tonic levels (eventually-consistent) and the filter they modulate.
+    // Neuromodulation: eventually-consistent tonic snapshots broadcast by NeuromodulatorSystem.
     private ActionProbabilityFilter affordanceFilter;
     private double daTonic = 0.0;
     private double serotoninTonic = 0.0;
+    private double orexinTonic = 0.0;
 
     private long cognitiveCycle = 0;
-    private boolean inSleep = false;
-    private int sleepDwellTicks = 0;
-    private long sleepOnsetCycle = 0;
+    private final SleepEpisode sleepEpisode = new SleepEpisode();
 
     public FullAppraisal(SequentialId id, LearningSettings learningSettings, MLServiceExtension.Impl mlExt) {
         super(id);
@@ -121,183 +119,303 @@ public class FullAppraisal extends CreatureComponent {
 
     @Override
     public void onReceive(Object message) {
-        List stimuli = (List) message;
-
-        for (Object aStimuli : stimuli) {
-            Stimulus stimulus = (Stimulus) aStimuli;
-
-            if (stimulus instanceof NeuromodulatorState) {
-                // Cache the slow-varying tonic levels for the next action selection.
-                NeuromodulatorState nm = (NeuromodulatorState) stimulus;
-                daTonic = nm.dopamineTonic;
-                serotoninTonic = nm.serotoninTonic;
-                continue;
-            }
-
-            if (stimulus instanceof EmotionalStimulus) {
-                cognitiveCycle++;
-                memorySystem.tickDecisionCycle();
-                EmotionalStimulus emotional = (EmotionalStimulus) stimulus;
-
-                // Dual-encoder: supply current homeostatic state to WorldModelFilter
-                // before action selection so inference can condition on it.
-                if (worldModelFilter != null) {
-                    worldModelFilter.updateInternalState(encodeInternalState());
-                }
-
-                // Tonic neuromodulators bias the affordance sampler (exploration / rest) at
-                // selection time; a no-op when neuromodulation is disabled.
-                if (learningSettings.isNeuromodulationEnabled() && affordanceFilter != null) {
-                    affordanceFilter.setModulation(daTonic, serotoninTonic);
-                }
-
-                List<Action> possibleActions = definePossibleActions(emotional.getPerceptions());
-                Action action = actionSelection.selectOne(possibleActions, emotional.getMaxEmotion());
-
-                ShortTermMemory stm = new ShortTermMemory(
-                        action.type, action.perception.id, emotional.maxEmotion,
-                        action.perception, cognitiveCycle);
-                memorySystem.addShortTermMemory(stm);
-
-                logger.info(String.format("FullAppraisal[%s]: selected=%s for=%s angle=%.3f dist=%.1f",
-                        id, action.type, action.perception.objectType,
-                        action.perception.angle, action.perception.distance));
-
-                dispatchTediumStimulus(action.type);
-
-                CorticalStimulus cortical = produceCortical(action, emotional.behaviouralEfficiency);
-
-                logger.info(String.format("FullAppraisal[%s]: cortical angle=%.3f speed=%.3f",
-                        id, cortical.angle, cortical.speed));
-
-                // Anti-micro-nap hysteresis: once asleep, hold SLEEP for at least
-                // MIN_SLEEP_TICKS cognitive cycles before allowing any wake transition.
-                if (inSleep && action.type != ActionType.SLEEP
-                        && sleepDwellTicks < Constants.MIN_SLEEP_TICKS) {
-                    action = new Action(ActionType.SLEEP, action.perception);
-                    cortical = produceCortical(action, emotional.behaviouralEfficiency);
-                }
-
-                // Update sleep state and fire consolidation signals.
-                if (action.type == ActionType.SLEEP) {
-                    if (!inSleep) {
-                        inSleep = true;
-                        sleepDwellTicks = 0;
-                        sleepOnsetCycle = cognitiveCycle;
-                        logger.info(String.format("FullAppraisal[%s]: SLEEP onset at cycle %d", id, cognitiveCycle));
-                        creature.memoryConsolidator().tell(new SleepStarted(cognitiveCycle));
-                    } else {
-                        sleepDwellTicks++;
-                    }
-                } else {
-                    if (inSleep) {
-                        logger.info(String.format("FullAppraisal[%s]: WAKE after %d sleep cycles at cycle %d",
-                                id, sleepDwellTicks, cognitiveCycle));
-                        persist(new SleepEpisodeState(id.key, sleepOnsetCycle, cognitiveCycle, sleepDwellTicks));
-                    }
-                    inSleep = false;
-                    sleepDwellTicks = 0;
-                }
-
-                creature.effectorCortex().tell(cortical);
-
-                long inferenceMs = (worldModelFilter != null)
-                        ? worldModelFilter.getLastInferenceDurationMs() : 0L;
-                ChangeStimulusState change = new ChangeStimulusStateBuilder(this, id)
-                        .buildOneReceivedOneEmitted(emotional, cortical);
-                ChosenActionState chosenActionState = new ChosenActionState(change,
-                        actionSelection.getLastUsedFilterType(), action.type, action.perception.id,
-                        inferenceMs);
-                persist(change, chosenActionState);
+        @SuppressWarnings("unchecked")
+        List<Stimulus> stimuli = (List<Stimulus>) message;
+        for (Stimulus stimulus : stimuli) {
+            switch (stimulus) {
+                case NeuromodulatorState nm -> onNeuromodulatorState(nm);
+                case EndocrineState es      -> onEndocrineState(es);
+                case EmotionalStimulus em   -> onEmotionalStimulus(em);
+                default                     -> {}
             }
         }
     }
 
-    private CorticalStimulus produceCortical(Action action, double behaviouralEfficiency) {
-        double angle, speed, focus;
-        CorticalStimulus cortical;
-        Random random = new Random();
-        Perception perception = action.perception;
+    /**
+     * Caches the latest tonic neuromodulator snapshot from {@link NeuromodulatorSystem}.
+     *
+     * <p>Dopamine modulates the affordance filter's exploration–exploitation balance:
+     * high DA increases willingness to sample low-probability actions (exploration).
+     * Serotonin biases the same filter toward patience (slows consummatory urgency).
+     * Orexin is used in {@link #definePossibleActions} to gate SLEEP out of the action
+     * set when the creature is too alert to sleep. All three are eventually-consistent —
+     * the snapshot may lag one cognitive cycle behind the true tonic level.
+     */
+    private void onNeuromodulatorState(NeuromodulatorState nm) {
+        daTonic        = nm.dopamineTonic;
+        serotoninTonic = nm.serotoninTonic;
+        orexinTonic    = nm.orexinTonic;
+    }
 
-        angle = 0;
+    /**
+     * Receives the HPA-axis broadcast after each cortisol tick.
+     *
+     * <p>{@link EndocrineSystem} regulates STRESS directly into {@link EmotionalSystem} on
+     * every tick, so FullAppraisal does not need to re-apply the stress level — it arrives
+     * already encoded in the next {@link EmotionalStimulus} via {@code getMaxArousal()}.
+     * The stimulus is received here (rather than dropped by the mailbox) so it is correctly
+     * ordered relative to the emotional stimulus in the batched delivery queue.
+     */
+    private void onEndocrineState(EndocrineState es) {
+        // Stress is already applied to EmotionalSystem by EndocrineSystem; nothing to do here.
+    }
 
-        focus = Math.max(Constants.MAX_VISION_FIELD_OPENING * behaviouralEfficiency, Constants.MIN_VISION_FIELD_OPENING);
-        speed = Math.max(Constants.MAX_STEP * behaviouralEfficiency, Constants.MIN_STEP);
+    /**
+     * Core cognitive appraisal cycle: selects an action, manages sleep state, and dispatches
+     * the motor command to {@link EffectorCortex}.
+     *
+     * <p>Ordering is intentional: action selection must see the current neuromodulator tonics
+     * (updated by {@link #onNeuromodulatorState} in the same batch before this stimulus),
+     * the hysteresis gate enforces minimum sleep duration before action can change, and
+     * sleep state updates must happen on the <em>final</em> action after the gate.
+     */
+    private void onEmotionalStimulus(EmotionalStimulus emotional) {
+        cognitiveCycle++;
+        memorySystem.tickDecisionCycle();
 
-        switch (action.type) {
-            case AVOID:
-                // 45° offset from target direction (pass by, not head-on)
-                angle = perception.angle + Math.PI / 4;
-                break;
+        Action action = selectAction(emotional);
+        updateMemory(action, emotional);
+        dispatchTediumStimulus(action.type);
 
-            case ESCAPE:
-                // run directly away from threat
-                angle = perception.angle + Math.PI;
-                break;
+        action = enforceHysteresisGate(action, emotional.behaviouralEfficiency);
+        CorticalStimulus cortical = updateSleepState(action, emotional.behaviouralEfficiency);
 
-            case APPROACH:
-                // Narrow focus as creature nears target; wide field at max range, locked at contact.
-                // Implements the attentional feedback loop: approach → narrower field → fewer distractors.
-                angle = perception.angle;
-                focus = Constants.MIN_VISION_FIELD_OPENING
-                        + (Constants.MAX_VISION_FIELD_OPENING - Constants.MIN_VISION_FIELD_OPENING)
-                        * Math.min(perception.distance / Constants.DEFAULT_VISION_FIELD_RADIUS, 1.0);
-                break;
+        creature.effectorCortex().tell(cortical);
+        persistDecision(emotional, cortical, action);
+    }
 
-            case EAT:
-                speed = 0;
-                angle = perception.angle;
-                // Locked on target at contact (distance=0); same as interpolation result at d=0.
-                focus = Constants.MIN_VISION_FIELD_OPENING;
-                break;
+    /**
+     * Runs the full action-selection pipeline for the current cognitive cycle.
+     *
+     * <p>Before selection the JEPA world model (if loaded) is supplied with the creature's
+     * current homeostatic state so the internal encoder can condition predictions on it.
+     * The affordance filter is re-modulated by the latest dopamine and serotonin tonics so
+     * neuromodulation influences the exploration-exploitation balance at selection time.
+     * The orexin gate in {@link #definePossibleActions} removes SLEEP from the candidate
+     * set when the creature is too alert, ensuring sleep is only possible under genuine
+     * sleep pressure.
+     */
+    private Action selectAction(EmotionalStimulus emotional) {
+        if (worldModelFilter != null) {
+            worldModelFilter.updateInternalState(encodeInternalState());
+        }
+        if (learningSettings.isNeuromodulationEnabled() && affordanceFilter != null) {
+            affordanceFilter.setModulation(daTonic, serotoninTonic);
+        }
+        List<Action> possibleActions = definePossibleActions(emotional.getPerceptions());
+        return actionSelection.selectOne(possibleActions, emotional.getMaxEmotion());
+    }
 
-            case WANDER:
-                // symmetric random turn ±MAX_ROTATE_ANGLE degrees around current heading
-                angle = perception.angle
-                        + (2 * random.nextDouble() - 1) * Math.toRadians(Constants.MAX_ROTATE_ANGLE);
-                break;
+    /**
+     * Records the selected action and its perceptual context in short-term memory.
+     *
+     * <p>Short-term memory (STM) is the raw episodic buffer that feeds the memory
+     * consolidation pipeline during sleep. Each entry stores the action taken, the
+     * target perception, the dominant emotion at decision time, and the cognitive cycle
+     * counter so episodes can be ordered and replayed by {@link MemoryConsolidator}.
+     */
+    private void updateMemory(Action action, EmotionalStimulus emotional) {
+        ShortTermMemory stm = new ShortTermMemory(
+                action.type, action.perception.id, emotional.maxEmotion,
+                action.perception, cognitiveCycle);
+        memorySystem.addShortTermMemory(stm);
 
-            case OBSERVE:
-                speed = 0;
-                focus = Constants.MAX_VISION_FIELD_OPENING;
-                angle = perception.angle;
-                break;
+        logger.info(String.format("FullAppraisal[%s]: selected=%s for=%s angle=%.3f dist=%.1f",
+                id, action.type, action.perception.objectType,
+                action.perception.angle, action.perception.distance));
+    }
 
-            case SLEEP:
-                speed = 0;
-                // 0.0 = eye literally closed; gate enforced in Eye.onReceive (< MIN check).
-                focus = 0.0;
-                break;
+    /**
+     * Applies the anti-micro-nap hysteresis gate and returns the (possibly overridden) action.
+     *
+     * <p>Once the creature enters sleep, it must remain asleep for at least
+     * {@code MIN_SLEEP_TICKS} cognitive cycles before any wake transition is allowed.
+     * Without this gate, the orexin boundary (sleep pressure ≈ 3.5 = gate threshold) is
+     * numerically unstable and the creature flickers in and out of sleep every 1–2 cycles,
+     * accumulating negligible cholinergic clearing and never actually resting.
+     * When the gate overrides the selected action, cortical parameters are recomputed so
+     * the motor command correctly reflects the enforced SLEEP posture (speed=0, focus=0).
+     */
+    private Action enforceHysteresisGate(Action action, double behaviouralEfficiency) {
+        if (sleepEpisode.isActive()
+                && action.type != ActionType.SLEEP
+                && sleepEpisode.dwellTicks < Constants.MIN_SLEEP_TICKS) {
+            return new Action(ActionType.SLEEP, action.perception);
+        }
+        return action;
+    }
+
+    /**
+     * Updates sleep episode tracking, sends homeostatic clearing signals, and produces
+     * the {@link CorticalStimulus} motor command for the final action.
+     *
+     * <p>On each SLEEP tick a cholinergic clearing signal is batched; the batch is flushed
+     * to {@link HomeostaticRegulation} every {@code HOMEO_BATCH_SIZE} ticks (matching
+     * PartialAppraisal's metabolic batching rate) to prevent queue starvation. A partial
+     * batch is always flushed on wake so no accumulated clearing is lost.
+     * On sleep onset a {@link SleepStarted} signal is sent to {@link MemoryConsolidator}
+     * to trigger asynchronous adapter training on the background ML thread.
+     */
+    private CorticalStimulus updateSleepState(Action action, double behaviouralEfficiency) {
+        if (action.type == ActionType.SLEEP) {
+            sleepEpisode.batchTickCount++;
+            if (sleepEpisode.batchTickCount >= Constants.HOMEO_BATCH_SIZE) {
+                creature.homeostatic().tell(new CholinergicStimulus(id, nextStimulusId(),
+                        sleepEpisode.batchTickCount * Constants.CHOLINERGIC_DELTA));
+                sleepEpisode.batchTickCount = 0;
+            }
+            if (sleepEpisode.onSleepTick(cognitiveCycle)) {
+                logger.info(String.format("FullAppraisal[%s]: SLEEP onset at cycle %d", id, cognitiveCycle));
+                creature.memoryConsolidator().tell(new SleepStarted(cognitiveCycle));
+            }
+        } else if (sleepEpisode.isActive()) {
+            if (sleepEpisode.batchTickCount > 0) {
+                creature.homeostatic().tell(new CholinergicStimulus(id, nextStimulusId(),
+                        sleepEpisode.batchTickCount * Constants.CHOLINERGIC_DELTA));
+            }
+            logger.info(String.format("FullAppraisal[%s]: WAKE after %d sleep cycles at cycle %d",
+                    id, sleepEpisode.dwellTicks, cognitiveCycle));
+            persist(new SleepEpisodeState(id.key, sleepEpisode.onsetCycle, cognitiveCycle, sleepEpisode.dwellTicks));
+            sleepEpisode.onWake();
         }
 
-        cortical = new CorticalStimulus(this.id, nextStimulusId(), action.type, action.perception.id, angle, focus, speed);
+        CorticalStimulus cortical = produceCortical(action, behaviouralEfficiency);
+        logger.info(String.format("FullAppraisal[%s]: cortical angle=%.3f speed=%.3f",
+                id, cortical.angle, cortical.speed));
         return cortical;
     }
 
+    /**
+     * Persists the decision audit trail: the stimulus-response change record and the
+     * chosen-action log entry (includes which filter type made the final selection and,
+     * when a world-model filter is active, how long inference took).
+     */
+    private void persistDecision(EmotionalStimulus emotional, CorticalStimulus cortical, Action action) {
+        long inferenceMs = (worldModelFilter != null)
+                ? worldModelFilter.getLastInferenceDurationMs() : 0L;
+        ChangeStimulusState change = new ChangeStimulusStateBuilder(this, id)
+                .buildOneReceivedOneEmitted(emotional, cortical);
+        ChosenActionState chosenActionState = new ChosenActionState(change,
+                actionSelection.getLastUsedFilterType(), action.type, action.perception.id,
+                inferenceMs);
+        persist(change, chosenActionState);
+    }
+
+    private static final class SleepEpisode {
+        boolean active = false;
+        int dwellTicks = 0;
+        long onsetCycle = 0L;
+        int batchTickCount = 0;
+
+        boolean isActive() { return active; }
+
+        /** Returns true on the first tick (onset); increments dwellTicks on subsequent ticks. */
+        boolean onSleepTick(long currentCycle) {
+            if (!active) {
+                active = true;
+                dwellTicks = 0;
+                onsetCycle = currentCycle;
+                return true;
+            }
+            dwellTicks++;
+            return false;
+        }
+
+        void onWake() {
+            active = false;
+            dwellTicks = 0;
+            batchTickCount = 0;
+        }
+    }
+
+    /**
+     * Converts the selected action into a motor command ({@link CorticalStimulus}).
+     *
+     * <p>Speed and focus defaults are scaled by behavioural efficiency (Yerkes-Dodson),
+     * clamped to {@code [MIN_STEP, MAX_STEP]} and {@code [MIN_VISION_FIELD_OPENING,
+     * MAX_VISION_FIELD_OPENING]}. Each action type then overrides the defaults as needed:
+     * APPROACH narrows focus linearly with proximity (attentional narrowing feedback loop);
+     * SLEEP sets speed=0 and focus=0 (eye closed); EAT locks on the target at contact.
+     */
+    private CorticalStimulus produceCortical(Action action, double behaviouralEfficiency) {
+        Perception perception = action.perception;
+        double defaultFocus = Math.max(Constants.MAX_VISION_FIELD_OPENING * behaviouralEfficiency, Constants.MIN_VISION_FIELD_OPENING);
+        double defaultSpeed = Math.max(Constants.MAX_STEP * behaviouralEfficiency, Constants.MIN_STEP);
+
+        return switch (action.type) {
+            case AVOID ->
+                // 45° offset from target direction (pass by, not head-on)
+                cortical(action, perception.angle + Math.PI / 4, defaultFocus, defaultSpeed);
+
+            case ESCAPE ->
+                // run directly away from threat
+                cortical(action, perception.angle + Math.PI, defaultFocus, defaultSpeed);
+
+            case APPROACH -> {
+                // Narrow focus as creature nears target; wide field at max range, locked at contact.
+                double focus = Constants.MIN_VISION_FIELD_OPENING
+                        + (Constants.MAX_VISION_FIELD_OPENING - Constants.MIN_VISION_FIELD_OPENING)
+                        * Math.min(perception.distance / Constants.DEFAULT_VISION_FIELD_RADIUS, 1.0);
+                yield cortical(action, perception.angle, focus, defaultSpeed);
+            }
+
+            case EAT ->
+                cortical(action, perception.angle, Constants.MIN_VISION_FIELD_OPENING, 0);
+
+            case WANDER ->
+                // symmetric random turn ±MAX_ROTATE_ANGLE degrees around current heading
+                cortical(action,
+                        perception.angle + (2 * new Random().nextDouble() - 1) * Math.toRadians(Constants.MAX_ROTATE_ANGLE),
+                        defaultFocus, defaultSpeed);
+
+            case OBSERVE ->
+                cortical(action, perception.angle, Constants.MAX_VISION_FIELD_OPENING, 0);
+
+            case SLEEP ->
+                // focus=0.0: eye closed; gate enforced in Eye.onReceive (< MIN check)
+                cortical(action, 0, 0.0, 0);
+
+            // TURN, TOUCH, PLAY are not yet wired into action selection; fall back to defaults.
+            default -> cortical(action, perception.angle, defaultFocus, defaultSpeed);
+        };
+    }
+
+    private CorticalStimulus cortical(Action action, double angle, double focus, double speed) {
+        return new CorticalStimulus(this.id, nextStimulusId(), action.type, action.perception.id, angle, focus, speed);
+    }
+
+    /**
+     * Emits a {@link TediumStimulus} to regulate the tedium affect based on the selected action.
+     *
+     * <p>This pathway is only active when the neuromodulator loop is <em>disabled</em>.
+     * When neuromodulation is on, tedium is regulated by dopamine absence in
+     * {@link NeuromodulatorSystem} — re-applying it here would double-count the effect.
+     * WANDER relieves tedium (novelty); OBSERVE increases it (passive fixation); all
+     * other non-sleep actions apply a mild idle rate.
+     */
     private void dispatchTediumStimulus(ActionType selectedAction) {
-        // When the neuromodulator loop is active, tedium is a reward-absence affect regulated by the
-        // NeuromodulatorSystem (dopamine relief + serotonin-slowed passive rise), so the legacy
-        // action-based tedium drift is suppressed to avoid double-regulation.
         if (learningSettings.isNeuromodulatorLoopActive()) return;
         if (selectedAction == ActionType.SLEEP) return;
 
-        double delta;
-        if (selectedAction == ActionType.WANDER) {
-            delta = -Constants.TEDIUM_WANDER_RELIEF;
-        } else if (selectedAction == ActionType.OBSERVE) {
-            delta = Constants.TEDIUM_OBSERVE_RATE;
-        } else {
-            delta = Constants.TEDIUM_IDLE_RATE;
-        }
+        double delta = switch (selectedAction) {
+            case WANDER  -> -Constants.TEDIUM_WANDER_RELIEF;
+            case OBSERVE ->  Constants.TEDIUM_OBSERVE_RATE;
+            default      ->  Constants.TEDIUM_IDLE_RATE;
+        };
 
-        creature.homeostatic().tell(
-                new TediumStimulus(id, nextStimulusId(), delta, selectedAction));
+        creature.homeostatic().tell(new TediumStimulus(id, nextStimulusId(), delta, selectedAction));
     }
 
-    // Encode the creature's current homeostatic state into a float[] for the
-    // dual-encoder InternalEncoder. Uses internalStateFeatureOrder (e.g.
-    // ["ht_hunger","ht_sleep","ht_pain","ht_tedium"]) with "ht_" stripped to
-    // get the emotion name. Returns null when no dual encoder is loaded.
+    /**
+     * Encodes the creature's current homeostatic drive levels into a float vector for the
+     * JEPA dual-encoder's internal state branch.
+     *
+     * <p>The feature order is defined by {@code model_contract.json}'s
+     * {@code internalStateFeatureOrder} field (e.g. {@code ["ht_hunger","ht_sleep",…]}).
+     * The {@code "ht_"} prefix is stripped to map feature names back to emotion names in
+     * {@link EmotionalSystem}. Returns {@code null} when no dual encoder is loaded, which
+     * causes {@link WorldModelFilter} to skip the internal state conditioning path.
+     */
     private float[] encodeInternalState() {
         if (worldModelFilter == null || !contract.hasDualEncoder) return null;
         List<String> featureOrder = contract.internalStateFeatureOrder;
@@ -313,6 +431,9 @@ public class FullAppraisal extends CreatureComponent {
         List<Action> actions = new ArrayList<>();
         for (Perception perception : perceptions) {
             actions.addAll(actionsForPerception(perception));
+        }
+        if (learningSettings.isOrexinEnabled() && orexinTonic >= Constants.OREXIN_SLEEP_GATE_THRESHOLD) {
+            actions.removeIf(a -> a.type == ActionType.SLEEP);
         }
         return actions;
     }

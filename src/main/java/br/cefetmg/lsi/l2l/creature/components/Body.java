@@ -6,7 +6,6 @@ import br.cefetmg.lsi.l2l.common.Vector;
 import br.cefetmg.lsi.l2l.creature.bd.BodyState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
-import br.cefetmg.lsi.l2l.stimuli.CholinergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.MuscularStimulus;
 import br.cefetmg.lsi.l2l.stimuli.Stimulus;
 
@@ -41,14 +40,12 @@ public class Body extends CreatureComponent{
                         currentPosition.x, currentPosition.y, nextPosition.x, nextPosition.y,
                         speedVector.x, speedVector.y));
 
-                CholinergicStimulus cholinergic = null;
-                if (muscular.speed  == 0) {
-                    cholinergic = new CholinergicStimulus(id, nextStimulusId());
-                    creature.homeostatic().tell(cholinergic);
-                }
-
+                // CholinergicStimulus (sleep recovery) is no longer emitted here.
+                // Speed=0 is a physics fact shared by EAT, OBSERVE, and SLEEP; gating sleep
+                // recovery on speed alone caused EAT to clear sleep drive on every eating tick.
+                // Sleep recovery is now emitted by FullAppraisal when ActionType.SLEEP is selected.
                 ChangeStimulusState change = new ChangeStimulusStateBuilder(this, this.id)
-                        .buildOneReceivedOneEmitted(muscular, cholinergic);
+                        .buildOneReceivedOneEmitted(muscular, null);
                 BodyState bodyState = new BodyState(currentPosition.x, currentPosition.y, nextPosition.x, nextPosition.y,
                         speedVector.size());
                 bodyState.setStimulusState(change);

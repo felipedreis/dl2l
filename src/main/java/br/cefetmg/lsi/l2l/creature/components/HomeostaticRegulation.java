@@ -12,10 +12,13 @@ import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyContext;
 import br.cefetmg.lsi.l2l.creature.ml.WakeUp;
 import br.cefetmg.lsi.l2l.stimuli.*;
+import br.cefetmg.lsi.l2l.stimuli.CortisolStimulus;
 import br.cefetmg.lsi.l2l.world.Self;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Created by felipe on 02/01/17.
@@ -23,10 +26,22 @@ import java.util.List;
 public class HomeostaticRegulation extends CreatureComponent {
 
     private final LearningSettings learningSettings;
+    // Consecutive above-threshold tick count per drive; reset to 0 when drive drops below threshold.
+    private final Map<String, Integer> stressorStreak = new HashMap<>();
+    // Cycle counters for rate-limiting drive-deprivation RPE events (one per N adrenergic ticks).
+    private int hungerDeprivationCycle = 0;
+    private int sleepDeprivationCycle  = 0;
+    private EmotionalSystem emotionalSystem;
 
     public HomeostaticRegulation(SequentialId id, LearningSettings learningSettings) {
         super(id);
         this.learningSettings = learningSettings;
+    }
+
+    @Override
+    public void preStart() throws Exception {
+        super.preStart();
+        emotionalSystem = creature.emotions();
     }
 
     @Override
@@ -63,7 +78,7 @@ public class HomeostaticRegulation extends CreatureComponent {
 
     /** Capture the regulated drive's pre-interaction level as the expectancy-predictor context. */
     private ExpectancyContext contextFor(String drive) {
-        return new ExpectancyContext(drive, creature.emotions().getLevel(drive));
+        return new ExpectancyContext(drive, emotionalSystem.getLevel(drive));
     }
 
     /**
@@ -80,10 +95,10 @@ public class HomeostaticRegulation extends CreatureComponent {
 
     private EmotionalState emotionalSnapshot() {
         EmotionalState s = new EmotionalState();
-        s.setHunger(creature.emotions().getLevel(Constants.HUNGER));
-        s.setSleep(creature.emotions().getLevel(Constants.SLEEP));
-        s.setPain(creature.emotions().getLevel(Constants.PAIN));
-        s.setTedium(creature.emotions().getLevel(Constants.TEDIUM));
+        s.setHunger(emotionalSystem.getLevel(Constants.HUNGER));
+        s.setSleep(emotionalSystem.getLevel(Constants.SLEEP));
+        s.setPain(emotionalSystem.getLevel(Constants.PAIN));
+        s.setTedium(emotionalSystem.getLevel(Constants.TEDIUM));
         return s;
     }
 
@@ -102,18 +117,21 @@ public class HomeostaticRegulation extends CreatureComponent {
         // Sympathetic metabolic drift applies to basic drives only. The affects are driven by their
         // own pathways, not a metabolic clock: pain by nociception (injury), tedium by the reward
         // system (boredom = reward absence). So neither is raised here.
-        creature.emotions().regulate(Constants.HUNGER, s.delta);
+        Emotion hungerAfter = emotionalSystem.regulate(Constants.HUNGER, s.delta);
+        emitCortisolIfStressed(Constants.HUNGER, hungerAfter.getLevel());
+        emitDeprivationRpe(Constants.HUNGER, hungerAfter, s.delta, hungerDeprivationCycle++);
         if (!learningSettings.isCircadianEnabled()) {
             // Circadian clock owns sleep pressure via AdenosinergicStimulus when enabled; otherwise
             // sleep drifts metabolically here.
-            creature.emotions().regulate(Constants.SLEEP, s.delta);
+            Emotion sleepAfter = emotionalSystem.regulate(Constants.SLEEP, s.delta);
+            emitCortisolIfStressed(Constants.SLEEP, sleepAfter.getLevel());
         }
         return null;
     }
 
     private Stimulus handleNutritive(NutritiveStimulus s) {
         ExpectancyContext ctx = contextFor(Constants.HUNGER);
-        Emotion regulated = creature.emotions().regulate(Constants.HUNGER, -s.nutritiveValue);
+        Emotion regulated = emotionalSystem.regulate(Constants.HUNGER, -s.nutritiveValue);
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
                 s.origin, s.objectType, ActionType.EAT, regulated, realizedDelta(ctx, regulated), ctx);
         creature.valuation().tell(emitted);
@@ -121,13 +139,15 @@ public class HomeostaticRegulation extends CreatureComponent {
     }
 
     private Stimulus handleAdenosinergic(AdenosinergicStimulus s) {
-        creature.emotions().regulate(Constants.SLEEP, s.delta);
+        Emotion sleepAfter = emotionalSystem.regulate(Constants.SLEEP, s.delta);
+        emitCortisolIfStressed(Constants.SLEEP, sleepAfter.getLevel());
+        emitDeprivationRpe(Constants.SLEEP, sleepAfter, s.delta, sleepDeprivationCycle++);
         return null;
     }
 
     private Stimulus handleCholinergic(CholinergicStimulus s) {
         ExpectancyContext ctx = contextFor(Constants.SLEEP);
-        Emotion regulated = creature.emotions().regulate(Constants.SLEEP, -s.delta);
+        Emotion regulated = emotionalSystem.regulate(Constants.SLEEP, -s.delta);
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(), id, Self.get(),
                 ActionType.SLEEP, regulated, realizedDelta(ctx, regulated), ctx);
         creature.valuation().tell(emitted);
@@ -140,7 +160,8 @@ public class HomeostaticRegulation extends CreatureComponent {
 
     private Stimulus handleNociceptive(NociceptiveStimulus s) {
         ExpectancyContext ctx = contextFor(Constants.PAIN);
-        Emotion regulated = creature.emotions().regulate(Constants.PAIN, s.painIntensity);
+        Emotion regulated = emotionalSystem.regulate(Constants.PAIN, s.painIntensity);
+        emitCortisolIfStressed(Constants.PAIN, regulated.getLevel());
         if (s.action == null) return null;
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
                 s.origin, s.objectType, s.action, regulated, realizedDelta(ctx, regulated), ctx);
@@ -150,9 +171,9 @@ public class HomeostaticRegulation extends CreatureComponent {
 
     private Stimulus handleAnalgesic(AnalgesicStimulus s) {
         ExpectancyContext ctx = contextFor(Constants.PAIN);
-        double currentPain = creature.emotions().getLevel(Constants.PAIN);
+        double currentPain = emotionalSystem.getLevel(Constants.PAIN);
         double effectiveDelta = Math.min(s.delta, Math.max(0, currentPain));
-        Emotion regulated = creature.emotions().regulate(Constants.PAIN, -effectiveDelta);
+        Emotion regulated = emotionalSystem.regulate(Constants.PAIN, -effectiveDelta);
         if (s.action == null) return null;
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
                 s.origin, s.objectType, s.action, regulated, realizedDelta(ctx, regulated), ctx);
@@ -162,7 +183,7 @@ public class HomeostaticRegulation extends CreatureComponent {
 
     private Stimulus handleTedium(TediumStimulus s) {
         ExpectancyContext ctx = contextFor(Constants.TEDIUM);
-        Emotion regulated = creature.emotions().regulate(Constants.TEDIUM, s.delta);
+        Emotion regulated = emotionalSystem.regulate(Constants.TEDIUM, s.delta);
         if (s.action != ActionType.WANDER && s.action != ActionType.OBSERVE) return null;
         Stimulus emitted = new EvaluationStimulus(s.origin, nextStimulusId(),
                 id, Self.get(), s.action, regulated, realizedDelta(ctx, regulated), ctx);
@@ -170,10 +191,43 @@ public class HomeostaticRegulation extends CreatureComponent {
         return emitted;
     }
 
+    /**
+     * Drive-deprivation negative RPE: when a drive rises above the homeostatic equilibrium band
+     * without being relieved, that is a worse-than-expected outcome. Emit an EvaluationStimulus
+     * to Valuation so the expectancy path computes a negative RPE and suppresses DA.
+     * Rate-limited to one event per DEPRIVATION_RPE_INTERVAL ticks to avoid flooding Valuation.
+     */
+    private void emitDeprivationRpe(String driveName, Emotion regulated, double delta, int cycle) {
+        if (!learningSettings.isExpectancyEnabled()) return;
+        if (regulated.getLevel() <= Constants.EQUILIBRIUM_BAND_UPPER) return;
+        if (cycle % Constants.DEPRIVATION_RPE_INTERVAL != 0) return;
+
+        ExpectancyContext ctx = new ExpectancyContext(driveName, regulated.getLevel());
+        // arousalVariation = +delta (drive went up); reward = -delta (negative).
+        // Valuation computes rpe = reward − expected ≤ 0 → DA dips.
+        Stimulus eval = new EvaluationStimulus(id, nextStimulusId(),
+                id, Self.get(), ActionType.WANDER, regulated, delta, ctx);
+        creature.valuation().tell(eval);
+    }
+
+    private void emitCortisolIfStressed(String driveName, double arousalLevel) {
+        if (!learningSettings.isEndocrineEnabled()) return;
+        double excess = arousalLevel - Constants.STRESS_ACTIVATION_THRESHOLD;
+        if (excess > 0) {
+            int streak = stressorStreak.merge(driveName, 1, Integer::sum);
+            if (streak >= Constants.CORTISOL_STRESSOR_SUSTAIN_TICKS) {
+                creature.endocrine().tell(
+                        new CortisolStimulus(id, nextStimulusId(), excess * Constants.CORTISOL_STRESSOR_GAIN));
+            }
+        } else {
+            stressorStreak.put(driveName, 0);
+        }
+    }
+
     // When pain exceeds the immune threshold, queue an AnalgesicStimulus back to self so
     // it is processed in the next batch — avoiding double-reduction within the current one.
     private void triggerImmuneResponseIfNeeded() {
-        double currentPain = creature.emotions().getLevel(Constants.PAIN);
+        double currentPain = emotionalSystem.getLevel(Constants.PAIN);
         if (currentPain <= Constants.PAIN_IMMUNE_THRESHOLD) return;
         double immune = Math.min(Constants.PAIN_IMMUNE_RATE, currentPain - Constants.PAIN_IMMUNE_THRESHOLD);
         logger.fine(String.format("HomeostaticRegulation[%s]: queuing immune pain decay=%.4f", id, immune));

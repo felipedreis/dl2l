@@ -13,11 +13,19 @@ public class NeuromodulatorState extends Stimulus {
 
     public final double dopamineTonic;
     public final double serotoninTonic;
+    public final double orexinTonic;
 
     public NeuromodulatorState(SequentialId origin, SequentialId stimulusId,
-                               double dopamineTonic, double serotoninTonic) {
+                               double dopamineTonic, double serotoninTonic, double orexinTonic) {
         super(origin, stimulusId);
-        this.dopamineTonic = dopamineTonic;
+        this.dopamineTonic  = dopamineTonic;
         this.serotoninTonic = serotoninTonic;
+        this.orexinTonic    = orexinTonic;
+    }
+
+    /** Backward-compatible constructor for tests that don't exercise orexin. */
+    public NeuromodulatorState(SequentialId origin, SequentialId stimulusId,
+                               double dopamineTonic, double serotoninTonic) {
+        this(origin, stimulusId, dopamineTonic, serotoninTonic, 0.0);
     }
 }

@@ -7,6 +7,7 @@ import br.cefetmg.lsi.l2l.creature.testing.TestingHarness;
 import br.cefetmg.lsi.l2l.stimuli.DopaminergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.NeuromodulatorState;
 import br.cefetmg.lsi.l2l.stimuli.NeuromodulatorTick;
+import br.cefetmg.lsi.l2l.stimuli.OrexinergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.SerotonergicStimulus;
 import br.cefetmg.lsi.l2l.world.FruitType;
 import org.junit.jupiter.api.Test;
@@ -31,6 +32,16 @@ public class NeuromodulatorSystemTest {
 
     private static NeuromodulatorTick tick(double phase) {
         return new NeuromodulatorTick(SID, SID.next(), phase);
+    }
+
+    private static OrexinergicStimulus orexin(double release) {
+        return new OrexinergicStimulus(SID, SID.next(), release);
+    }
+
+    private static double publishedOrexin(TestingHarness h) {
+        NeuromodulatorState s = h.fullRecorder().lastOf(NeuromodulatorState.class);
+        assertNotNull(s, "a NeuromodulatorState must be published after each update");
+        return s.orexinTonic;
     }
 
     private static double publishedDopamine(TestingHarness h) {
@@ -101,6 +112,47 @@ public class NeuromodulatorSystemTest {
             h.inject(NeuromodulatorSystem.class, tick(-Math.PI / 2));
         }
         assertEquals(0.0, publishedDopamine(h), 1e-9);
+    }
+
+    // --- Orexin integrator ---
+
+    @Test
+    void orexin_accumulates_from_release() {
+        TestingHarness h = TestingHarness.builder().build();
+
+        h.inject(NeuromodulatorSystem.class, orexin(0.5));
+        assertEquals(0.5, publishedOrexin(h), 1e-9);
+
+        // Decay happens on tick (like DA reuptake); release accumulates on OrexinergicStimulus.
+        h.inject(NeuromodulatorSystem.class, tick(0.0));   // orexin decays: 0.5 * OREXIN_DECAY
+        h.inject(NeuromodulatorSystem.class, orexin(0.5)); // then adds: + 0.5
+        assertEquals(0.5 * Constants.OREXIN_DECAY + 0.5, publishedOrexin(h), 1e-9);
+    }
+
+    @Test
+    void orexin_decays_to_zero_without_input() {
+        TestingHarness h = TestingHarness.builder().build();
+
+        h.inject(NeuromodulatorSystem.class, orexin(1.0));
+        // Decay is triggered by tick (no release → zero orexin release each tick)
+        for (int i = 0; i < 300; i++) {
+            h.inject(NeuromodulatorSystem.class, tick(0.0));
+        }
+        assertEquals(0.0, publishedOrexin(h), 1e-3);
+    }
+
+    @Test
+    void orexin_converges_to_fixed_point_with_continuous_release() {
+        TestingHarness h = TestingHarness.builder().build();
+
+        // Real pipeline order per cycle: tick (decay) then OrexinergicStimulus (accumulate).
+        // Fixed point: orexin = orexin * OREXIN_DECAY + 1.0 → orexin = 1 / (1 - OREXIN_DECAY).
+        for (int i = 0; i < 400; i++) {
+            h.inject(NeuromodulatorSystem.class, tick(0.0));
+            h.inject(NeuromodulatorSystem.class, orexin(1.0));
+        }
+        double expected = 1.0 / (1.0 - Constants.OREXIN_DECAY);
+        assertEquals(expected, publishedOrexin(h), 1.0);
     }
 
     // --- Tedium as a reward-absence affect regulated by the pool ---

@@ -88,6 +88,7 @@ public final class TestingCreature implements Creature {
         register(cid = cid.next(), new HomeostaticRegulation(cid, learningSettings));
         register(cid = cid.next(), new Valuation(cid, learningSettings));
         register(cid = cid.next(), new NeuromodulatorSystem(cid));
+        register(cid = cid.next(), new EndocrineSystem(cid));
 
         // Wire each component to the Creature + persister + self-ref.
         components.forEach((cls, component) -> {
@@ -150,6 +151,9 @@ public final class TestingCreature implements Creature {
     public ComponentRef valuation()       { return refs.get(Valuation.class); }
     @Override
     public ComponentRef neuromodulators() { return refs.get(NeuromodulatorSystem.class); }
+
+    @Override
+    public ComponentRef endocrine()       { return refs.get(EndocrineSystem.class); }
 
     @Override
     public EmotionalSystem emotions() { return emotionalSystem; }

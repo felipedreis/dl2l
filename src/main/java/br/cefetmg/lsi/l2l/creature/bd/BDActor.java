@@ -33,6 +33,7 @@ public class BDActor extends UntypedActor {
                     em.persist(state);
             }
             em.getTransaction().commit();
+            em.clear();
 
         } else if (message instanceof PoisonPill) {
             getContext().stop(self());

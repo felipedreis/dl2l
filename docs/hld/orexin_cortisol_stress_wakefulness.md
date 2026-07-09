@@ -84,68 +84,94 @@ FullAppraisal (action gating)
 
 ---
 
-## Component 2 — Cortisol (`CortisolStimulus`, `EndocrineSystem`)
+## Component 2 — Cortisol (`EndocrineTick`, `CortisolStimulus`, `EndocrineSystem`)
 
 ### What it is biologically
 
 Cortisol is a glucocorticoid hormone secreted by the adrenal cortex (HPA axis: hypothalamus →
 pituitary → adrenal). It operates on a *much slower* timescale than neuropeptides (minutes to
-hours vs. milliseconds). Its functions include: (1) a **circadian morning pulse** (peaks ~30 min
-after waking to mobilise energy for the day); (2) a **stress response** (sustained HPA activation
-in the face of chronic stressors — hunger, injury, social conflict — producing the physiological
-correlates of stress).
+hours vs. milliseconds). Its biological functions:
+
+1. **Smooth circadian baseline** — a daily tonic that peaks in the early morning (awakening
+   cortisol response) and declines through the day. This is not an all-or-nothing pulse but a
+   continuously phase-modulated synthesis rate.
+2. **Stress response** — the HPA activates only under *sustained, unrelieved* stressors (chronic
+   hunger, persistent pain). A single foraging episode above threshold is not a biological
+   stressor — sustained deprivation is.
+3. **Negative feedback** — glucocorticoid receptors in the hypothalamus and pituitary inhibit
+   further CRH/ACTH release. This self-limiting mechanism prevents runaway accumulation. The
+   standard receptor-saturation model is `synth_effective = synth / (1 + k·cortisol)`.
+
+*Empirical motivation: the v1 implementation (flat morning pulse + per-tick stressor pathway)
+caused pathological accumulation — mean cortisol 40× above the stress threshold, STRESS pinned
+at MAX for the entire run (EXP-P59). The redesign below fixes all three root causes identified.*
 
 ### Architecture — separate `EndocrineSystem` component
 
-Cortisol is not a fast neurotransmitter — it is a circulating hormone. It deserves its own
-component rather than being folded into `NeuromodulatorSystem`.
-
 ```
-New component: EndocrineSystem (untyped CreatureComponent)
-  fields: cortisol  (slow leaky integrator; CORTISOL_DECAY ≈ 0.9995 → half-life ~1386 cycles)
+EndocrineSystem (untyped CreatureComponent)
+  state: cortisol  (slow leaky integrator)
 
-  Emitters (who sends CortisolStimulus):
-    PartialAppraisal:
-      morning pulse: if circadianPhase transitions from NIGHT→DAY:
-        send CortisolStimulus(origin, stimulusId, CORTISOL_MORNING_PULSE)
-        ──► EndocrineSystem
-    HomeostaticRegulation:
-      stressor pathway: on each handler (handleNutritive, handleNociceptive, ...):
-        stressorMagnitude = max(0, regulatedArousal - STRESS_ACTIVATION_THRESHOLD)
-        if stressorMagnitude > 0:
-          send CortisolStimulus(origin, stimulusId, stressorMagnitude * CORTISOL_STRESSOR_GAIN)
-          ──► EndocrineSystem
+  ── Tick pacemaker ───────────────────────────────────────────────────────────────────
+  PartialAppraisal (each cognitive cycle, endocrineEnabled):
+    send EndocrineTick(circadian.phase())  ──► EndocrineSystem
 
-  Handler:
-    onCortisol(CortisolStimulus s):
-      cortisol = cortisol * CORTISOL_DECAY + s.magnitude
-      // When cortisol exceeds the stress threshold, activate the stress affect
-      stressLevel = max(0, (cortisol - CORTISOL_STRESS_THRESHOLD) * CORTISOL_STRESS_GAIN)
-      creature.emotions().regulate(STRESS, stressLevel - current_stress)
-      publish EndocrineState(cortisolTonic, stressLevel) → FullAppraisal / logging
+  onTick(EndocrineTick et):
+    cortisol *= CORTISOL_DECAY                    // passive adrenal clearance
+    synth = CORTISOL_CIRCADIAN_BASELINE
+          + CORTISOL_CIRCADIAN_AMPLITUDE * max(0, sin(phase - CORTISOL_MORNING_OFFSET))
+    cortisol += synth / (1 + CORTISOL_FEEDBACK_GAIN * cortisol)  // saturating negative feedback
+
+  ── Sustained-stressor pathway ────────────────────────────────────────────────────────
+  HomeostaticRegulation (per drive: HUNGER, SLEEP, PAIN):
+    streak[drive]++ if drive > STRESS_ACTIVATION_THRESHOLD, else reset streak[drive] = 0
+    if streak[drive] >= CORTISOL_STRESSOR_SUSTAIN_TICKS:
+      excess = drive - STRESS_ACTIVATION_THRESHOLD
+      send CortisolStimulus(excess * CORTISOL_STRESSOR_GAIN)  ──► EndocrineSystem
+
+  onCortisol(CortisolStimulus cs):
+    cortisol += cs.magnitude / (1 + CORTISOL_FEEDBACK_GAIN * cortisol)  // negative feedback
+
+  ── Shared update after all stimuli processed ─────────────────────────────────────────
+  stressLevel = max(0, (cortisol - CORTISOL_STRESS_THRESHOLD) * CORTISOL_STRESS_GAIN)
+  creature.emotions().regulate(STRESS, stressLevel - currentStress)
+  publish EndocrineState(cortisolTonic, stressLevel) → FullAppraisal / logging
 ```
+
+### Steady-state analysis
+
+The `input / (1 + k·c)` feedback term bounds cortisol at a finite equilibrium. At constant
+synthesis rate `r`, the fixed point solves `r / (1+k·c) = (1−DECAY) · c`:
+
+| Condition | Total rate `r` | Equilibrium `c*` | Below threshold? |
+|---|---|---|---|
+| Baseline only (night) | 0.003 | ≈ 0.82 | ✓ (< 3.0) |
+| Baseline + morning peak | 0.013 | ≈ 2.1 | ✓ (< 3.0) |
+| Sustained stressor (excess=1) | 0.003 + 0.05 = 0.053 | ≈ 4.7 | ✗ → STRESS ≈ 0.85 |
 
 ### Stress affect
 
-`STRESS` is already registered as an inactive emotion in `EmotionalSystemActor`. Cortisol
-activates it:
+`STRESS` is registered as an inactive emotion in `EmotionalSystemActor`. Cortisol activates it:
 
 - **Valence:** negative (arousal → aversion — same polarity as pain/tedium).
 - **Not lethal** — stress cannot trigger death (only drives can).
-- **Action coupling** (optional): `ActionTendencyFilter` can map `stress → {ESCAPE, WANDER}` to
-  model fight-or-flight, though this requires some chronic stressor (predator) in the world to
-  be meaningful.
+- **Action coupling** (deferred): `ActionTendencyFilter` can map `stress → {ESCAPE, WANDER}` to
+  model fight-or-flight; needs a world with chronic stressors (predator, injury zones).
 - **Persistence:** `EndocrineStateLog` JPA entity (same pattern as `NeuromodulatorStateLog`).
 
 ### Key constants
 
-| Constant | Initial value | Role |
+| Constant | Value | Role |
 |---|---|---|
-| `CORTISOL_DECAY` | 0.9995 | Half-life ≈ 1400 cycles (~23 min at 1 cycle/s) |
-| `CORTISOL_MORNING_PULSE` | 0.5 | Circadian energy mobilisation spike |
-| `CORTISOL_STRESSOR_GAIN` | 0.3 | Per-handler stressor contribution rate |
-| `STRESS_ACTIVATION_THRESHOLD` | 4.0 | Drive/affect arousal level that triggers HPA |
-| `CORTISOL_STRESS_THRESHOLD` | 3.0 | Cortisol accumulation level that activates stress affect |
+| `CORTISOL_DECAY` | 0.998 | Passive adrenal clearance; half-life ≈ 346 cycles ≈ 1.7 periods |
+| `CORTISOL_CIRCADIAN_BASELINE` | 0.003 | Trough synthesis (night); baseline equilibrium ≈ 0.82 |
+| `CORTISOL_CIRCADIAN_AMPLITUDE` | 0.01 | Morning peak increment; peak equilibrium ≈ 2.1 |
+| `CORTISOL_MORNING_OFFSET` | 0.0 | Phase offset; peak at circadian phase = π/2 |
+| `CORTISOL_FEEDBACK_GAIN` | 1.0 | Negative-feedback strength `k` in `synth/(1+k·c)` |
+| `CORTISOL_STRESSOR_GAIN` | 0.05 | Per-handler stressor magnitude multiplier |
+| `CORTISOL_STRESSOR_SUSTAIN_TICKS` | 10 | Consecutive above-threshold ticks before HPA fires |
+| `STRESS_ACTIVATION_THRESHOLD` | 4.0 | Drive arousal level that increments the streak counter |
+| `CORTISOL_STRESS_THRESHOLD` | 3.0 | Cortisol level above which STRESS affect activates |
 | `CORTISOL_STRESS_GAIN` | 0.5 | Conversion factor: cortisol excess → stress arousal delta |
 
 ---
@@ -182,7 +208,8 @@ Creature lifecycle (with all three):
 | Stimulus | From | To | When |
 |---|---|---|---|
 | `OrexinergicStimulus` | `PartialAppraisal` | `NeuromodulatorSystem` | Every cognitive cycle |
-| `CortisolStimulus` | `PartialAppraisal` (morning), `HomeostaticRegulation` (stressor) | `EndocrineSystem` | Circadian transition / stressor events |
+| `EndocrineTick` | `PartialAppraisal` | `EndocrineSystem` | Every cognitive cycle (decay + circadian synthesis) |
+| `CortisolStimulus` | `HomeostaticRegulation` (sustained stressor only) | `EndocrineSystem` | After streak ≥ CORTISOL_STRESSOR_SUSTAIN_TICKS |
 | `EndocrineState` | `EndocrineSystem` | `FullAppraisal`, logged | After each cortisol update |
 
 ---

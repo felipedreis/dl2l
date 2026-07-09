@@ -54,11 +54,15 @@ public class LearningSettings implements Serializable {
     // --- Innate emotion→action coupling (issue #57) — default-off ---
     private final boolean actionTendencyEnabled;
 
+    // --- Orexin wakefulness gate + cortisol/endocrine system (post-#57) — default-off ---
+    private final boolean orexinEnabled;
+    private final boolean endocrineEnabled;
+
     public LearningSettings(boolean circadianEnabled,
                             boolean consolidationEnabled,
                             List<ActionSelectionType> enabledFilters) {
         this(circadianEnabled, consolidationEnabled, enabledFilters,
-                false, ExpectancyMode.DISCRETE, false, false);
+                false, ExpectancyMode.DISCRETE, false, false, false, false);
     }
 
     public LearningSettings(boolean circadianEnabled,
@@ -68,7 +72,7 @@ public class LearningSettings implements Serializable {
                             ExpectancyMode expectancyMode,
                             boolean neuromodulationEnabled) {
         this(circadianEnabled, consolidationEnabled, enabledFilters,
-                expectancyEnabled, expectancyMode, neuromodulationEnabled, false);
+                expectancyEnabled, expectancyMode, neuromodulationEnabled, false, false, false);
     }
 
     public LearningSettings(boolean circadianEnabled,
@@ -78,6 +82,20 @@ public class LearningSettings implements Serializable {
                             ExpectancyMode expectancyMode,
                             boolean neuromodulationEnabled,
                             boolean actionTendencyEnabled) {
+        this(circadianEnabled, consolidationEnabled, enabledFilters,
+                expectancyEnabled, expectancyMode, neuromodulationEnabled, actionTendencyEnabled,
+                false, false);
+    }
+
+    public LearningSettings(boolean circadianEnabled,
+                            boolean consolidationEnabled,
+                            List<ActionSelectionType> enabledFilters,
+                            boolean expectancyEnabled,
+                            ExpectancyMode expectancyMode,
+                            boolean neuromodulationEnabled,
+                            boolean actionTendencyEnabled,
+                            boolean orexinEnabled,
+                            boolean endocrineEnabled) {
         this.circadianEnabled       = circadianEnabled;
         this.consolidationEnabled   = consolidationEnabled;
         this.enabledFilters         = Collections.unmodifiableList(new ArrayList<>(enabledFilters));
@@ -85,6 +103,8 @@ public class LearningSettings implements Serializable {
         this.expectancyMode         = expectancyMode;
         this.neuromodulationEnabled = neuromodulationEnabled;
         this.actionTendencyEnabled  = actionTendencyEnabled;
+        this.orexinEnabled          = orexinEnabled;
+        this.endocrineEnabled       = endocrineEnabled;
     }
 
     /** Default: all subsystems enabled, full filter chain in canonical order. */
@@ -123,6 +143,16 @@ public class LearningSettings implements Serializable {
     /** Whether the innate ActionTendency prior biases action selection by the dominant emotion. */
     public boolean isActionTendencyEnabled() {
         return actionTendencyEnabled;
+    }
+
+    /** Whether the orexin wakefulness gate is active (gates SLEEP out when creature is rested). */
+    public boolean isOrexinEnabled() {
+        return orexinEnabled;
+    }
+
+    /** Whether the cortisol/endocrine system (HPA axis) is active. */
+    public boolean isEndocrineEnabled() {
+        return endocrineEnabled;
     }
 
     /** The emotion→action tendency map used when {@link #isActionTendencyEnabled()}. */

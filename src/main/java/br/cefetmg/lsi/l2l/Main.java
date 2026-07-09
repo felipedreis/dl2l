@@ -19,11 +19,13 @@ import org.apache.commons.cli.*;
 import javax.persistence.EntityManager;
 import javax.persistence.Persistence;
 import java.io.File;
+import java.io.InputStream;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
+import java.util.logging.LogManager;
 import java.util.logging.Logger;
 
 /**
@@ -36,6 +38,10 @@ public class Main {
 
 
     public static void main(String [] args) throws InterruptedException {
+        try (InputStream cfg = Main.class.getResourceAsStream("/logging.properties")) {
+            if (cfg != null) LogManager.getLogManager().readConfiguration(cfg);
+        } catch (Exception ignored) {}
+
         CommandLineParser parser = new BasicParser();
         try {
             CommandLine commandLine = parser.parse(options, args);

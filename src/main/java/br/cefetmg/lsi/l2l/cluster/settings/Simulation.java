@@ -28,6 +28,8 @@ public class Simulation {
 
     private boolean reposition;
 
+    private int maxRuntimeMinutes;
+
     private LearningSettings learningSettings;
 
     public Simulation(){}
@@ -69,6 +71,9 @@ public class Simulation {
 
         reposition = fullConfig.getBoolean("simulation.reposition");
 
+        maxRuntimeMinutes = fullConfig.hasPath("simulation.maxRuntimeMinutes")
+                ? fullConfig.getInt("simulation.maxRuntimeMinutes") : 0;
+
         learningSettings = parseLearningSettings(fullConfig);
     }
 
@@ -102,9 +107,12 @@ public class Simulation {
         }
 
         boolean actionTendencyEnabled = ls.hasPath("actionTendencyEnabled") && ls.getBoolean("actionTendencyEnabled");
+        boolean orexinEnabled         = ls.hasPath("orexinEnabled")         && ls.getBoolean("orexinEnabled");
+        boolean endocrineEnabled      = ls.hasPath("endocrineEnabled")      && ls.getBoolean("endocrineEnabled");
 
         return new LearningSettings(circadianEnabled, consolidationEnabled, enabledFilters,
-                expectancyEnabled, expectancyMode, neuromodulationEnabled, actionTendencyEnabled);
+                expectancyEnabled, expectancyMode, neuromodulationEnabled, actionTendencyEnabled,
+                orexinEnabled, endocrineEnabled);
     }
 
     public Long getNumHolders() {
@@ -145,6 +153,10 @@ public class Simulation {
 
     public boolean isReposition() {
         return reposition;
+    }
+
+    public int getMaxRuntimeMinutes() {
+        return maxRuntimeMinutes;
     }
 
     public LearningSettings getLearningSettings() {
