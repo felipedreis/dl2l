@@ -31,7 +31,7 @@ class SimulationViewer {
     }
 
     setupWebSocket() {
-        this.ws = new WebSocket('ws://localhost:8090/geometry');
+        this.ws = new WebSocket(`ws://${window.location.host}/geometry`);
         
         this.ws.onmessage = (event) => {
             if (this.isPaused) return;

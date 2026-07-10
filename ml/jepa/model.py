@@ -2,9 +2,10 @@
 JEPA world-model architecture for the DL2L species base model.
 
 Three modules trained jointly:
-  Encoder   : s_t  -> z_t          (input_dim -> latent_dim)
-  Predictor : z_t, a_t -> z_{t+1}  (latent_dim + action_dim -> latent_dim)
-  Critic    : z_t, a_t -> emotion   (latent_dim + action_dim -> emotion_dim, bounded)
+  Encoder         : s_t  -> z_t          (input_dim -> latent_dim)
+  Predictor       : z_t, a_t -> z_{t+1}  (latent_dim + action_dim -> latent_dim)
+  Critic          : z_t, a_t -> emotion   (latent_dim + action_dim -> emotion_dim, bounded)
+  UnifiedPredictor: (z_world, a, z_internal) -> (z_next, emotion)  — merged Predictor+Critic
 
 An IndividualAdapter wraps the Predictor output with a small additive MLP.
 The species base (Encoder + Predictor + Critic) is frozen post-training;
@@ -316,4 +317,85 @@ class InternalCriticModel(nn.Module):
         z_internal = self.internal_encoder(h_t)
         z_next     = self.predictor(z_world, a_t)
         emotion    = self.critic(torch.cat([z_next, z_internal], dim=-1), a_t)
+        return z_world, z_next, emotion
+
+
+class UnifiedPredictor(nn.Module):
+    """Merged Predictor + Critic — two-head network with internal_critic routing.
+
+    Preserves the internal_critic property: world dynamics are world-only (Predictor
+    does not see z_internal). Only the emotion head sees the internal state.
+
+    Architecture:
+        world_trunk  : [z_world, a]           -> z_next   [latent_dim]
+        emotion_head : [z_next, z_internal, a] -> emotion  [emotion_dim, tanh]
+
+    Export: wrapped as an NDList module → NDList([z_next, emotion]).
+    """
+
+    def __init__(
+        self,
+        latent_dim: int,
+        action_dim: int,
+        internal_latent_dim: int,
+        emotion_dim: int,
+        hidden: int = 128,
+    ):
+        super().__init__()
+        self.world_trunk  = _mlp(latent_dim + action_dim,
+                                 hidden, latent_dim, norm=True)
+        self.emotion_head = _mlp(latent_dim + internal_latent_dim + action_dim,
+                                 hidden, emotion_dim, norm=False)
+
+    def forward(
+        self,
+        z_world: torch.Tensor,
+        a: torch.Tensor,
+        z_internal: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Returns (z_next, emotion_pred).  emotion is tanh-bounded to [-1, 1]."""
+        z_next  = self.world_trunk(torch.cat([z_world, a], dim=-1))
+        emotion = torch.tanh(self.emotion_head(
+            torch.cat([z_next, z_internal, a], dim=-1)))
+        return z_next, emotion
+
+
+class InternalCriticUnifiedModel(nn.Module):
+    """InternalCritic variant using UnifiedPredictor (merged Predictor+Critic).
+
+    Identical routing to InternalCriticModel but replaces the two separate
+    predictor and critic modules with a single UnifiedPredictor, halving the
+    number of exported .pt files (4 instead of 5).
+
+    Export produces: encoder, internal_encoder, adapter, unified_predictor.
+    """
+
+    def __init__(
+        self,
+        input_dim: int,
+        internal_state_dim: int,
+        action_dim: int,
+        latent_dim: int,
+        internal_latent_dim: int,
+        emotion_dim: int,
+        min_arousal: float = 0.18,  # accepted for API compat with other dual variants
+        max_arousal: float = 7.0,   # accepted for API compat with other dual variants
+        hidden: int = 128,
+    ):
+        super().__init__()
+        self.encoder           = Encoder(input_dim, latent_dim, hidden)
+        self.internal_encoder  = InternalEncoder(internal_state_dim, internal_latent_dim)
+        self.unified_predictor = UnifiedPredictor(
+            latent_dim, action_dim, internal_latent_dim, emotion_dim, hidden)
+
+    def forward(
+        self,
+        s_t: torch.Tensor,
+        h_t: torch.Tensor,
+        a_t: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Returns (z_world, z_next_hat, emotion_pred)."""
+        z_world    = self.encoder(s_t)
+        z_internal = self.internal_encoder(h_t)
+        z_next, emotion = self.unified_predictor(z_world, a_t, z_internal)
         return z_world, z_next, emotion
