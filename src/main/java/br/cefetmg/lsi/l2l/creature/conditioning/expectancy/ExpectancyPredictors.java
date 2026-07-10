@@ -12,7 +12,9 @@ public final class ExpectancyPredictors {
     public static ExpectancyPredictor forMode(ExpectancyMode mode) {
         return switch (mode) {
             case CONTINUOUS -> new ContinuousDriveExpectancy();
-            case DISCRETE -> new DiscreteDriveExpectancy();
+            case DISCRETE   -> new DiscreteDriveExpectancy();
+            case JEPA       -> throw new IllegalArgumentException(
+                    "ExpectancyMode.JEPA requires a WorldModelFilter — use CreatureActor wiring, not forMode()");
         };
     }
 }

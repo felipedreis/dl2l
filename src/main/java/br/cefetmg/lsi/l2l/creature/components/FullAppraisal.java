@@ -40,6 +40,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Created by felipe on 02/01/17.
@@ -48,6 +49,8 @@ public class FullAppraisal extends CreatureComponent {
 
     private final LearningSettings learningSettings;
     private final MLServiceExtension.Impl mlExt;
+    // Populated after preStart() creates the filter; shared with JepaExpectancyPredictor.
+    private final AtomicReference<WorldModelFilter> wmFilterRef;
 
     private ActionSelection actionSelection;
     private MemorySystem memorySystem;
@@ -60,14 +63,22 @@ public class FullAppraisal extends CreatureComponent {
     private double daTonic = 0.0;
     private double serotoninTonic = 0.0;
     private double orexinTonic = 0.0;
+    // Endocrine: cortisol tonic level from HPA axis, cached for encodeInternalState().
+    private double cortisolTonic = 0.0;
 
     private long cognitiveCycle = 0;
     private final SleepEpisode sleepEpisode = new SleepEpisode();
 
     public FullAppraisal(SequentialId id, LearningSettings learningSettings, MLServiceExtension.Impl mlExt) {
+        this(id, learningSettings, mlExt, null);
+    }
+
+    public FullAppraisal(SequentialId id, LearningSettings learningSettings, MLServiceExtension.Impl mlExt,
+                         AtomicReference<WorldModelFilter> wmFilterRef) {
         super(id);
         this.learningSettings = learningSettings;
         this.mlExt = mlExt;
+        this.wmFilterRef = wmFilterRef;
     }
 
     @Override
@@ -102,6 +113,7 @@ public class FullAppraisal extends CreatureComponent {
                     if (worldModelAvailable) {
                         worldModelFilter = new WorldModelFilter(worldModelEngine, contract);
                         filterList.add(worldModelFilter);
+                        if (wmFilterRef != null) wmFilterRef.set(worldModelFilter);
                     }
                 }
                 case RANDOM          -> filterList.add(new RandomFilter());
@@ -153,11 +165,11 @@ public class FullAppraisal extends CreatureComponent {
      * <p>{@link EndocrineSystem} regulates STRESS directly into {@link EmotionalSystem} on
      * every tick, so FullAppraisal does not need to re-apply the stress level — it arrives
      * already encoded in the next {@link EmotionalStimulus} via {@code getMaxArousal()}.
-     * The stimulus is received here (rather than dropped by the mailbox) so it is correctly
-     * ordered relative to the emotional stimulus in the batched delivery queue.
+     * The cortisol tonic level is cached here for {@link #encodeInternalState()} so the
+     * JEPA internal encoder can condition on HPA-axis state.
      */
     private void onEndocrineState(EndocrineState es) {
-        // Stress is already applied to EmotionalSystem by EndocrineSystem; nothing to do here.
+        cortisolTonic = es.cortisolTonic;
     }
 
     /**
@@ -407,22 +419,49 @@ public class FullAppraisal extends CreatureComponent {
     }
 
     /**
-     * Encodes the creature's current homeostatic drive levels into a float vector for the
-     * JEPA dual-encoder's internal state branch.
+     * Encodes the creature's current internal state into a float vector for the JEPA
+     * dual-encoder's internal state branch.
      *
-     * <p>The feature order is defined by {@code model_contract.json}'s
-     * {@code internalStateFeatureOrder} field (e.g. {@code ["ht_hunger","ht_sleep",…]}).
-     * The {@code "ht_"} prefix is stripped to map feature names back to emotion names in
-     * {@link EmotionalSystem}. Returns {@code null} when no dual encoder is loaded, which
-     * causes {@link WorldModelFilter} to skip the internal state conditioning path.
+     * <p>Feature order is defined by {@code model_contract.json}'s
+     * {@code internalStateFeatureOrder} field. Three prefix namespaces are supported:
+     * <ul>
+     *   <li>{@code ht_*}  — homeostatic drive level from {@link EmotionalSystem}</li>
+     *   <li>{@code nm_*}  — neuromodulator tonic (dopamine, serotonin, orexin)</li>
+     *   <li>{@code end_*} — endocrine value (cortisol_tonic from HPA axis)</li>
+     * </ul>
+     * Returns {@code null} when no dual encoder is loaded.
      */
     private float[] encodeInternalState() {
         if (worldModelFilter == null || !contract.hasDualEncoder) return null;
         List<String> featureOrder = contract.internalStateFeatureOrder;
         float[] state = new float[featureOrder.size()];
         for (int i = 0; i < featureOrder.size(); i++) {
-            String name = featureOrder.get(i).replaceFirst("^ht_", "");
-            state[i] = (float) creature.emotions().getLevel(name);
+            String feature = featureOrder.get(i);
+            double raw;
+            if (feature.startsWith("ht_")) {
+                raw = creature.emotions().getLevel(feature.substring(3));
+            } else if (feature.startsWith("nm_")) {
+                raw = switch (feature.substring(3)) {
+                    case "dopamine"  -> daTonic;
+                    case "serotonin" -> serotoninTonic;
+                    case "orexin"    -> orexinTonic;
+                    default          -> 0.0;
+                };
+            } else if (feature.startsWith("end_")) {
+                raw = switch (feature.substring(4)) {
+                    case "cortisol_tonic" -> cortisolTonic;
+                    default               -> 0.0;
+                };
+            } else {
+                raw = 0.0;
+            }
+            // Apply per-feature z-score normalisation if stats are present in the contract.
+            if (contract.hMeans != null && contract.hStds != null
+                    && i < contract.hMeans.size() && i < contract.hStds.size()) {
+                double std = contract.hStds.get(i);
+                raw = (raw - contract.hMeans.get(i)) / (std < 1e-6 ? 1e-6 : std);
+            }
+            state[i] = (float) raw;
         }
         return state;
     }
