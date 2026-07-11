@@ -1,0 +1,76 @@
+#!/bin/bash
+# Experiment: 20260709_memory_vs_wm_v1 — JEPA conditions only (4 + 5)
+#
+#   4_jepa_only          — WORLD_MODEL filter, no consolidation
+#   5_jepa_consolidation — WORLD_MODEL filter + sleep consolidation
+#
+# Usage:
+#   ./scripts/run_exp_20260709_jepa.sh [N_TRIALS]   (default: 5)
+#
+set -euo pipefail
+
+TRIALS=${1:-5}
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+COMPOSE_DIR="$ROOT_DIR/docker"
+DC="docker compose"
+EXP="20260709_memory_vs_wm_v1"
+DATA_DIR="$ROOT_DIR/ml/data_${EXP}"
+
+CONDITION_KEYS=(
+  "4_jepa_only"
+  "5_jepa_consolidation"
+)
+
+COMPOSE_FILES=(
+  "docker-compose-20260709-memory-vs-wm-v1-4.yml"
+  "docker-compose-20260709-memory-vs-wm-v1-5.yml"
+)
+
+echo "========================================================"
+echo " EXP: $EXP (JEPA conditions only)"
+echo " Trials per condition : $TRIALS"
+echo " Conditions           : ${#CONDITION_KEYS[@]} (4_jepa_only, 5_jepa_consolidation)"
+echo " Total runs           : $((TRIALS * ${#CONDITION_KEYS[@]}))"
+echo " Output               : $DATA_DIR"
+echo "========================================================"
+
+mkdir -p "$DATA_DIR"
+
+for trial in $(seq 1 "$TRIALS"); do
+  for idx in "${!CONDITION_KEYS[@]}"; do
+    COND="${CONDITION_KEYS[$idx]}"
+    COMPOSE="${COMPOSE_FILES[$idx]}"
+    PROJ="exp20260709_${COND}_t${trial}"
+
+    echo ""
+    echo "────────────────────────────────────────────────────────"
+    echo " Condition: $COND  |  Trial: $trial/$TRIALS"
+    echo "────────────────────────────────────────────────────────"
+
+    (cd "$COMPOSE_DIR" && $DC -p "$PROJ" -f "$COMPOSE" down -v --remove-orphans 2>/dev/null || true)
+    (cd "$COMPOSE_DIR" && $DC -p "$PROJ" -f "$COMPOSE" up -d)
+
+    HOLDER_ID=$(cd "$COMPOSE_DIR" && $DC -p "$PROJ" -f "$COMPOSE" ps -q dl2l-holder)
+    echo "  Holder container: $HOLDER_ID"
+    echo "  Waiting for simulation to finish ..."
+    docker wait "$HOLDER_ID"
+    echo "  Simulation done."
+
+    echo "  Extracting data → $DATA_DIR/$COND/trial_$trial/ ..."
+    python3 "$ROOT_DIR/scripts/exp_extract.py" \
+        --experiment "$EXP" \
+        --condition  "$COND" \
+        --trial      "$trial" \
+        --out        "$DATA_DIR" \
+        --container  "db"
+
+    (cd "$COMPOSE_DIR" && $DC -p "$PROJ" -f "$COMPOSE" down -v)
+    echo "  Trial $trial/$TRIALS for $COND complete."
+  done
+done
+
+echo ""
+echo "========================================================"
+echo " ALL DONE"
+echo " Data: $DATA_DIR"
+echo "========================================================"
