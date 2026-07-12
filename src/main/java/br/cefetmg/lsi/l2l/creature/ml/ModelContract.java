@@ -25,6 +25,9 @@ public class ModelContract {
     private static final List<String> MODEL_FILES_DUAL =
             List.of("species_adapter.pt", "species_critic.pt", "species_encoder.pt",
                     "species_internal_encoder.pt", "species_predictor.pt");
+    private static final List<String> MODEL_FILES_UNIFIED =
+            List.of("species_adapter.pt", "species_encoder.pt",
+                    "species_internal_encoder.pt", "species_unified_predictor.pt");
 
     @JsonProperty("schema_version")           public int schemaVersion;
     @JsonProperty("input_dim")                public int inputDim;
@@ -41,12 +44,15 @@ public class ModelContract {
     @JsonProperty("max_arousal")              public double maxArousal;
     @JsonProperty("baseline_pred_error")          public double  baselinePredError      = 1.0;
     @JsonProperty("ood_threshold_multiplier")     public double  oodThresholdMultiplier = 2.0;
-    @JsonProperty("has_internal_encoder")         public boolean hasDualEncoder         = false;
-    // "single" | "dual" | "internal_critic" — determines inference routing strategy.
-    @JsonProperty("model_variant")                public String  modelVariant           = "single";
+    @JsonProperty("has_internal_encoder")          public boolean hasDualEncoder          = false;
+    @JsonProperty("has_unified_predictor")         public boolean hasUnifiedPredictor     = false;
+    // "single" | "dual" | "internal_critic" | "unified_critic" — determines inference routing.
+    @JsonProperty("model_variant")                 public String  modelVariant            = "single";
     @JsonProperty("internal_state_dim")           public int     internalStateDim        = 0;
     @JsonProperty("internal_latent_dim")          public int     internalLatentDim       = 0;
     @JsonProperty("internal_state_feature_order") public List<String> internalStateFeatureOrder;
+    @JsonProperty("h_means")                       public List<Double> hMeans;
+    @JsonProperty("h_stds")                        public List<Double> hStds;
     // "need_relief_tanh": Critic outputs tanh((next-now)/now) in [-1,1]; lower=more relief=better.
     // absent or other value: Critic outputs absolute emotion level in [min,max_arousal].
     @JsonProperty("critic_output")                public String  criticOutput            = "absolute";
@@ -85,7 +91,9 @@ public class ModelContract {
             throw new RuntimeException(e);
         }
 
-        List<String> files = hasDualEncoder ? MODEL_FILES_DUAL : MODEL_FILES_SINGLE;
+        List<String> files = hasUnifiedPredictor ? MODEL_FILES_UNIFIED
+                           : hasDualEncoder      ? MODEL_FILES_DUAL
+                           :                       MODEL_FILES_SINGLE;
         // Alphabetical order matches the hash computed at training time.
         for (String filename : files) {
             try (DigestInputStream dis = new DigestInputStream(

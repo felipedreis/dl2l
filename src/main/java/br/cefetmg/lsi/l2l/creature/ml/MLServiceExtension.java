@@ -51,12 +51,14 @@ public class MLServiceExtension extends AbstractExtensionId<MLServiceExtension.I
 
     public record LoadedModels(
             ZooModel<NDList, NDList> encoder,
-            ZooModel<NDList, NDList> predictor,
-            ZooModel<NDList, NDList> critic,
-            ZooModel<NDList, NDList> internalEncoder,  // null when hasDualEncoder=false
+            ZooModel<NDList, NDList> predictor,          // null when hasUnifiedPredictor=true
+            ZooModel<NDList, NDList> critic,             // null when hasUnifiedPredictor=true
+            ZooModel<NDList, NDList> internalEncoder,    // null when hasDualEncoder=false
+            ZooModel<NDList, NDList> unifiedPredictor,   // null when hasUnifiedPredictor=false
             ModelContract contract
     ) {
         public boolean hasDualEncoder() { return internalEncoder != null; }
+        public boolean hasUnifiedPredictor() { return unifiedPredictor != null; }
     }
 
     // -------------------------------------------------------------------------
@@ -72,6 +74,10 @@ public class MLServiceExtension extends AbstractExtensionId<MLServiceExtension.I
                 "species_encoder.pt", "species_predictor.pt",
                 "species_critic.pt", "species_adapter.pt",
                 "species_internal_encoder.pt", "model_contract.json");
+        private static final List<String> MODEL_FILES_UNIFIED = List.of(
+                "species_encoder.pt", "species_unified_predictor.pt",
+                "species_adapter.pt", "species_internal_encoder.pt",
+                "model_contract.json");
 
         private final LoadedModels models;
         private final ActorRef inferenceRouter;
@@ -110,9 +116,10 @@ public class MLServiceExtension extends AbstractExtensionId<MLServiceExtension.I
 
                 system.registerOnTermination(() -> {
                     models.encoder().close();
-                    models.predictor().close();
-                    models.critic().close();
-                    if (models.internalEncoder() != null) models.internalEncoder().close();
+                    if (models.predictor() != null)        models.predictor().close();
+                    if (models.critic() != null)           models.critic().close();
+                    if (models.internalEncoder() != null)  models.internalEncoder().close();
+                    if (models.unifiedPredictor() != null) models.unifiedPredictor().close();
                     perCreatureAdapters.values().forEach(m -> {
                         try { m.close(); } catch (Exception ignored) {}
                     });
@@ -202,7 +209,9 @@ public class MLServiceExtension extends AbstractExtensionId<MLServiceExtension.I
         }
 
         private static void extractModelFiles(Path tempDir, ModelContract contract) throws IOException {
-            List<String> files = contract.hasDualEncoder ? MODEL_FILES_DUAL : MODEL_FILES_SINGLE;
+            List<String> files = contract.hasUnifiedPredictor ? MODEL_FILES_UNIFIED
+                               : contract.hasDualEncoder      ? MODEL_FILES_DUAL
+                               :                                MODEL_FILES_SINGLE;
             for (String filename : files) {
                 if (filename.equals("model_contract.json")) continue;
                 try (InputStream is = MLServiceExtension.class
@@ -216,14 +225,22 @@ public class MLServiceExtension extends AbstractExtensionId<MLServiceExtension.I
 
         private static LoadedModels loadModels(Path modelDir, ModelContract contract)
                 throws IOException, ModelNotFoundException, MalformedModelException {
-            ZooModel<NDList, NDList> internalEncoder = contract.hasDualEncoder
+            ZooModel<NDList, NDList> internalEncoder = (contract.hasDualEncoder || contract.hasUnifiedPredictor)
                     ? loadInferenceModel(modelDir, "species_internal_encoder")
                     : null;
+            ZooModel<NDList, NDList> unifiedPredictor = contract.hasUnifiedPredictor
+                    ? loadInferenceModel(modelDir, "species_unified_predictor")
+                    : null;
+            ZooModel<NDList, NDList> predictor = contract.hasUnifiedPredictor
+                    ? null : loadInferenceModel(modelDir, "species_predictor");
+            ZooModel<NDList, NDList> critic = contract.hasUnifiedPredictor
+                    ? null : loadInferenceModel(modelDir, "species_critic");
             return new LoadedModels(
                     loadInferenceModel(modelDir, "species_encoder"),
-                    loadInferenceModel(modelDir, "species_predictor"),
-                    loadInferenceModel(modelDir, "species_critic"),
+                    predictor,
+                    critic,
                     internalEncoder,
+                    unifiedPredictor,
                     contract);
         }
 

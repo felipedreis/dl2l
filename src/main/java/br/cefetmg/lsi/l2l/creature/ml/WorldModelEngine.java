@@ -35,9 +35,10 @@ public class WorldModelEngine implements AutoCloseable {
 
     private final Predictor<NDList, NDList> encoderPredictor;
     private final Predictor<NDList, NDList> adapterPredictor;
-    private final Predictor<NDList, NDList> predictorPredictor;
-    private final Predictor<NDList, NDList> criticPredictor;
-    private final Predictor<NDList, NDList> internalEncoderPredictor;  // null when single-encoder
+    private final Predictor<NDList, NDList> predictorPredictor;      // null when unified
+    private final Predictor<NDList, NDList> criticPredictor;         // null when unified
+    private final Predictor<NDList, NDList> internalEncoderPredictor; // null when single-encoder
+    private final Predictor<NDList, NDList> unifiedPredictorPredictor; // null when not unified
     private final ModelContract contract;
     private final ModelVariantStrategy strategy;
 
@@ -60,13 +61,13 @@ public class WorldModelEngine implements AutoCloseable {
         }
 
         MLServiceExtension.LoadedModels m = mlExt.models();
-        this.encoderPredictor          = m.encoder().newPredictor();
-        this.adapterPredictor          = mlExt.getOrCreateAdapter(creatureKey).newPredictor();
-        this.predictorPredictor        = m.predictor().newPredictor();
-        this.criticPredictor           = m.critic().newPredictor();
-        this.internalEncoderPredictor  = m.hasDualEncoder()
-                ? m.internalEncoder().newPredictor() : null;
-        this.strategy                  = ModelVariantStrategyFactory.forContract(this.contract);
+        this.encoderPredictor           = m.encoder().newPredictor();
+        this.adapterPredictor           = mlExt.getOrCreateAdapter(creatureKey).newPredictor();
+        this.predictorPredictor         = m.predictor()        != null ? m.predictor().newPredictor()        : null;
+        this.criticPredictor            = m.critic()           != null ? m.critic().newPredictor()           : null;
+        this.internalEncoderPredictor   = m.internalEncoder()  != null ? m.internalEncoder().newPredictor()  : null;
+        this.unifiedPredictorPredictor  = m.unifiedPredictor() != null ? m.unifiedPredictor().newPredictor() : null;
+        this.strategy                   = ModelVariantStrategyFactory.forContract(this.contract);
 
         this.latentPredErrorEma = contract.baselinePredError;
         this.emaAlpha           = 2.0 / (100 + 1);
@@ -106,19 +107,29 @@ public class WorldModelEngine implements AutoCloseable {
             NDArray perc    = mgr.create(perceptionFeatures);
             NDArray latent  = encoderPredictor.predict(new NDList(perc)).singletonOrThrow();
             NDArray adapted = adapterPredictor.predict(new NDList(latent)).singletonOrThrow();
+            NDArray actionHot = mgr.create(encodeAction(actionType));
 
-            NDArray zInternal = (internalEncoderPredictor != null && internalState != null)
-                    ? internalEncoderPredictor.predict(new NDList(mgr.create(internalState))).singletonOrThrow()
-                    : null;
-
-            NDArray actionHot    = mgr.create(encodeAction(actionType));
-            NDArray predictorIn  = strategy.buildPredictorInput(adapted, zInternal);
-            NDArray nextLatent   = predictorPredictor.predict(
-                                       new NDList(predictorIn, actionHot)).singletonOrThrow();
-            NDArray criticIn     = strategy.buildCriticInput(nextLatent, zInternal);
-            float[] deltas       = criticPredictor.predict(
-                                       new NDList(criticIn, actionHot))
-                                       .singletonOrThrow().toFloatArray();
+            float[] deltas;
+            if (unifiedPredictorPredictor != null && internalEncoderPredictor != null
+                    && internalState != null) {
+                // unified_critic path: single call returns NDList([z_next, emotion])
+                NDArray zInternal = internalEncoderPredictor.predict(
+                        new NDList(mgr.create(internalState))).singletonOrThrow();
+                NDList result = unifiedPredictorPredictor.predict(
+                        new NDList(adapted, actionHot, zInternal));
+                deltas = result.get(1).toFloatArray();  // index 1 = emotion head output
+            } else {
+                // legacy dual- or single-encoder path
+                NDArray zInternal = (internalEncoderPredictor != null && internalState != null)
+                        ? internalEncoderPredictor.predict(new NDList(mgr.create(internalState))).singletonOrThrow()
+                        : null;
+                NDArray predictorIn = strategy.buildPredictorInput(adapted, zInternal);
+                NDArray nextLatent  = predictorPredictor.predict(
+                        new NDList(predictorIn, actionHot)).singletonOrThrow();
+                NDArray criticIn    = strategy.buildCriticInput(nextLatent, zInternal);
+                deltas = criticPredictor.predict(
+                        new NDList(criticIn, actionHot)).singletonOrThrow().toFloatArray();
+            }
             return buildState(deltas);
         } catch (TranslateException e) {
             logger.log(Level.WARNING, "WorldModelEngine: inference failed, returning null", e);
@@ -153,6 +164,7 @@ public class WorldModelEngine implements AutoCloseable {
         closeSilently(predictorPredictor);
         closeSilently(criticPredictor);
         closeSilently(internalEncoderPredictor);
+        closeSilently(unifiedPredictorPredictor);
     }
 
     // -----------------------------------------------------------------------

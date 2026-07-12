@@ -8,6 +8,7 @@ import br.cefetmg.lsi.l2l.cluster.settings.CreatureSetting;
 import br.cefetmg.lsi.l2l.cluster.settings.Simulation;
 import br.cefetmg.lsi.l2l.cluster.settings.WorldObjectSetting;
 import br.cefetmg.lsi.l2l.common.SequentialId;
+import br.cefetmg.lsi.l2l.world.WorldObjectType;
 import org.apache.commons.collections4.ListUtils;
 import scala.concurrent.duration.Duration;
 
@@ -40,6 +41,7 @@ public class SimulationManager extends UntypedActor {
     private Set<Long> holdersDone;
     private long holdersCount;
     private final long maxHolders;
+    private final int repositionDelaySeconds;
 
     SimulationManager(Simulation settings) {
         holders = new ArrayList<>();
@@ -47,9 +49,11 @@ public class SimulationManager extends UntypedActor {
         holdersDone = new HashSet<>();
         this.settings = settings;
         this.maxHolders = settings.getNumHolders();
+        this.repositionDelaySeconds = settings.getRepositionDelaySeconds();
     }
 
     private static final class MaxRuntimeExpired {}
+    private record DelayedRepose(WorldObjectType objectType) {}
 
     @Override
     public void preStart() throws Exception {
@@ -82,9 +86,16 @@ public class SimulationManager extends UntypedActor {
 
         } else if (message instanceof Repose) {
             Repose repose = (Repose) message;
-            SequentialId id = Sync.ask(idProvider, new AskForId(), 5);
-            holders.get((int)(id.key % maxHolders))
-                    .tell(new CreateWorldObject(repose.objectType(), id), self());
+            if (repositionDelaySeconds > 0) {
+                context().system().scheduler().scheduleOnce(
+                        Duration.create(repositionDelaySeconds, TimeUnit.SECONDS),
+                        self(), new DelayedRepose(repose.objectType()),
+                        context().dispatcher(), ActorRef.noSender());
+            } else {
+                spawnWorldObject(repose.objectType());
+            }
+        } else if (message instanceof DelayedRepose) {
+            spawnWorldObject(((DelayedRepose) message).objectType());
 
         } else if (message instanceof AllCreaturesDead) {
             AllCreaturesDead holder = (AllCreaturesDead) message;
@@ -97,6 +108,12 @@ public class SimulationManager extends UntypedActor {
             logger.info("Maximum runtime reached — stopping simulation");
             stopSimulation();
         }
+    }
+
+    private void spawnWorldObject(WorldObjectType type) {
+        SequentialId id = Sync.ask(idProvider, new AskForId(), 5);
+        holders.get((int)(id.key % maxHolders))
+                .tell(new CreateWorldObject(type, id), self());
     }
 
     private void handleRegister(Register register) {

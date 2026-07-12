@@ -28,16 +28,26 @@ Need-satisfaction target (dual encoder):
 
 from __future__ import annotations
 
+import copy
 from typing import Optional, Union
 
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from .model import SpeciesModel, DualSpeciesModel, InternalCriticModel, InternalPredictorModel
+from .model import (SpeciesModel, DualSpeciesModel, InternalCriticModel,
+                    InternalPredictorModel, InternalCriticUnifiedModel)
 
 # All model classes that require h_t (internal state) as a third input.
-DUAL_ENCODER_MODELS = (DualSpeciesModel, InternalCriticModel, InternalPredictorModel)
+DUAL_ENCODER_MODELS = (DualSpeciesModel, InternalCriticModel, InternalPredictorModel,
+                       InternalCriticUnifiedModel)
+
+
+@torch.no_grad()
+def _update_ema(target: nn.Module, online: nn.Module, decay: float) -> None:
+    """EMA update: θ_target = decay * θ_target + (1-decay) * θ_online."""
+    for p_t, p_o in zip(target.parameters(), online.parameters()):
+        p_t.data.mul_(decay).add_(p_o.data, alpha=1.0 - decay)
 
 
 def sigreg_loss(z: torch.Tensor) -> torch.Tensor:
@@ -47,20 +57,46 @@ def sigreg_loss(z: torch.Tensor) -> torch.Tensor:
     return mu.pow(2).mean() + (var - 1).pow(2).mean()
 
 
+def vicreg_loss(z: torch.Tensor, lambda_cov: float = 1.0) -> torch.Tensor:
+    """VICReg regulariser (Bardes et al. 2022).
+
+    L_var  : hinge loss pushing per-dim std above 1  (same role as sigreg variance term)
+    L_cov  : penalises off-diagonal entries of the covariance matrix — forces each
+             latent dimension to encode different information.
+
+    Returns a scalar combining both terms with equal weight unless lambda_cov differs.
+    The mean-centering term from the original VICReg paper is included in L_cov.
+    """
+    N, D = z.shape
+    # Variance term: push each dim's std to >= 1
+    std = z.std(dim=0)
+    l_var = torch.relu(1.0 - std).mean()
+
+    # Covariance term: penalise off-diagonal entries of cov(z)
+    z_c = z - z.mean(dim=0)
+    cov = (z_c.T @ z_c) / (N - 1)           # (D, D)
+    off_diag = cov.pow(2).sum() - cov.diagonal().pow(2).sum()
+    l_cov = off_diag / D
+
+    return l_var + lambda_cov * l_cov
+
+
 # Which action relieves / costs which drive dimension.
 # Keys are action names; values are (dim_name, sign) pairs where
 # sign=-1 means relief and sign=+1 means opportunity cost.
-# dim_name must match the live emotion dim order: hunger, sleep, pain, tedium.
+# dim_names must match internal_state_feature_order in stats.json (ht_ prefix stripped).
 _ACTION_DIM_EFFECTS: dict[str, list[tuple[str, int]]] = {
-    "EAT":      [("hunger", -1)],
-    "APPROACH": [("hunger", -1)],   # moving toward food addresses hunger as strongly as eating
-    "SLEEP":    [("sleep",  -1), ("hunger", +1)],  # relieves sleep, but costs hunger if hungry
+    "EAT":      [("hunger", -1), ("dopamine", -1), ("serotonin", -1)],
+    "APPROACH": [("hunger", -1), ("dopamine", -1)],
+    "SLEEP":    [("sleep",  -1), ("hunger", +1), ("orexin", -1)],
     "AVOID":    [("pain",   -1)],
     "ESCAPE":   [("pain",   -1)],
     "PLAY":     [("tedium", -1)],
     "WANDER":   [("tedium", -1)],
 }
-_LIVE_DIM_NAMES = ["hunger", "sleep", "pain", "tedium"]
+# Must match the internal_state_feature_order (ht_/nm_/end_ prefixes stripped)
+_LIVE_DIM_NAMES = ["hunger", "sleep", "pain", "tedium",
+                   "dopamine", "serotonin", "orexin", "cortisol_tonic"]
 
 
 def critic_loss(
@@ -120,11 +156,15 @@ def train_one_epoch(
     lambda_crit: float,
     device: torch.device,
     action_names: Optional[list[str]] = None,
+    target_encoder: Optional[nn.Module] = None,
+    ema_decay: float = 0.996,
 ) -> dict[str, float]:
     model.train()
     totals = {"pred": 0.0, "sigreg": 0.0, "crit": 0.0, "total": 0.0}
     n_batches = 0
     dual = isinstance(model, DUAL_ENCODER_MODELS)
+    # Use EMA target encoder if provided, else fall back to online encoder (moving target).
+    enc_for_target = target_encoder if target_encoder is not None else model.encoder
 
     for batch in loader:
         if dual:
@@ -137,21 +177,20 @@ def train_one_epoch(
 
         s_curr = s_t[:-1]
         a_curr = a_t[:-1]
-        emotion_curr = emotion_target[:-1]
         s_next = s_t[1:]
 
         if dual:
             h_curr = h_t[:-1]
             z_world, z_next_hat, emotion_pred = model(s_curr, h_curr, a_curr)
-            with torch.no_grad():
-                z_next_target = model.encoder(s_next)
         else:
+            h_curr = None
             z_world, z_next_hat, emotion_pred = model(s_curr, a_curr)
-            with torch.no_grad():
-                z_next_target = model.encoder(s_next)
+
+        with torch.no_grad():
+            z_next_target = enc_for_target(s_next)
 
         l_pred   = nn.functional.mse_loss(z_next_hat, z_next_target)
-        l_sigreg = sigreg_loss(z_world)
+        l_sigreg = vicreg_loss(z_world)
         l_crit   = critic_loss(emotion_pred, a_curr, live_dims,
                                h_curr if dual else None,
                                action_names if dual else None)
@@ -161,6 +200,9 @@ def train_one_epoch(
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+
+        if target_encoder is not None:
+            _update_ema(target_encoder, model.encoder, ema_decay)
 
         totals["pred"]   += l_pred.item()
         totals["sigreg"] += l_sigreg.item()
@@ -182,11 +224,13 @@ def evaluate(
     lambda_crit: float,
     device: torch.device,
     action_names: Optional[list[str]] = None,
+    target_encoder: Optional[nn.Module] = None,
 ) -> dict[str, float]:
     model.eval()
     totals = {"pred": 0.0, "sigreg": 0.0, "crit": 0.0, "total": 0.0}
     n_batches = 0
     dual = isinstance(model, DUAL_ENCODER_MODELS)
+    enc_for_target = target_encoder if target_encoder is not None else model.encoder
 
     for batch in loader:
         if dual:
@@ -197,19 +241,20 @@ def evaluate(
         if s_t.shape[0] < 2:
             continue
 
-        s_curr, a_curr, emotion_curr = s_t[:-1], a_t[:-1], emotion_target[:-1]
+        s_curr, a_curr = s_t[:-1], a_t[:-1]
         s_next = s_t[1:]
 
         if dual:
             h_curr = h_t[:-1]
             z_world, z_next_hat, emotion_pred = model(s_curr, h_curr, a_curr)
-            z_next_target = model.encoder(s_next)
+            z_next_target = enc_for_target(s_next)
         else:
+            h_curr = None
             z_world, z_next_hat, emotion_pred = model(s_curr, a_curr)
-            z_next_target = model.encoder(s_next)
+            z_next_target = enc_for_target(s_next)
 
         l_pred   = nn.functional.mse_loss(z_next_hat, z_next_target)
-        l_sigreg = sigreg_loss(z_world)
+        l_sigreg = vicreg_loss(z_world)
         l_crit   = critic_loss(emotion_pred, a_curr, live_dims,
                                h_curr if dual else None,
                                action_names if dual else None)

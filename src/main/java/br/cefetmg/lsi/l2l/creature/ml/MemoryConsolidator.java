@@ -71,19 +71,20 @@ public class MemoryConsolidator extends UntypedActor {
     private ModelVariantStrategy strategy;
 
     // Per-creature models loaded with trainParam=true for gradient flow through the full chain.
-    // Frozen models (encoder, predictor, critic) accumulate gradients but are never stepped —
-    // their weight values remain unchanged across the creature's lifetime.
+    // Frozen models accumulate gradients but are never stepped — their weights stay fixed.
     private ZooModel<NDList, NDList> encoderModel;
     private ZooModel<NDList, NDList> adapterModel;
-    private ZooModel<NDList, NDList> predictorModel;
-    private ZooModel<NDList, NDList> criticModel;
-    private ZooModel<NDList, NDList> internalEncoderModel;  // null when single-encoder
+    private ZooModel<NDList, NDList> predictorModel;          // null when unified
+    private ZooModel<NDList, NDList> criticModel;             // null when unified
+    private ZooModel<NDList, NDList> internalEncoderModel;    // null when single-encoder
+    private ZooModel<NDList, NDList> unifiedPredictorModel;   // null when not unified
 
     private Trainer encoderTrainer;
     private Trainer adapterTrainer;
-    private Trainer predictorTrainer;
-    private Trainer criticTrainer;
-    private Trainer internalEncoderTrainer;  // null when single-encoder
+    private Trainer predictorTrainer;         // null when unified
+    private Trainer criticTrainer;            // null when unified
+    private Trainer internalEncoderTrainer;   // null when single-encoder
+    private Trainer unifiedPredictorTrainer;  // null when not unified
 
     private final AtomicBoolean abortFlag = new AtomicBoolean(false);
     private CompletableFuture<?> consolidationTask;
@@ -110,20 +111,29 @@ public class MemoryConsolidator extends UntypedActor {
                         .optLearningRateTracker(Tracker.fixed(0.001f))
                         .build());
 
-        encoderModel   = MLServiceExtension.Impl.loadTrainable(mlExt.modelDir(), "species_encoder");
-        adapterModel   = mlExt.getOrCreateAdapter(creatureKey);
-        predictorModel = MLServiceExtension.Impl.loadTrainable(mlExt.modelDir(), "species_predictor");
-        criticModel    = MLServiceExtension.Impl.loadTrainable(mlExt.modelDir(), "species_critic");
+        encoderModel = MLServiceExtension.Impl.loadTrainable(mlExt.modelDir(), "species_encoder");
+        adapterModel = mlExt.getOrCreateAdapter(creatureKey);
 
-        encoderTrainer   = encoderModel.newTrainer(config);
-        adapterTrainer   = adapterModel.newTrainer(config);
-        predictorTrainer = predictorModel.newTrainer(config);
-        criticTrainer    = criticModel.newTrainer(config);
+        encoderTrainer = encoderModel.newTrainer(config);
+        adapterTrainer = adapterModel.newTrainer(config);
 
-        if (contract.hasDualEncoder) {
-            internalEncoderModel   = MLServiceExtension.Impl.loadTrainable(
+        if (contract.hasUnifiedPredictor) {
+            unifiedPredictorModel   = MLServiceExtension.Impl.loadTrainable(
+                    mlExt.modelDir(), "species_unified_predictor");
+            unifiedPredictorTrainer = unifiedPredictorModel.newTrainer(config);
+            internalEncoderModel    = MLServiceExtension.Impl.loadTrainable(
                     mlExt.modelDir(), "species_internal_encoder");
-            internalEncoderTrainer = internalEncoderModel.newTrainer(config);
+            internalEncoderTrainer  = internalEncoderModel.newTrainer(config);
+        } else {
+            predictorModel = MLServiceExtension.Impl.loadTrainable(mlExt.modelDir(), "species_predictor");
+            criticModel    = MLServiceExtension.Impl.loadTrainable(mlExt.modelDir(), "species_critic");
+            predictorTrainer = predictorModel.newTrainer(config);
+            criticTrainer    = criticModel.newTrainer(config);
+            if (contract.hasDualEncoder) {
+                internalEncoderModel   = MLServiceExtension.Impl.loadTrainable(
+                        mlExt.modelDir(), "species_internal_encoder");
+                internalEncoderTrainer = internalEncoderModel.newTrainer(config);
+            }
         }
 
         strategy = ModelVariantStrategyFactory.forContract(contract);
@@ -144,11 +154,13 @@ public class MemoryConsolidator extends UntypedActor {
         closeSilently(predictorTrainer);
         closeSilently(criticTrainer);
         closeSilently(internalEncoderTrainer);
+        closeSilently(unifiedPredictorTrainer);
         closeSilently(encoderModel);
         // adapterModel is owned by MLServiceExtension; released via releaseAdapter() in CreatureActor.kill()
         closeSilently(predictorModel);
         closeSilently(criticModel);
         closeSilently(internalEncoderModel);
+        closeSilently(unifiedPredictorModel);
         em.close();
         logger.info("MemoryConsolidator[" + creatureKey + "]: resources released");
     }
@@ -179,6 +191,10 @@ public class MemoryConsolidator extends UntypedActor {
         List<Engram> engrams = memory.getRecentEngrams(Constants.CONSOLIDATION_WINDOW);
         if (engrams.isEmpty()) {
             logger.info("MemoryConsolidator[" + creatureKey + "]: sleep started but no engrams, skipping");
+            // Persist a zero-batch skipped episode so analysis can detect skip events.
+            ConsolidationEpisodeStat skipped = new ConsolidationEpisodeStat(
+                    creatureKey, onsetCycle, 0, 0.0, 0.0, 0, true);
+            persistResult(new ConsolidationResult(List.of(), skipped));
             return;
         }
 
@@ -272,34 +288,27 @@ public class MemoryConsolidator extends UntypedActor {
         return new ConsolidationResult(batchStats, episode);
     }
 
-    // Full prediction-error chain (single-encoder):
-    //   perception → encoder → z → adapter → adapted_z
-    //   → predictor(adapted_z, action) → next_z → critic(next_z, action) → pred_delta
-    //
-    // Dual-encoder adds:
-    //   internal_state → internalEncoder → z_internal
-    //   concat(adapted_z, z_internal) → predictor → next_z → critic → pred_delta
-    //
+    // Full prediction-error chain.
+    // Single-encoder:   encoder → adapter → predictor(action) → critic → pred_delta
+    // Dual-encoder:     encoder → adapter → concat(adapted_z, z_internal) → predictor → critic
+    // Unified:          encoder → adapter → unifiedPredictor(adapted_z, action, z_internal)
+    //                              → (z_next, emotion_pred)
     // loss = MSE(pred_delta, actual_delta) * mean(eligibility)
-    // emotionDelta is broadcast across all emotion dimensions as the training target.
     private float trainBatch(List<Engram> batch, NDManager mgr) {
         int n = batch.size();
+        boolean useUnified = contract.hasUnifiedPredictor;
+        boolean needInternal = useUnified || contract.hasDualEncoder;
 
         float[] percData     = new float[n * contract.inputDim];
         float[] actionData   = new float[n * contract.actionDim];
         float[] targetData   = new float[n * contract.emotionDim];
         float[] weights      = new float[n];
-        float[] internalData = contract.hasDualEncoder
-                ? new float[n * contract.internalStateDim] : null;
+        float[] internalData = needInternal ? new float[n * contract.internalStateDim] : null;
 
         for (int i = 0; i < n; i++) {
             Engram e = batch.get(i);
-            float[] percFeats = encodePerception(e);
-            float[] actionHot = encodeAction(e.actionType());
-            System.arraycopy(percFeats, 0, percData,   i * contract.inputDim,  contract.inputDim);
-            System.arraycopy(actionHot, 0, actionData, i * contract.actionDim, contract.actionDim);
-            // tanh maps emotionDelta to [-1, 1], preventing extreme target values
-            // that cause large loss gradients and eventual parameter explosion.
+            System.arraycopy(encodePerception(e), 0, percData,   i * contract.inputDim,  contract.inputDim);
+            System.arraycopy(encodeAction(e.actionType()), 0, actionData, i * contract.actionDim, contract.actionDim);
             float delta = (float) Math.tanh(e.emotionDelta());
             Arrays.fill(targetData, i * contract.emotionDim, (i + 1) * contract.emotionDim, delta);
             weights[i] = (float) e.eligibility();
@@ -314,30 +323,38 @@ public class MemoryConsolidator extends UntypedActor {
         NDArray target      = mgr.create(targetData, new Shape(n, contract.emotionDim));
         NDArray weightArr   = mgr.create(weights,    new Shape(n));
 
-        // PyTorch accumulates .grad across backward calls without automatic zeroing.
-        // Without explicit zeroing, gradients grow unboundedly across batches, eventually
-        // causing parameter explosion and NaN loss (observed in EXP-P5-1, creature 180).
         zeroGradients(encoderTrainer);
         zeroGradients(adapterTrainer);
-        zeroGradients(predictorTrainer);
-        zeroGradients(criticTrainer);
-        if (internalEncoderTrainer != null) zeroGradients(internalEncoderTrainer);
+        if (predictorTrainer != null)        zeroGradients(predictorTrainer);
+        if (criticTrainer != null)           zeroGradients(criticTrainer);
+        if (internalEncoderTrainer != null)  zeroGradients(internalEncoderTrainer);
+        if (unifiedPredictorTrainer != null) zeroGradients(unifiedPredictorTrainer);
 
         float lossValue;
         try (GradientCollector gc = Engine.getInstance().newGradientCollector()) {
             NDArray z        = encoderTrainer.forward(new NDList(percInput)).singletonOrThrow();
             NDArray adaptedZ = adapterTrainer.forward(new NDList(z)).singletonOrThrow();
 
-            NDArray zInternal = (internalEncoderTrainer != null && internalData != null)
-                    ? internalEncoderTrainer.forward(
-                            new NDList(mgr.create(internalData, new Shape(n, contract.internalStateDim))))
-                              .singletonOrThrow()
-                    : null;
-
-            NDArray predictorInput = strategy.buildPredictorInput(adaptedZ, zInternal);
-            NDArray nextZ          = predictorTrainer.forward(new NDList(predictorInput, actionBatch)).singletonOrThrow();
-            NDArray criticInput    = strategy.buildCriticInput(nextZ, zInternal);
-            NDArray predDelta      = criticTrainer.forward(new NDList(criticInput, actionBatch)).singletonOrThrow();
+            NDArray predDelta;
+            if (useUnified && internalEncoderTrainer != null && internalData != null) {
+                NDArray zInternal = internalEncoderTrainer.forward(
+                        new NDList(mgr.create(internalData, new Shape(n, contract.internalStateDim))))
+                        .singletonOrThrow();
+                // unified predictor returns NDList([z_next, emotion]); use emotion (index 1)
+                NDList result = unifiedPredictorTrainer.forward(
+                        new NDList(adaptedZ, actionBatch, zInternal));
+                predDelta = result.get(1);
+            } else {
+                NDArray zInternal = (internalEncoderTrainer != null && internalData != null)
+                        ? internalEncoderTrainer.forward(
+                                new NDList(mgr.create(internalData, new Shape(n, contract.internalStateDim))))
+                                .singletonOrThrow()
+                        : null;
+                NDArray predictorInput = strategy.buildPredictorInput(adaptedZ, zInternal);
+                NDArray nextZ          = predictorTrainer.forward(new NDList(predictorInput, actionBatch)).singletonOrThrow();
+                NDArray criticInput    = strategy.buildCriticInput(nextZ, zInternal);
+                predDelta              = criticTrainer.forward(new NDList(criticInput, actionBatch)).singletonOrThrow();
+            }
 
             NDArray rawLoss      = adapterTrainer.getLoss().evaluate(new NDList(target), new NDList(predDelta));
             NDArray weightedLoss = rawLoss.mul(weightArr.mean());

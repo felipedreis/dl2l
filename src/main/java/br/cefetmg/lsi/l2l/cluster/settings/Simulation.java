@@ -28,6 +28,8 @@ public class Simulation {
 
     private boolean reposition;
 
+    private int repositionDelaySeconds;
+
     private int maxRuntimeMinutes;
 
     private LearningSettings learningSettings;
@@ -70,6 +72,9 @@ public class Simulation {
         }
 
         reposition = fullConfig.getBoolean("simulation.reposition");
+
+        repositionDelaySeconds = fullConfig.hasPath("simulation.repositionDelaySeconds")
+                ? fullConfig.getInt("simulation.repositionDelaySeconds") : 0;
 
         maxRuntimeMinutes = fullConfig.hasPath("simulation.maxRuntimeMinutes")
                 ? fullConfig.getInt("simulation.maxRuntimeMinutes") : 0;
@@ -153,6 +158,10 @@ public class Simulation {
 
     public boolean isReposition() {
         return reposition;
+    }
+
+    public int getRepositionDelaySeconds() {
+        return repositionDelaySeconds;
     }
 
     public int getMaxRuntimeMinutes() {

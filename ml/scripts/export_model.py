@@ -20,7 +20,8 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from jepa.export import export
-from jepa.model  import SpeciesModel, DualSpeciesModel, InternalCriticModel, InternalPredictorModel, IndividualAdapter
+from jepa.model  import (SpeciesModel, DualSpeciesModel, InternalCriticModel,
+                         InternalPredictorModel, InternalCriticUnifiedModel, IndividualAdapter)
 
 
 def parse_args():
@@ -29,7 +30,8 @@ def parse_args():
     p.add_argument("--out",     default="../src/main/resources/models")
     p.add_argument("--device",  default="cpu")
     p.add_argument("--variant", default="single",
-                   choices=["single", "dual", "internal_critic", "internal_predictor"])
+                   choices=["single", "dual", "internal_critic", "internal_predictor",
+                            "unified_critic"])
     return p.parse_args()
 
 
@@ -44,7 +46,7 @@ def main():
         sys.exit(f"stats.json not found at {stats_path}")
     stats = json.loads(stats_path.read_text())
 
-    dual_variant = args.variant in ("dual", "internal_critic", "internal_predictor")
+    dual_variant = args.variant in ("dual", "internal_critic", "internal_predictor", "unified_critic")
 
     if dual_variant and "internal_state_dim" not in stats:
         sys.exit(f"--variant {args.variant} requires internal_state_dim in stats.json.")
@@ -73,16 +75,27 @@ def main():
         model = DualSpeciesModel(**dual_kwargs).to(device)
     elif args.variant == "internal_critic":
         model = InternalCriticModel(**dual_kwargs).to(device)
+    elif args.variant == "unified_critic":
+        model = InternalCriticUnifiedModel(**dual_kwargs).to(device)
     else:
         model = InternalPredictorModel(**dual_kwargs).to(device)
 
     model.load_state_dict(torch.load(ckpt / "best.pt", map_location=device))
     adapter = IndividualAdapter(stats["latent_dim"]).to(device)
 
+    is_unified = args.variant == "unified_critic"
     print(f"Exporting {args.variant} model to {out_dir} …")
-    export(model.encoder, model.predictor, model.critic, adapter, stats, out_dir,
-           internal_encoder=model.internal_encoder if dual_variant else None,
-           model_variant=args.variant)
+    export(
+        model.encoder,
+        getattr(model, "predictor", None),
+        getattr(model, "critic", None),
+        adapter,
+        stats,
+        out_dir,
+        internal_encoder=model.internal_encoder if dual_variant else None,
+        unified_predictor=model.unified_predictor if is_unified else None,
+        model_variant=args.variant,
+    )
     print("Export complete.")
 
 
