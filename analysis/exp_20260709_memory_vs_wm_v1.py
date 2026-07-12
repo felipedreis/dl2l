@@ -1,18 +1,17 @@
 """
 Analysis: 20260709_memory_vs_wm_v1
-Memory-based learning vs. JEPA world model — 6 conditions × 5 trials × 5 creatures
+Memory-based learning vs. JEPA world model — 5 conditions × 5 trials × 5 creatures
 
 Conditions:
   1_baseline               — no extra learning
   2_memory_only            — memory filter in action selection
   3_memory_consolidation   — memory filter + sleep consolidation (MemoryTraceConsolidator)
-  4_jepa_only              — JEPA world-model filter (no consolidation)
-  5_jepa_consolidation     — JEPA world-model filter + MemoryConsolidator adapter fine-tuning
   6_jepa_rpe_consolidation — JEPA world-model filter + JEPA RPE baseline + consolidation
+  7_jepa_rpe_only          — JEPA world-model filter + JEPA RPE baseline, no consolidation
 
 Data directories:
   Conditions 1-3: ml/data_20260709_memory_vs_wm_v2/   (5 creatures — v2 rerun)
-  Conditions 4-6: ml/data_20260709_memory_vs_wm_v1/   (5 creatures — JEPA rerun with cond 6)
+  Conditions 6-7: ml/data_20260709_memory_vs_wm_v1/   (5 creatures)
 
 Usage:
   python3 analysis/exp_20260709_memory_vs_wm_v1.py
@@ -36,16 +35,15 @@ warnings.filterwarnings("ignore")
 
 EXP        = "20260709_memory_vs_wm_v1"
 ROOT_DIR   = Path(__file__).resolve().parent.parent
-# Conditions 1-3 were rerun with 5 creatures in v2; conditions 4-6 from the JEPA rerun (v1).
+# Conditions 1-3 from v2 rerun; conditions 6-7 from JEPA RPE runs (v1).
 DIR_V1     = ROOT_DIR / "ml" / "data_20260709_memory_vs_wm_v1"
 DIR_V2     = ROOT_DIR / "ml" / "data_20260709_memory_vs_wm_v2"
 COND_DIR   = {
     "1_baseline":               DIR_V2,
     "2_memory_only":            DIR_V2,
     "3_memory_consolidation":   DIR_V2,
-    "4_jepa_only":              DIR_V1,
-    "5_jepa_consolidation":     DIR_V1,
     "6_jepa_rpe_consolidation": DIR_V1,
+    "7_jepa_rpe_only":          DIR_V1,
 }
 FIG_DIR    = ROOT_DIR / "docs" / "reports" / "figures" / f"p{EXP[:8].replace('-','')[:8]}"
 REPORT_DIR = ROOT_DIR / "docs" / "reports"
@@ -56,9 +54,8 @@ CONDITIONS = [
     ("1_baseline",               "Baseline"),
     ("2_memory_only",            "Memory"),
     ("3_memory_consolidation",   "Mem+Consol"),
-    ("4_jepa_only",              "JEPA"),
-    ("5_jepa_consolidation",     "JEPA+Consol"),
-    ("6_jepa_rpe_consolidation", "JEPA+RPE"),
+    ("6_jepa_rpe_consolidation", "JEPA+RPE+Consol"),
+    ("7_jepa_rpe_only",          "JEPA+RPE"),
 ]
 COND_KEYS  = [c for c, _ in CONDITIONS]
 COND_LABELS= [l for _, l in CONDITIONS]
@@ -68,9 +65,8 @@ PALETTE = {
     "1_baseline":               "#9e9e9e",
     "2_memory_only":            "#5c85d6",
     "3_memory_consolidation":   "#2b5eb8",
-    "4_jepa_only":              "#e07b39",
-    "5_jepa_consolidation":     "#c0392b",
     "6_jepa_rpe_consolidation": "#7b2d8b",
+    "7_jepa_rpe_only":          "#b05ec4",
 }
 
 DRIVE_COLS = [
@@ -291,7 +287,7 @@ BIN_S = 30
 drives["time_bin"] = (drives["elapsed_s"] // BIN_S).astype(int)
 drives["time_bin"] = drives["time_bin"].clip(lower=0)
 
-fig, axes = plt.subplots(2, 4, figsize=(20, 8))
+fig, axes = plt.subplots(2, 3, figsize=(15, 8))
 axes = axes.flatten()
 
 for ax_idx, (ck, cl) in enumerate(CONDITIONS):
@@ -308,8 +304,8 @@ for ax_idx, (ck, cl) in enumerate(CONDITIONS):
     ax.set_ylabel("Total Arousal")
     ax.grid(alpha=0.3)
 
-# Combined on 7th panel (index 6); hide the 8th panel
-ax = axes[6]
+# Combined on 6th panel (index 5)
+ax = axes[5]
 for ck, cl in CONDITIONS:
     sub = drives[drives["condition"] == ck]
     gb = sub.groupby("time_bin")["arousal"].mean()
@@ -320,7 +316,6 @@ ax.set_xlabel("Elapsed time (min)")
 ax.set_ylabel("Mean Arousal")
 ax.legend(fontsize=8)
 ax.grid(alpha=0.3)
-axes[7].set_visible(False)
 
 fig.suptitle("Total Arousal Over Simulation Time", fontsize=13)
 plt.tight_layout()
