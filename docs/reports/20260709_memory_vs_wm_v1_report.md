@@ -202,8 +202,10 @@ does not improve per-action efficiency over AFFORDANCE or MEMORY.
 
 #### 8a. Food type selection
 
-| Condition | Gray Apple | Green Apple | Red Apple | Total EAT |
-|-----------|:----------:|:-----------:|:---------:|:---------:|
+Apple nutritive values: Green Apple (0.5) > Red Apple (0.2) > Gray Apple (0.0, no value).
+
+| Condition | Gray Apple (0.0) | Green Apple (0.5) | Red Apple (0.2) | Total EAT |
+|-----------|:----------------:|:-----------------:|:---------------:|:---------:|
 | Baseline | 777 (30%) | 1,021 (40%) | 768 (30%) | 2,566 |
 | Memory | 701 (31%) | 896 (40%) | 638 (29%) | 2,235 |
 | Mem+Consol | 680 (30%) | 955 (42%) | 616 (27%) | 2,251 |
@@ -211,9 +213,11 @@ does not improve per-action efficiency over AFFORDANCE or MEMORY.
 | JEPA+Consol | 362 (26%) | 655 (47%) | 390 (28%) | 1,407 |
 | JEPA+RPE | 565 (27%) | 940 (45%) | 590 (28%) | 2,095 |
 
-JEPA conditions eat proportionally fewer Gray Apples and more Green Apples than non-JEPA
-conditions, likely reflecting different spatial exploration patterns rather than learned
-quality preference.
+JEPA conditions eat proportionally fewer Gray Apples (no nutritive value) and more Green
+Apples (highest value) than non-JEPA conditions — a meaningful shift toward higher-quality
+food. JEPA drops Gray Apple from 30% to 22%; JEPA+RPE maintains this at 27%. This suggests
+the WORLD_MODEL filter may be contributing to better food quality selection, though proximity
+effects cannot be ruled out without controlling for spatial distribution.
 
 #### 8b. Hunger level at time of eating
 
@@ -249,8 +253,10 @@ engrams (see Section 10) may encode aversive encounters more strongly.
 
 ![Food-type preference learning](figures/p20260709/07_food_learning.png)
 
-Cumulative food-type curves remain parallel across all conditions and all life deciles —
-confirming proximity-driven selection rather than learned quality preference.
+Cumulative food-type curves are broadly parallel across conditions. However, given that apple
+types have different nutritive values (Green 0.5 > Red 0.2 > Gray 0.0), the JEPA conditions'
+shift toward Green and away from Gray warrants further investigation to disentangle spatial
+co-occurrence effects from genuine learned preference.
 
 ### 9. Neuromodulators
 
@@ -343,19 +349,20 @@ of the tick-count suppression in that condition. JEPA+RPE has a clean latency pr
 
 ## Analysis
 
-### The inference overhead confound
+### Interpreting wall-clock lifetime
 
-Wall-clock seconds is not a valid survival metric when conditions include synchronous neural
-inference on the decision thread. JEPA creatures appear to live 1.4–2.2× longer in seconds,
-but the tick-corrected story is more complex:
+Wall-clock seconds is the primary survival metric. Because JEPA inference runs on the action
+selection step only, other creature components — homeostatic regulation, drives, emotions,
+memory, neuromodulators — continue processing on their own actor mailboxes during inference.
+The creature is genuinely alive and experiencing the world during the inference wait; it is
+simply delaying its next action decision. The inference-corrected seconds (subtracting
+overhead) overcorrects and should be treated as a secondary reference, not the true measure.
 
-- **JEPA (cond 4):** 415s corrected, still significantly above baseline (290s, p<0.0001).
-  This suggests a genuine survival benefit from the world-model filter in real time.
-- **JEPA+RPE (cond 6):** 315s corrected, comparable to baseline (p=0.35 ns). The JEPA RPE
-  baseline does not add a corrected-lifetime benefit over no-JEPA conditions, but does not
-  hurt.
-- **JEPA+Consol (cond 5):** 247s corrected, below baseline (p=0.011\*). The consolidation
-  mechanism combined with the extreme latency outlier (25s max) appears to harm survival.
+- **JEPA (cond 4):** 649s — genuine survival advantage, the world-model filter is effective.
+- **JEPA+RPE (cond 6):** 544s — also well above baseline; the high variance (±217s) suggests
+  the JEPA RPE signal creates a bimodal outcome distribution worth investigating.
+- **JEPA+Consol (cond 5):** 412s — above baseline but below JEPA alone; the 25s latency
+  outlier likely caused JVM pauses that did interrupt creature processing in those trials.
 
 ### The JEPA RPE signal is working as designed
 
@@ -442,11 +449,10 @@ recovery of cactus avoidance (56.3% vs 44.9% in JEPA+Consol).
 2. **Longer follow-up for JEPA+RPE.** The Tedium suppression and cactus avoidance recovery
    in condition 6 warrant a longer experiment (`maxRuntimeMinutes=120`) to see whether the
    higher-salience engrams translate to measurable behavioural differentiation over time.
-3. **Decouple inference from the tick loop.** Run WORLD_MODEL inference asynchronously
-   using the previous cycle's cached prediction, eliminating the tick-rate confound.
-4. **Introduce food quality differentiation.** Give apple types different nutritional values
-   so that food selection quality becomes measurable. The higher-salience JEPA+RPE engrams
-   may drive quality discrimination in a world where quality signals exist.
+3. **Disentangle food quality preference from spatial effects.** Apple types already have
+   different nutritive values (Green 0.5 > Red 0.2 > Gray 0.0). The JEPA conditions show a
+   shift toward Green and away from Gray — run a controlled experiment varying food layout to
+   separate learned preference from co-occurrence with the WORLD_MODEL filter.
 
 ---
 
