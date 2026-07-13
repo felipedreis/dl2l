@@ -1,0 +1,15 @@
+---
+dl2l_env: local
+
+# Repo root, resolved relative to this playbook's location (ansible/../).
+repo_root: "{{ playbook_dir | dirname }}"
+
+dl2l_image: "dl2l:latest"
+dl2l_config_dir: "{{ repo_root }}/config"
+
+# Local mini-experiments always run with the UI reachable
+# (noUI=false lives in the simulation .conf; this just publishes the port).
+publish_ui: true
+
+# Where per-run scratch state (rendered compose file, etc.) is kept.
+run_dir: "{{ repo_root }}/ansible/.run"

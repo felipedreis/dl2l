@@ -1,0 +1,51 @@
+---
+# Runs on the "runner" host (the CEFET login node, cluster.decom.cefetmg.br).
+# CEFET has no docker — this bare-metals the four Akka cluster roles
+# (manager, idProvider, collisionDetector, holder x N) as separate SLURM
+# jobs, same shape as the legacy scripts/l2l_job.sh + scripts/deploy.sh.
+#
+# db_setup.yml runs FIRST and unconditionally fails while cefet_db_strategy
+# is 'todo' (the default) — a plain ansible.builtin.fail is a local action
+# (no remote connection needed), so none of the sync/submit steps below, nor
+# any SSH connection to the login node, ever happen today. This role is
+# exercised via --syntax-check / --check only until the postgres seam is
+# resolved (see db_setup.yml).
+#
+# This phase deliberately does NOT build extraction/collection logic for
+# CEFET (see CLAUDE.md's Database section) — without a resolved postgres
+# story there is nowhere for dl2l_data.extract to pull data from in the new
+# pipeline's terms, so job submission is as far as this role goes.
+
+- name: Check the postgres seam before touching any infrastructure
+  ansible.builtin.include_tasks: db_setup.yml
+
+- name: Sync fat jar, simulation confs, and natives to the login node
+  ansible.posix.synchronize:
+    src: "{{ repo_root }}/{{ item.src }}"
+    dest: "{{ remote_work_dir }}/{{ item.dest }}"
+  loop:
+    - { src: "target/l2l-2.0.0-SNAPSHOT-wd.jar", dest: "l2l.jar" }
+    - { src: "simulations/", dest: "config/" }
+    - { src: "target/natives/", dest: "natives/" }
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: Render the SLURM job script and submit-all wrapper onto the login node
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "{{ remote_work_dir }}/{{ item }}"
+    mode: "0755"
+  loop:
+    - l2l_job.sh
+    - submit_experiment.sh
+
+- name: Submit the experiment (all conditions x trials, role-chained via SLURM job dependencies)
+  ansible.builtin.command:
+    argv: ["./submit_experiment.sh"]
+    chdir: "{{ remote_work_dir }}"
+  changed_when: true
+  register: _submitted
+
+- name: Report submitted job chains
+  ansible.builtin.debug:
+    msg: "{{ _submitted.stdout_lines }}"

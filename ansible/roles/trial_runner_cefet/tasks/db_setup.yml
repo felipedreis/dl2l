@@ -1,0 +1,30 @@
+---
+# THE SEAM. CEFET has no docker, so there's no `dl2l-db` container for
+# dl2l_data.extract's `--container` flag to target — extraction, backup, and
+# upload all assume a docker-composed postgres that doesn't exist here.
+# Resolving this (a shared always-on postgres server reachable from compute
+# nodes? a per-job Singularity/Apptainer postgres container? SQLite as a
+# CEFET-only stopgap?) and threading the result through DL2L_DB_URL into
+# src/main/resources/META-INF/persistence.xml (currently hardcoded to
+# jdbc:postgresql://dl2l-db:5432/l2l with no env-var override mechanism at
+# all — that Java-side change belongs to the follow-up task too) is
+# explicitly out of scope for this phase. See
+# docs/plans/experiment-infra-ansible-refactor.md's CEFET section.
+- name: CEFET postgres strategy not yet implemented
+  ansible.builtin.fail:
+    msg: >-
+      cefet_db_strategy is 'todo' — CEFET has no docker, so there is no
+      dl2l-db container to extract from or back up. Before running
+      experiments here you must: (1) decide where postgres runs on CEFET (a
+      shared always-on server? a per-job Singularity/Apptainer container? a
+      SQLite fallback for this cluster only?), (2) add a DL2L_DB_URL
+      environment-variable override to
+      src/main/resources/META-INF/persistence.xml (it currently hardcodes
+      jdbc:postgresql://dl2l-db:5432/l2l with no override hook), (3) update
+      scripts/dl2l_data/extract.py to accept a --db-host/--db-port target
+      instead of assuming a docker container name, and (4) set
+      cefet_db_strategy to something other than 'todo' in
+      ansible/inventories/cefet/group_vars/all.yml once the above is done.
+      This is intentionally left open for a follow-up task — see
+      docs/plans/experiment-infra-ansible-refactor.md.
+  when: cefet_db_strategy == 'todo'

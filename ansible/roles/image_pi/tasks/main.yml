@@ -1,0 +1,38 @@
+---
+# Cross-builds the ARM64 image on this Mac and pushes it to the Pi cluster's
+# private registry ({{ registry }}), then pre-pulls it on every worker node
+# so the SLURM array job (dl2l_trial.sh) doesn't pay a cold-pull tax per
+# trial. Included from the "Load and validate experiment spec, build image"
+# play (hosts: localhost), so the build/push tasks below need no
+# delegate_to; only the worker pre-pull needs to reach outside that host.
+- name: Package the fat jar (mvn package -DskipTests)
+  ansible.builtin.command:
+    argv: [mvn, package, -q, -DskipTests]
+    chdir: "{{ repo_root }}"
+  changed_when: true
+
+- name: "Cross-build the ARM64 image and push to {{ dl2l_image }}"
+  ansible.builtin.command:
+    argv:
+      - docker
+      - buildx
+      - build
+      - --platform
+      - linux/arm64
+      - -f
+      - "{{ repo_root }}/docker/Dockerfile"
+      - -t
+      - "{{ dl2l_image }}"
+      - --push
+      - "{{ repo_root }}"
+    chdir: "{{ repo_root }}"
+  changed_when: true
+
+- name: Pre-pull the image on every worker node
+  ansible.builtin.command:
+    argv: [sudo, docker, pull, "{{ dl2l_image }}", -q]
+  loop: "{{ groups['workers'] }}"
+  loop_control:
+    loop_var: pi_worker
+  delegate_to: "{{ pi_worker }}"
+  changed_when: true

@@ -16,6 +16,9 @@ __pycache__/
 data/
 ml/data/
 ml/checkpoints/
+# Ansible per-run scratch state (rendered docker-compose.yml, etc.)
+ansible/.run/
+
 # Ignore raw Java/IDE project files
 .classpath
 .project

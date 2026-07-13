@@ -1,0 +1,15 @@
+# Install with: ansible-galaxy collection install -r ansible/requirements.yml
+#
+# Trial execution shells out to the `docker compose` CLI directly (via
+# ansible.builtin.command) rather than using community.docker's compose
+# module. This repo's docker-compose files already rely on env-var
+# substitution (${SIMULATION}, ${DL2L_IMAGE}) and multi-project `-p` isolation
+# in ways that map directly onto the CLI; going through community.docker's
+# docker_compose_v2 module would add a dependency and an abstraction layer
+# without buying anything — the CLI invocation is simpler to read, debug, and
+# keep in lockstep with scripts/run_exp_*.sh's proven semantics. ansible.posix
+# is pulled in for the `synchronize` module, used by the Pi trial runner
+# (Phase 5) to pull results back over rsync.
+collections:
+  - name: ansible.posix
+    version: ">=1.5.0"

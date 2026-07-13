@@ -1,0 +1,71 @@
+---
+# Runs exactly one (condition, trial) cell of the matrix — mirrors the loop
+# body of scripts/run_exp_rotten_fruit_v1.sh and its siblings:
+#   down -v (cleanup) -> up -d -> docker wait holder -> extract -> down -v
+- name: Set per-trial facts
+  ansible.builtin.set_fact:
+    _cond: "{{ trial_item.condition }}"
+    _trial: "{{ trial_item.trial }}"
+    _proj: "exp_{{ experiment_cfg.name }}_{{ trial_item.condition.key }}_t{{ trial_item.trial }}"
+
+- name: "[{{ _proj }}] Clean up any stale containers from a previous attempt"
+  ansible.builtin.command:
+    argv: [docker, compose, -p, "{{ _proj }}", -f, "{{ compose_file }}", down, -v, --remove-orphans]
+  environment:
+    SIMULATION: "{{ _cond.simulation }}"
+  changed_when: false
+  failed_when: false
+
+- name: "[{{ _proj }}] Start the stack"
+  ansible.builtin.command:
+    argv: [docker, compose, -p, "{{ _proj }}", -f, "{{ compose_file }}", up, -d]
+  environment:
+    SIMULATION: "{{ _cond.simulation }}"
+  changed_when: true
+
+- name: "[{{ _proj }}] Resolve holder container id"
+  ansible.builtin.command:
+    argv: [docker, compose, -p, "{{ _proj }}", -f, "{{ compose_file }}", ps, -q, dl2l-holder]
+  environment:
+    SIMULATION: "{{ _cond.simulation }}"
+  register: _holder_id
+  changed_when: false
+
+- name: "[{{ _proj }}] Resolve db container id"
+  ansible.builtin.command:
+    argv: [docker, compose, -p, "{{ _proj }}", -f, "{{ compose_file }}", ps, -q, dl2l-db]
+  environment:
+    SIMULATION: "{{ _cond.simulation }}"
+  register: _db_id
+  changed_when: false
+
+- name: "[{{ _proj }}] Wait for the simulation to finish (docker wait on the holder)"
+  ansible.builtin.command:
+    argv: [docker, wait, "{{ _holder_id.stdout }}"]
+  async: "{{ holder_wait_async }}"
+  poll: "{{ holder_wait_poll }}"
+  changed_when: false
+
+- name: "[{{ _proj }}] Extract data (dl2l_data.extract)"
+  ansible.builtin.command:
+    argv: >-
+      {{ [
+        'python3', '-m', 'dl2l_data.extract',
+        '--experiment', experiment_cfg.name,
+        '--condition', _cond.key,
+        '--trial', _trial | string,
+        '--out', experiment_data_dir,
+        '--container', _db_id.stdout,
+        '--format', experiment_cfg.extract.format,
+      ] + ([] if experiment_cfg.extract.backup else ['--skip-backup']) }}
+    chdir: "{{ repo_root }}"
+  environment:
+    PYTHONPATH: "{{ repo_root }}/scripts"
+  changed_when: true
+
+- name: "[{{ _proj }}] Tear down the stack"
+  ansible.builtin.command:
+    argv: [docker, compose, -p, "{{ _proj }}", -f, "{{ compose_file }}", down, -v]
+  environment:
+    SIMULATION: "{{ _cond.simulation }}"
+  changed_when: true

@@ -1,0 +1,45 @@
+---
+# Entry point for running a DL2L experiment on any environment.
+#
+# Usage:
+#   ansible-playbook -i ansible/inventories/local ansible/run-experiment.yml -e experiment=smoke
+#   ansible-playbook -i ansible/inventories/pi    ansible/run-experiment.yml -e experiment=rotten_fruit_v1
+#
+# The target environment is selected by which inventory you pass with -i;
+# each inventory's group_vars/all.yml sets dl2l_env, which in turn selects
+# the per-env roles (image_{{ dl2l_env }}, trial_runner_{{ dl2l_env }}).
+#
+# Extra-vars:
+#   experiment=<name>     required, matches experiments/<name>.yml
+#   build_image=false      skip mvn package + docker build, reuse an existing image
+#   analyze=true            run the experiment's analysis module after upload
+
+- name: Load and validate experiment spec, build image
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - ansible.builtin.include_role:
+        name: experiment_spec
+    - ansible.builtin.include_role:
+        name: "image_{{ dl2l_env }}"
+      when: (build_image | default(true) | bool) and experiment_cfg.image.source == 'build'
+
+- name: Run trials
+  hosts: runner
+  gather_facts: false
+  tasks:
+    - ansible.builtin.include_role:
+        name: experiment_spec
+    - ansible.builtin.include_role:
+        name: "trial_runner_{{ dl2l_env }}"
+
+- name: Collect, upload, and (optionally) analyze
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - ansible.builtin.include_role:
+        name: experiment_spec
+    - ansible.builtin.include_role:
+        name: collect_upload

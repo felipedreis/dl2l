@@ -24,17 +24,19 @@ mvn test -Dtest=QuadTreeTest
 ./scripts/detector.sh      # roles: collisionDetector
 ./scripts/holder.sh        # roles: holder
 
-# Run via Docker Compose (preferred for local dev)
+# Run via Docker Compose (ad-hoc single-stack dev convenience — no experiment tracking)
 cd docker && docker-compose up
 
 # Build Docker image
 docker build -f docker/Dockerfile -t dl2l .
 
-# Run data extractor (exports simulation data to CSV)
-java -jar target/l2l-2.0.0-SNAPSHOT-wd.jar --host localhost --port 2551 --roles holder --extractor --save <output-dir>
+# Run an experiment (any env — see "Running Experiments" below)
+cd ansible && ansible-playbook -i inventories/local run-experiment.yml -e experiment=<name>
 
-# Preferred: extract directly from PostgreSQL (no fat JAR needed)
-python3 scripts/pg_extract.py --out <output-dir> --container <db-container>
+# Extract data directly from a running PostgreSQL container (used internally by the
+# ansible trial runner; call it manually to re-extract from a live container)
+PYTHONPATH=scripts python3 -m dl2l_data.extract \
+    --experiment <name> --condition <key> --trial <n> --out <data-dir> --container <db-container>
 ```
 
 The generic launch script signature:
@@ -95,15 +97,86 @@ PostgreSQL. Schema name must be `data`. Connection configured in `src/main/resou
 
 All JPA entities are in `creature/bd/` and `common/SequentialId`. EclipseLink is the JPA provider.
 
+## Running Experiments
+
+Experiments are declared once as a YAML spec and run identically on any of three
+environments — this local macbook, the Raspberry Pi cluster (SLURM + Docker), or the
+CEFET cluster (SLURM only, no Docker) — via a single Ansible playbook. This replaced
+a prior generation of ~46 near-duplicate `docker-compose-*.yml` files and ~10
+`run_exp_*.sh` scripts (still visible in git history if you need to reference an old
+one-off run).
+
+```bash
+cd ansible
+ansible-playbook -i inventories/local ansible/run-experiment.yml -e experiment=<name>   # this Mac
+ansible-playbook -i inventories/pi    ansible/run-experiment.yml -e experiment=<name>   # Pi cluster
+ansible-playbook -i inventories/cefet ansible/run-experiment.yml -e experiment=<name>   # CEFET (blocked — see below)
+```
+
+An experiment is one file, `experiments/<name>.yml` — conditions (each mapping to a
+`simulations/*.conf`), trial count, image source, extraction/upload settings, and
+(optionally) which `analysis/experiments/<module>.py` to run. Schema and a worked
+example are in `experiments/README.md`. Validate a spec standalone with
+`python3 scripts/validate_experiment.py experiments/<name>.yml`.
+
+The playbook always: loads and validates the spec → builds/pulls the image → runs
+every (condition, trial) cell (compose up → wait for the holder to finish → extract →
+teardown) → uploads the collected data to `felipedreis/dl2l-experiments` on
+HuggingFace (never skip this — see Development cycle step 5i) → optionally runs the
+analysis module (`-e analyze=true`).
+
+Local runs always publish the UI on `:8080` (the local inventory sets
+`publish_ui: true`); the Pi and CEFET inventories don't.
+
+**CEFET is a known-incomplete seam.** The cluster has no Docker, so there's no
+`dl2l-db` container for extraction to target. `ansible/roles/trial_runner_cefet/tasks/db_setup.yml`
+fails fast with an explanatory message until that's resolved — see the seam note in
+`docs/plans/experiment-infra-ansible-refactor.md`.
+
+### Extraction and upload internals
+
+`scripts/dl2l_data/` is the extraction/upload package the ansible roles call:
+- `dl2l_data.extract` — `docker exec <container> psql ... COPY` per table → one Parquet
+  file per table under `<data-dir>/<condition>/trial_N/`, plus a gzipped `pg_dump` backup
+  and a root `manifest.json`.
+- `dl2l_data.upload` — pushes a data-dir tree to the HF dataset repo.
+- `scripts/pg_extract.py` is a separate, older CSV-oriented extractor (mirrors the
+  Java `--extractor` output format exactly) kept for parity with historical data; it
+  shares its low-level `psql`/`pg_dump` helpers with `dl2l_data.db`.
+
 ## WebSocket API (feature/api branch)
 
 `CollisionDetectorActor` feeds position updates into a `GeometrySourceProvider` (Akka Streams queue). `GeometryWebService` merges creature and object streams and broadcasts `GeometryUpdate` JSON over WebSocket at `ws://localhost:8080/geometry`.
 
 ## Data Analysis
 
-Python 2.7 scripts in `analysis/`. After simulation, copy the SLURM output directory back locally, set the `wd` variable in `exp1.py` / `exp2.py` / `exp3.py` / `tracing.py`, and run. Requires `numpy` and `scipy`.
+`analysis/dl2l_analysis/` is the shared library for analyzing an experiment's Parquet
+output: `config.py` (`ExperimentAnalysis.from_spec("<name>")` reads
+`experiments/<name>.yml` — conditions, labels, colors, trials, data/fig/report dirs),
+`loading.py` (`load_all`, the born_time/elapsed_s/tick-rank enrichment scaffold),
+`stats.py` (`cond_stats`, `kruskal_test` — Kruskal-Wallis + Bonferroni-corrected
+Mann-Whitney), `figures.py` (Agg backend setup, palette-aware save-to-`FIG_DIR`), and
+`report.py` (the mandated Purpose/Assumptions/Hypothesis/Results/Analysis skeleton —
+see Development cycle step 5g).
 
-New JEPA-integration analysis scripts (`coverage_probe.py`, `reg_granularity.py`, …) are Python 3 + pandas + sklearn + matplotlib and follow the same `wd` convention. Run them with `python3 analysis/<script>.py`.
+A new experiment's analysis script goes in `analysis/experiments/<name>.py` — a `run(cfg)`
+function that pulls in only the experiment-specific figures/interpretation; everything
+generic comes from `dl2l_analysis`. See `analysis/experiments/rotten_fruit_v1.py` for
+the pattern. Run it via:
+
+```bash
+PYTHONPATH=analysis python3 -m dl2l_analysis --experiment <name>
+```
+
+(or pass `-e analyze=true` to the ansible experiment playbook to run it automatically
+after data collection).
+
+`analysis/legacy/` holds the pre-refactor CSV-era scripts (`exp1.py`, `util.py`,
+`graphics.py`, …) for old experiments whose raw CSV data still lives in their original
+layout — kept for provenance, not meant to be extended. `analysis/exp_20260709_memory_vs_wm_v1.py`
+is a not-yet-ported Parquet-era script (the `dl2l_analysis` port for it doesn't exist
+yet); run it directly with `python3 analysis/exp_20260709_memory_vs_wm_v1.py` until
+someone ports it.
 
 ## JEPA World Model
 
@@ -169,11 +242,17 @@ Before implementing a feature:
     a. You should state the hipotesis and assumptions to the user
     b. You should choose a relevant sample to test the hipotesis 
     c. Whenever you can determine the size of the sample through an statistical method, do it
-    d. You should create the experiment configuration and run it through docker
-    e. You should collect the data and analyse it with python
+    d. Write an experiment spec at `experiments/p{issue-number}_<name>.yml` (see
+       `experiments/README.md` for the schema) and run it via
+       `cd ansible && ansible-playbook -i inventories/local run-experiment.yml -e experiment=p{issue-number}_<name>`
+       (see "Running Experiments" above).
+    e. The playbook collects the data automatically; write the analysis as
+       `analysis/experiments/p{issue-number}_<name>.py` using `analysis/dl2l_analysis/`
+       (see "Data Analysis" above), and run it standalone or via `-e analyze=true`.
     f. You should finally create a report in docs/reports folder 
     g. The report should have the following sections: Purpose, Assumptions, Hypothesis, Results and Analysis 
     h. You should include all the graphs and figures needed in your report
-    i. Upload all data collected during the experiment to `felipedreis/dl2l-experiments` on HuggingFace
-       under the prefix `p{issue-number}/` (e.g. `p55/` for issue #55). Use `hf upload` or
-       `ml/scripts/upload_hf.py`. Never discard experiment data — it must be preserved on HF.
+    i. Experiment data is uploaded to `felipedreis/dl2l-experiments` on HuggingFace
+       automatically by the playbook's collect-and-upload play (`upload.prefix` in the
+       experiment spec, default `p{issue-number}/` — e.g. `p55/` for issue #55). Never
+       set `upload.enabled: false` for a real experiment — data must be preserved on HF.

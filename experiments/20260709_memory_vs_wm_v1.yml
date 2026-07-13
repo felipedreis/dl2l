@@ -1,0 +1,53 @@
+name: 20260709_memory_vs_wm_v1
+trials: 5
+
+conditions:
+  - key: 1_baseline
+    simulation: simulations/20260709_memory_vs_wm_v1_1_baseline.conf
+    label: Baseline
+    color: "#9e9e9e"
+  - key: 2_memory_only
+    simulation: simulations/20260709_memory_vs_wm_v1_2_memory_only.conf
+    label: Memory
+    color: "#5c85d6"
+  - key: 3_memory_consolidation
+    simulation: simulations/20260709_memory_vs_wm_v1_3_memory_consolidation.conf
+    label: Mem+Consol
+    color: "#2b5eb8"
+  - key: 4_jepa_rpe_only
+    simulation: simulations/20260709_memory_vs_wm_v1_7_jepa_rpe_only.conf
+    label: JEPA
+    color: "#b05ec4"
+  - key: 5_jepa_rpe_consolidation
+    simulation: simulations/20260709_memory_vs_wm_v1_6_jepa_rpe_consolidation.conf
+    label: JEPA+Consol
+    color: "#7b2d8b"
+
+image:
+  source: build
+
+# Primary data_dir for new runs. Conditions 1-3 were rerun and their published
+# analysis (analysis/exp_20260709_memory_vs_wm_v1.py's COND_DIR) actually reads
+# from ml/data_20260709_memory_vs_wm_v2/ instead — cond_dir below reproduces
+# that historical split for anyone re-running the existing analysis against
+# this spec. A fresh ansible run of this spec writes ALL conditions under
+# data_dir (v1); cond_dir only matters for reading pre-existing data.
+data_dir: ml/data_20260709_memory_vs_wm_v1
+cond_dir:
+  1_baseline: ml/data_20260709_memory_vs_wm_v2
+  2_memory_only: ml/data_20260709_memory_vs_wm_v2
+  3_memory_consolidation: ml/data_20260709_memory_vs_wm_v2
+
+extract:
+  format: parquet
+  backup: true
+  tables: all
+
+upload:
+  enabled: true
+  repo: felipedreis/dl2l-experiments
+  prefix: 20260709_memory_vs_wm_v1
+
+# No analysis.module: analysis/exp_20260709_memory_vs_wm_v1.py was not ported
+# to analysis/experiments/ in Phase 2 (only rotten_fruit_v1 was, as the reuse
+# proof-of-concept). Port it in a follow-up if this experiment needs re-analysis.
