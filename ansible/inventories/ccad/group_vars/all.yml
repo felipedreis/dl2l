@@ -21,3 +21,10 @@ ccad_python_activate: "module load miniforge3 && conda activate {{ ccad_conda_en
 
 # Headless cluster — no UI port to publish (unlike inventories/local).
 publish_ui: false
+
+# CCAD username: read once from a gitignored .env.local at the repo root
+# (CCAD_USERNAME=<cpf-no-punctuation> — see .gitignore; NEVER commit that
+# file, it's PII). Override per-invocation with -e ccad_user=<cpf> instead
+# if you'd rather not use .env.local (extra-vars take precedence over this
+# group_var automatically). NEVER print this value in any debug/report task.
+ccad_user: "{{ (lookup('ansible.builtin.file', repo_root + '/.env.local', errors='ignore') | default('', true)) | regex_findall('^CCAD_USERNAME=(.+)$', multiline=True) | first | default('', true) }}"
