@@ -222,6 +222,21 @@ Docker path never needs a host-side `psql` either.
    practice, but the real fix (deriving ports/instance names from `$SLURM_ARRAY_TASK_ID`, which
    also touches `ccad-config.conf`'s seed-nodes port) is an explicit follow-up, not done here.
 
+   **Current actual blocker (found on a later live retry, after the VPN issues above were
+   worked around by targeting the login node's IP directly instead of its hostname — a
+   separate, unresolved DNS/split-tunnel gap on the client side): the compute nodes' user
+   database doesn't have this CCAD account registered.** Job 113 failed instantly (exit 127,
+   0s elapsed) with `singularity`'s own error: `Couldn't determine user account information:
+   user: unknown userid 2533`. Isolated with a plain `sbatch --wrap='id; whoami'` (no
+   Singularity involved) on the same node (`c8`): `id` resolves the uid number but not the
+   username, and `whoami` fails outright with "cannot find name for user ID 2533" — while the
+   *login* node resolves this account fully (`id` → `10822696622(...)`). This is a CCAD
+   infrastructure gap (NSS/LDAP/sssd not synced to at least node c8), not anything in this
+   repo's ansible/Singularity design — needs CCAD admins (`ccad@cefetmg.br`) to fix account
+   propagation to the compute nodes before the postgres/`--fakeroot` and completion-detection
+   risks above can even be exercised (the job died before Singularity got far enough to reach
+   either of them).
+
    Confirmed working end-to-end up through job submission: image pull (GHCR, public, no auth
    needed), directory setup, config/script sync, per-condition array job rendering and
    submission (`sbatch`, no `--wait`), job id parsing and local persistence, and
