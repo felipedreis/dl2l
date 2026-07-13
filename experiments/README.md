@@ -101,3 +101,48 @@ optional post-processing function run on the raw rows — see
 - An experiment spec listing explicit `extract.tables` needs the new name
   added to that list too (`scripts/validate_experiment.py` will reject an
   unknown name either way, so a typo fails fast).
+
+**Adding an analysis capability** (a new stat test, a new figure type): goes
+in `analysis/dl2l_analysis/stats.py`, `figures.py`, or `loading.py` — whichever
+fits — following the pattern of `cond_stats`/`kruskal_test`. Any
+`analysis/experiments/<name>.py` module can then import and use it; nothing
+in the runner (`analysis/dl2l_analysis/runner.py`) needs to change.
+
+**Adding a new target environment** (a fourth cluster, a cloud VM, etc.): add
+`ansible/inventories/<env>/` (with `hosts.yml` and `group_vars/all.yml`
+setting `dl2l_env: <env>`), plus `ansible/roles/image_<env>/` and
+`ansible/roles/trial_runner_<env>/`. `ansible/run-experiment.yml` resolves
+both role names dynamically via `include_role: name: "image_{{ dl2l_env }}"`
+/ `"trial_runner_{{ dl2l_env }}"` — it does not need editing. (Ansible's
+static `roles:` play attribute can't do this kind of dynamic name
+resolution from inventory vars, which is why `run-experiment.yml` uses
+`include_role` tasks instead — keep that pattern for a new environment too.)
+
+**Extending the experiment spec schema itself** (e.g. a new field like
+`image.build_args` or `trial_timeout`): touches three places —
+`scripts/validate_experiment.py` (validate the new field), the
+default-application logic in `ansible/roles/experiment_spec/tasks/main.yml`
+(`experiment_cfg` fact, if the field needs a default), and whichever
+role/template actually consumes it (e.g. an `image_*` role, or
+`common/templates/docker-compose.yml.j2`).
+
+**A new extraction output format** (beyond parquet/csv): add a branch in
+`scripts/dl2l_data/extract.py`'s `--format` handling (currently
+`argparse.ArgumentParser`'s `choices=["parquet", "csv"]` plus the `save()`
+call sites) and update the `format` field's allowed values in
+`scripts/validate_experiment.py`.
+
+**A new upload destination** (beyond HuggingFace): `scripts/dl2l_data/upload.py`
+is HF-specific (built directly on `huggingface_hub.HfApi`) — there's no
+pluggable-backend abstraction. A different destination means a new module
+alongside it (e.g. `dl2l_data/upload_s3.py`) and a way for the spec's
+`upload:` block or `ansible/roles/collect_upload/tasks/main.yml` to pick
+which one to call; that indirection doesn't exist yet.
+
+**Changing compose topology** (e.g. collapsing detector+holder onto one
+container, as `holder_combines_detector` already does): the flag is read in
+`ansible/roles/trial_runner_local/tasks/main.yml` and branched on in
+`ansible/roles/common/templates/docker-compose.yml.j2`'s
+`{% if holder_combines_detector %}` block. A similar experiment-level
+boolean flag (set via `experiment_cfg.<flag> | default(false)`) is the
+pattern to follow for other topology variants.
