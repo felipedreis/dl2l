@@ -315,11 +315,6 @@ are worth reinforcing.
    (novel, noisy gradients). This would combine JEPA's no-consol survival advantage with
    JEPA+Consol's long-run adaptation potential.
 
-3. **Run JEPA (no consol) in familiar world with ROTTEN_APPLE.** Condition 4 here is a
-   cold-start test. Running in a world where rotten apples were included in JEPA training
-   would test whether the world model can explicitly encode aversion when it has seen the
-   item.
-
 ---
 
 ## Data Availability
