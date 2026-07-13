@@ -54,8 +54,8 @@ CONDITIONS = [
     ("1_baseline",               "Baseline"),
     ("2_memory_only",            "Memory"),
     ("3_memory_consolidation",   "Mem+Consol"),
-    ("4_jepa_rpe_only",          "JEPA+RPE"),
-    ("5_jepa_rpe_consolidation", "JEPA+RPE+Consol"),
+    ("4_jepa_rpe_only",          "JEPA"),
+    ("5_jepa_rpe_consolidation", "JEPA+Consol"),
 ]
 COND_KEYS  = [c for c, _ in CONDITIONS]
 COND_LABELS= [l for _, l in CONDITIONS]
@@ -126,6 +126,8 @@ drives = drives.merge(born_lookup, on=["creature_key", "condition", "trial"], ho
 drives["elapsed_s"] = (drives["time"] - drives["born_time"]) / 1000.0
 behav["efficiency"] = num(behav["efficiency"])
 behav["time"]       = num(behav["time"])
+behav = behav.merge(born_lookup, on=["creature_key", "condition", "trial"], how="left")
+behav["elapsed_s"]  = (behav["time"] - behav["born_time"]) / 1000.0
 neuro["dopamine"]   = num(neuro["dopamine"])
 neuro["serotonin"]  = num(neuro["serotonin"])
 neuro["orexin"]     = num(neuro["orexin"])
@@ -416,19 +418,19 @@ cond_stats(mean_eff, "Mean efficiency")
 
 fig, axes = plt.subplots(1, 2, figsize=(13, 5))
 
-# Time series
+# Time series — use elapsed seconds from each creature's birth
 ax = axes[0]
-BIN_E = 300
-behav["time_bin"] = (behav["time"] // BIN_E).astype(int)
+BIN_E_S = 30  # 30-second bins
+behav["time_bin"] = (behav["elapsed_s"] // BIN_E_S).clip(lower=0).astype(int)
 for ck, cl in CONDITIONS:
     sub = behav[behav["condition"] == ck]
     gb = sub.groupby("time_bin")["efficiency"].mean()
-    t = gb.index * BIN_E / 60
+    t = gb.index * BIN_E_S / 60
     ax.plot(t, gb, color=PALETTE[ck], lw=2, label=cl)
-ax.set_xlabel("Time (min)")
+ax.set_xlabel("Elapsed time (min)")
 ax.set_ylabel("Behavioural Efficiency")
 ax.set_title("Efficiency Over Time")
-ax.legend(fontsize=8)
+ax.legend(fontsize=9, loc="upper right", framealpha=0.9)
 ax.grid(alpha=0.3)
 
 # Boxplot
@@ -440,6 +442,7 @@ for patch, (ck, _) in zip(bp["boxes"], CONDITIONS):
     patch.set_alpha(0.7)
 ax.set_ylabel("Behavioural Efficiency")
 ax.set_title("Efficiency Distribution")
+ax.set_xticklabels(COND_LABELS, rotation=20, ha="right", fontsize=9)
 ax.grid(axis="y", alpha=0.3)
 
 plt.tight_layout()
