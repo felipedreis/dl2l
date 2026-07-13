@@ -6,12 +6,28 @@ dl2l_env: ccad
 repo_root: "{{ playbook_dir | dirname }}"
 
 # GPU partition — 4x NVIDIA L40S 48GB across nodes c1/c2, max 2 GPUs/user,
-# 2-day time cap. See https://www.ccad.cefetmg.br/guia/
+# 2-day time cap. See https://www.ccad.cefetmg.br/guia/ (training only)
 ccad_partition: gpu
 ccad_qos: gpu_qos
 ccad_gres: "gpu:1"
 
+# CPU partitions (dev/short/normal/long/extended, nodes c1-c11) — for running
+# simulations (pure CPU/JVM work, no GPU needed). Distinct from the
+# training-only ccad_partition/ccad_qos/ccad_gres above.
+# CONFIRMED LIVE: the guide didn't list a required qos per CPU partition, but
+# there is one — a job submitted to `short` with no --qos pended forever
+# ("Job's QOS not permitted to use this partition (short allows
+# short_qos,priority_qos not dev_qos)" — the account's default qos, dev_qos,
+# isn't valid there).
+ccad_sim_partition: short
+ccad_sim_qos: short_qos
+
 remote_work_dir: "l2l"   # relative to the login user's $HOME (shared NFS)
+
+# No local docker daemon on CCAD — images come from GHCR (CI pushes here on
+# every push to main, see .github/workflows/cd.yml), pulled as a Singularity
+# SIF by roles/image_ccad.
+dl2l_image: "ghcr.io/felipedreis/dl2l:latest"
 
 # The conda env created once by provision-ccad.yml (module load miniforge3;
 # $HOME/.conda/envs/ is on shared NFS, so this is visible on compute nodes

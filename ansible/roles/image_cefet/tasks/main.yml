@@ -1,9 +1,0 @@
----
-# CEFET has no docker — there is no image to build or push. All that's
-# needed here is the fat jar itself, which trial_runner_cefet syncs to the
-# login node (natives/ come from the same mvn package build).
-- name: Package the fat jar (mvn package -DskipTests)
-  ansible.builtin.command:
-    argv: [mvn, package, -q, -DskipTests]
-    chdir: "{{ repo_root }}"
-  changed_when: true

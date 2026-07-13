@@ -91,9 +91,11 @@ files; fix hyperparameters and re-run with a narrowed `variants:` list.
 
 ## Training on CCAD
 
-CEFET-MG's CCAD HPC cluster (https://www.ccad.cefetmg.br/guia/) — NOT the
-same as `cluster.decom.cefetmg.br` (`inventories/cefet`, used only for
-CPU-only simulation jobs) — is the actual GPU training target: 4x NVIDIA
+CEFET-MG's CCAD HPC cluster (https://www.ccad.cefetmg.br/guia/) is the only
+CEFET cluster this repo targets (`cluster.decom.cefetmg.br` no longer
+exists). The same `inventories/ccad` also runs experiments (see
+`experiments/README.md`) via `roles/trial_runner_ccad`, on CCAD's CPU
+partitions — training specifically targets the GPU partition: 4x NVIDIA
 L40S 48GB across nodes c1/c2, `--partition=gpu --qos=gpu_qos`, max 2 GPUs/user,
 2-day time cap.
 

@@ -1,0 +1,119 @@
+#!/bin/bash
+# Rendered by ansible/roles/trial_runner_ccad — do not edit by hand.
+# One SLURM array task = one trial of condition "{{ cond.key }}". Submitted via:
+#   sbatch --array=1-{{ experiment_cfg.trials }} run_trial_{{ experiment_cfg.name }}_{{ cond.key }}.sh
+#
+# Replaces docker-compose (no equivalent under Singularity: no bridge
+# networking/service-DNS, no depends_on/healthchecks) with 4 `singularity
+# instance start` calls sharing this node's network namespace — hence
+# HOST=localhost everywhere and a DISTINCT PORT per role (manager=2551,
+# detector=2552, holder=2553) instead of docker's per-container hostnames.
+#
+# KNOWN FOLLOW-UP (not yet solved): originally used `--exclusive` (whole
+# node per trial) specifically so fixed ports never collide across
+# concurrently-running trials — confirmed live that this trips
+# AssocGrpCpuLimit (the account's CPU grant is smaller than a full node, and
+# GrpTRES/MaxTRES weren't visible via `sacctmgr show associations` to size
+# it precisely), so this now requests a modest fixed CPU count instead. That
+# means two trials CAN land on the same node at once, and their fixed ports
+# (2551-2553, 5432) and singularity instance names (dl2l-db, dl2l-manager,
+# ...) WOULD collide. Fine for now (this repo currently only runs one
+# condition's array job at a time in practice) — the real fix is deriving
+# each port/instance name from ${SLURM_ARRAY_TASK_ID} instead of hardcoding
+# them, which also touches ccad-config.conf's seed-nodes port.
+#
+# The trap below always writes a DONE sentinel (this task's exit code) and
+# tears down every instance, success or failure — mirrors
+# roles/train_ccad/templates/train_variants.sh.j2's pattern exactly. No live
+# ansible/SSH connection is needed once submitted (the CEFET VPN drops on
+# idle) — a separate `-e rescue=true` run checks for this sentinel later.
+#SBATCH --job-name=dl2l_{{ experiment_cfg.name }}_{{ cond.key }}
+#SBATCH --partition={{ ccad_sim_partition }}
+{% if ccad_sim_qos %}#SBATCH --qos={{ ccad_sim_qos }}
+{% endif %}#SBATCH --nodes=1 --ntasks=1 --cpus-per-task=4
+#SBATCH --output={{ remote_work_dir }}/logs/{{ experiment_cfg.name }}_{{ cond.key }}_%A_%a.out
+set -euo pipefail
+
+TRIAL="${SLURM_ARRAY_TASK_ID:?must be run as a SLURM array task}"
+TRIAL_DIR="{{ remote_work_dir }}/data/{{ experiment_cfg.name }}/{{ cond.key }}/trial_${TRIAL}"
+mkdir -p "$TRIAL_DIR"
+
+trap 'echo "$?" > "'"$TRIAL_DIR"'/DONE"; singularity instance stop --all >/dev/null 2>&1 || true' EXIT
+
+CONFIG_BIND="{{ remote_work_dir }}/config/ccad-config.conf:/config/docker-config.conf:ro"
+INITDB_BIND="{{ remote_work_dir }}/config/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro"
+
+# A Singularity SIF is read-only by default — --writable-tmpfs gives every
+# instance an ephemeral, in-memory writable overlay (discarded when the
+# instance stops). Needed for postgres (initdb/WAL — it can't start at all
+# on a fully read-only rootfs) and harmless insurance for the app containers
+# (logs/tmp writes). Ephemeral is intentional, not a shortcut: this exactly
+# mirrors how the local/Pi docker-compose postgres has no named volume
+# either — extraction below copies everything needed out to the shared NFS
+# before the EXIT trap tears the instances (and this overlay) down.
+WRITABLE="--writable-tmpfs"
+
+# --- postgres --------------------------------------------------------------
+# NOTE (untested against the live cluster): the official postgres image's
+# entrypoint expects to run as its own uid inside the container; --fakeroot
+# maps that via a user namespace. If this fails, the likely fix is a
+# rootless-friendly postgres image (e.g. a Bitnami variant) instead.
+singularity instance start --fakeroot $WRITABLE \
+  --bind "$INITDB_BIND" \
+  --env POSTGRES_PASSWORD=postgres --env POSTGRES_DB=l2l \
+  docker://postgres:16 dl2l-db
+
+echo "Waiting for postgres..."
+for _ in $(seq 1 60); do
+  singularity exec instance://dl2l-db pg_isready -U postgres >/dev/null 2>&1 && break
+  sleep 2
+done
+
+# --- manager (+ idProvider) --------------------------------------------------
+singularity instance start $WRITABLE \
+  --bind "$CONFIG_BIND" \
+  --env ROLE=manager,idProvider --env SIMULATION={{ cond.simulation }} \
+  --env HOST=localhost --env PORT=2551 \
+  --env DL2L_DB_URL=jdbc:postgresql://localhost:5432/l2l \
+  docker://{{ dl2l_image }} dl2l-manager
+
+echo "Waiting for manager..."
+for _ in $(seq 1 60); do
+  (exec 3<>/dev/tcp/localhost/2551) 2>/dev/null && exec 3<&- 3>&- && break
+  sleep 2
+done
+
+# --- collisionDetector -------------------------------------------------------
+singularity instance start $WRITABLE \
+  --bind "$CONFIG_BIND" \
+  --env ROLE=collisionDetector --env SIMULATION={{ cond.simulation }} \
+  --env HOST=localhost --env PORT=2552 \
+  docker://{{ dl2l_image }} dl2l-detector
+
+# --- holder -------------------------------------------------------------------
+singularity instance start $WRITABLE \
+  --bind "$CONFIG_BIND" \
+  --env ROLE=holder --env SIMULATION={{ cond.simulation }} \
+  --env HOST=localhost --env PORT=2553 \
+  --env DL2L_DB_URL=jdbc:postgresql://localhost:5432/l2l \
+  docker://{{ dl2l_image }} dl2l-holder
+
+# Wait for the holder's own process to exit (the simulation's "Finish" ->
+# no `docker wait` equivalent under Singularity). NOTE (untested against
+# the live cluster): assumes `singularity instance list` stops showing
+# dl2l-holder once its PID 1 process exits — if that doesn't hold in
+# practice, tail the holder's log for its own completion message instead.
+echo "Waiting for the simulation to finish..."
+while singularity instance list 2>/dev/null | grep -q '^dl2l-holder '; do
+  sleep 5
+done
+
+# --- extract (before teardown; dl2l_data.extract does its own pg_dump backup) -
+PYTHONPATH="{{ remote_work_dir }}/scripts" python3 -m dl2l_data.extract \
+  --experiment "{{ experiment_cfg.name }}" \
+  --condition "{{ cond.key }}" \
+  --trial "$TRIAL" \
+  --out "{{ remote_work_dir }}/data/{{ experiment_cfg.name }}" \
+  --container dl2l-db --runtime singularity \
+  --format {{ experiment_cfg.extract.format }}{% if not experiment_cfg.extract.backup %} \
+  --skip-backup{% endif %}

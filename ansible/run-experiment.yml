@@ -4,6 +4,7 @@
 # Usage:
 #   ansible-playbook -i ansible/inventories/local ansible/run-experiment.yml -e experiment=smoke
 #   ansible-playbook -i ansible/inventories/pi    ansible/run-experiment.yml -e experiment=rotten_fruit_v1
+#   ansible-playbook -i ansible/inventories/ccad  ansible/run-experiment.yml -e experiment=rotten_fruit_v1
 #
 # The target environment is selected by which inventory you pass with -i;
 # each inventory's group_vars/all.yml sets dl2l_env, which in turn selects
@@ -16,6 +17,16 @@
 #   train=true              chain a training run (train-model.yml) after upload —
 #                            requires the experiment spec's optional `training: <name>`
 #                            field (see experiments/README.md, training/README.md)
+#   rescue=true              CCAD only. The CEFET VPN drops the connection when
+#                            idle, so a plain run on -i inventories/ccad submits
+#                            every condition's trials and returns immediately
+#                            WITHOUT waiting for them to finish (see
+#                            roles/trial_runner_ccad). Pass -e rescue=true in a
+#                            later invocation, whenever you're back on the VPN,
+#                            to check whether all trials have finished and (if
+#                            so) collect + upload + analyze/train. No-op for
+#                            local/pi, which always complete within one
+#                            invocation.
 
 - name: Load and validate experiment spec, build image
   hosts: localhost
@@ -26,7 +37,16 @@
         name: experiment_spec
     - ansible.builtin.include_role:
         name: "image_{{ dl2l_env }}"
-      when: (build_image | default(true) | bool) and experiment_cfg.image.source == 'build'
+      # CCAD has no local docker daemon to build from — it always needs a
+      # registry pull (image_ccad enforces image.source: registry itself),
+      # regardless of the experiment spec's image.source value elsewhere.
+      # Skipped entirely on -e rescue=true — a rescue run only checks job
+      # status and collects already-submitted results, nothing new is
+      # launched, so there's nothing to build/pull.
+      when: >-
+        (build_image | default(true) | bool) and
+        (experiment_cfg.image.source == 'build' or dl2l_env == 'ccad') and
+        not (rescue | default(false) | bool)
 
 - name: Run trials
   hosts: runner

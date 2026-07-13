@@ -91,26 +91,33 @@ Custom dispatchers defined in application.conf:
 ## Database
 
 PostgreSQL. Schema name must be `data`. Connection configured in `src/main/resources/META-INF/persistence.xml`:
-- URL: `jdbc:postgresql://l2l-db:5432/l2l` (Docker) or `localhost` (local)
+- URL: `jdbc:postgresql://dl2l-db:5432/l2l` (hardcoded default — Docker's per-container DNS
+  resolves `dl2l-db` in every environment that uses docker-compose, i.e. local and Pi)
 - User/password: `postgres`/`postgres`
 - DDL generation: `drop-and-create-tables` on startup
+
+`DL2L_DB_URL` (read in `JpaPersister`'s constructor) overrides the URL above when set — needed
+on CCAD, where Singularity instances share the node's network namespace instead of getting
+per-container hostnames like Docker, so postgres is reached at `jdbc:postgresql://localhost:5432/l2l`
+instead. Unset (the default everywhere else), behavior is unchanged.
 
 All JPA entities are in `creature/bd/` and `common/SequentialId`. EclipseLink is the JPA provider.
 
 ## Running Experiments
 
 Experiments are declared once as a YAML spec and run identically on any of three
-environments — this local macbook, the Raspberry Pi cluster (SLURM + Docker), or the
-CEFET cluster (SLURM only, no Docker) — via a single Ansible playbook. This replaced
-a prior generation of ~46 near-duplicate `docker-compose-*.yml` files and ~10
+environments — this local macbook, the Raspberry Pi cluster (SLURM + Docker), or CCAD
+(CEFET-MG's HPC cluster, SLURM + Singularity/Apptainer — the only CEFET cluster;
+`cluster.decom.cefetmg.br` no longer exists) — via a single Ansible playbook. This
+replaced a prior generation of ~46 near-duplicate `docker-compose-*.yml` files and ~10
 `run_exp_*.sh` scripts (still visible in git history if you need to reference an old
 one-off run).
 
 ```bash
 cd ansible
-ansible-playbook -i inventories/local ansible/run-experiment.yml -e experiment=<name>   # this Mac
-ansible-playbook -i inventories/pi    ansible/run-experiment.yml -e experiment=<name>   # Pi cluster
-ansible-playbook -i inventories/cefet ansible/run-experiment.yml -e experiment=<name>   # CEFET (blocked — see below)
+ansible-playbook -i inventories/local run-experiment.yml -e experiment=<name>   # this Mac
+ansible-playbook -i inventories/pi    run-experiment.yml -e experiment=<name>   # Pi cluster
+ansible-playbook -i inventories/ccad  run-experiment.yml -e experiment=<name>   # CCAD (see below — submit/rescue)
 ```
 
 An experiment is one file, `experiments/<name>.yml` — conditions (each mapping to a
@@ -126,18 +133,33 @@ HuggingFace (never skip this — see Development cycle step 5i) → optionally r
 analysis module (`-e analyze=true`).
 
 Local runs always publish the UI on `:8080` (the local inventory sets
-`publish_ui: true`); the Pi and CEFET inventories don't.
+`publish_ui: true`); the Pi and CCAD inventories don't.
 
-**CEFET is a known-incomplete seam.** The cluster has no Docker, so there's no
-`dl2l-db` container for extraction to target. `ansible/roles/trial_runner_cefet/tasks/db_setup.yml`
-fails fast with an explanatory message until that's resolved — see the seam note in
-`docs/plans/experiment-infra-ansible-refactor.md`.
+**CCAD requires the CEFET VPN, which drops the connection when idle** — same
+constraint as JEPA training there (see below). Running experiments on CCAD is
+submit-and-collect, not submit-and-wait: a plain run submits one SLURM array job per
+condition (Singularity instances standing in for docker-compose — no compose
+equivalent exists under Singularity, so each of the 4 roles runs as its own
+`singularity instance` sharing the node's network namespace, `HOST=localhost` with a
+distinct port per role) and returns immediately; a later `-e rescue=true` run (safe to
+repeat) checks whether every condition's every trial has finished (a `DONE` sentinel
+each array task writes on exit) and, once all are done, syncs the data back and
+proceeds to upload/analyze/train. CCAD images come from GHCR only (no local docker
+daemon there — `image: {source: registry}` is required for `experiments/*.yml` specs
+targeting CCAD). See `training/README.md` for the shared submit/rescue pattern and
+`docs/plans/ccad-singularity-experiments.md` for the full design, including two
+untested-against-the-live-cluster risks flagged there: running the official postgres
+image under unprivileged Singularity, and detecting simulation completion without a
+`docker wait` equivalent.
 
 ### Extraction and upload internals
 
 `scripts/dl2l_data/` is the extraction/upload package the ansible roles call:
-- `dl2l_data.extract` — `docker exec <container> psql ... COPY` per table → one Parquet
-  file per table under `<data-dir>/<condition>/trial_N/`, plus a gzipped `pg_dump` backup
+- `dl2l_data.extract` — `docker exec <container> psql ... COPY` per table (or, with
+  `--runtime singularity` on CCAD, `singularity exec instance://<name> psql ...` —
+  reusing the psql client bundled in the postgres image itself, since there's no
+  reason to assume a bare psql client exists on the cluster host) → one Parquet file
+  per table under `<data-dir>/<condition>/trial_N/`, plus a gzipped `pg_dump` backup
   and a root `manifest.json`.
 - `dl2l_data.upload` — pushes a data-dir tree to the HF dataset repo.
 - `scripts/pg_extract.py` is a separate, older CSV-oriented extractor (mirrors the

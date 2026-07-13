@@ -33,3 +33,7 @@
   loop_control:
     loop_var: trial_item
     label: "{{ trial_item.condition.key }} trial {{ trial_item.trial }}/{{ experiment_cfg.trials }}"
+
+- name: Mark experiment as finished (local runs always complete within one invocation)
+  ansible.builtin.set_fact:
+    experiment_finished: true

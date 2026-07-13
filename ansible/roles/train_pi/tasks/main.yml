@@ -1,10 +1,10 @@
 ---
 # Training on the Raspberry Pi cluster is not supported — there's no
 # realistic compute there for this workload (see training/README.md).
-# Use -i inventories/local or -i inventories/cefet instead.
+# Use -i inventories/local or -i inventories/ccad instead.
 - name: Training on the Pi cluster is not supported
   ansible.builtin.fail:
     msg: >-
       Training does not run on the Raspberry Pi cluster — there's no
       realistic compute there for this workload. Use
-      -i inventories/local or -i inventories/cefet instead.
+      -i inventories/local or -i inventories/ccad instead.

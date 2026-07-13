@@ -1,0 +1,44 @@
+---
+# CCAD has no local docker daemon to build from — images must already exist
+# in a registry (GHCR, populated by CI on every push to main — see
+# .github/workflows/cd.yml). This role just pulls the image as a Singularity
+# SIF on the login node. delegate_to is needed on every task here since this
+# role is included from the "Load and validate experiment spec, build image"
+# play (hosts: localhost), but Singularity only exists on the CCAD side.
+#
+# CONFIRMED LIVE BUG (caught during real testing, not theoretical): a play's
+# `connection: local` overrides delegate_to's target unless the delegated
+# task explicitly forces `ansible_connection: ssh` back — without it,
+# `delegate_to: "{{ groups['runner'][0] }}"` silently ran every task on THIS
+# MAC instead of the CCAD login node (proved by a `remote_work_dir`-named
+# directory appearing locally under ansible/, not on the cluster at all).
+# The same latent bug likely affects roles/image_pi's delegated worker
+# pre-pull task too, never live-tested against real Pi hardware.
+#
+# Always re-pulls (--force) rather than caching — dl2l_image defaults to a
+# moving `:latest` tag, so skip-if-cached would silently run stale images.
+- name: Fail if image.source is not 'registry'
+  ansible.builtin.fail:
+    msg: >-
+      CCAD has no local docker daemon — image.source must be 'registry'
+      (got '{{ experiment_cfg.image.source }}'). Push the image to GHCR
+      first (CI does this on every push to main) and set
+      `image: {source: registry}` in experiments/{{ experiment_cfg.name }}.yml.
+  when: experiment_cfg.image.source != 'registry'
+
+- name: Ensure the remote work dir exists
+  delegate_to: "{{ groups['runner'][0] }}"
+  vars:
+    ansible_connection: ssh
+  ansible.builtin.file:
+    path: "{{ remote_work_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: "Pull {{ dl2l_image }} as a Singularity image on the login node"
+  delegate_to: "{{ groups['runner'][0] }}"
+  vars:
+    ansible_connection: ssh
+  ansible.builtin.command:
+    argv: [singularity, pull, --force, "{{ remote_work_dir }}/dl2l.sif", "docker://{{ dl2l_image }}"]
+  changed_when: true

@@ -29,10 +29,18 @@
   changed_when: true
 
 - name: Pre-pull the image on every worker node
+  # ansible_connection: ssh is required here — a play's `connection: local`
+  # (this role is included from a hosts: localhost play) silently overrides
+  # delegate_to's target otherwise, running the task on the control machine
+  # instead of the worker. Confirmed as a real, live bug via the equivalent
+  # delegate_to task in roles/image_ccad (untested here against real Pi
+  # hardware, but the same play-level connection: local applies).
   ansible.builtin.command:
     argv: [sudo, docker, pull, "{{ dl2l_image }}", -q]
   loop: "{{ groups['workers'] }}"
   loop_control:
     loop_var: pi_worker
   delegate_to: "{{ pi_worker }}"
+  vars:
+    ansible_connection: ssh
   changed_when: true

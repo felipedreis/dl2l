@@ -85,13 +85,16 @@ These are code changes, not spec changes — you won't need a new experiment
 spec field for either of them.
 
 **Changing the Docker image** (new base image, added dependencies, etc.):
-all three environments build from the same `docker/Dockerfile` —
-`ansible/roles/image_local/tasks/main.yml`, `image_pi/tasks/main.yml`, and
-`image_cefet/tasks/main.yml` all just run `mvn package` + `docker build -f
-docker/Dockerfile` (or `buildx build --platform linux/arm64` for the Pi's
-cross-build). Edit `docker/Dockerfile` directly; every environment picks it
-up automatically next time `image.source: build` runs (the default — see
-the schema above). If you need a genuinely different build invocation (e.g.
+local and Pi build from the same `docker/Dockerfile` —
+`ansible/roles/image_local/tasks/main.yml` and `image_pi/tasks/main.yml`
+both just run `mvn package` + `docker build -f docker/Dockerfile` (or
+`buildx build --platform linux/arm64` for the Pi's cross-build). CCAD has no
+local docker daemon — `image_ccad/tasks/main.yml` instead pulls the image
+CI already publishes to GHCR (`.github/workflows/cd.yml`) as a Singularity
+SIF; experiment specs targeting CCAD must set `image: {source: registry}`.
+Edit `docker/Dockerfile` directly; local/Pi pick it up automatically next
+time `image.source: build` runs (the default — see the schema above). If
+you need a genuinely different build invocation (e.g.
 an extra `--build-arg`, or a second image variant), add it to the relevant
 `image_*` role's `docker build`/`buildx build` task — there is currently no
 per-experiment build-arg hook in the spec schema.

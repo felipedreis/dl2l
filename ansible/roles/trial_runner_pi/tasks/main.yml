@@ -77,3 +77,8 @@
     src: "{{ shared_fs }}/data/{{ experiment_cfg.name }}/"
     dest: "{{ experiment_data_dir }}/"
     recursive: true
+
+- name: Mark experiment as finished (pi runs always complete within one invocation)
+  delegate_to: localhost
+  ansible.builtin.set_fact:
+    experiment_finished: true

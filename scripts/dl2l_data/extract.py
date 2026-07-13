@@ -13,6 +13,7 @@ Usage:
         [--container db] \
         [--format parquet|csv] \
         [--docker-cmd docker] \
+        [--runtime docker|singularity] \
         [--skip-backup]
 
 Each condition gets its own subdirectory (optionally under trial_N/) with one
@@ -21,7 +22,9 @@ experiment root is created/updated with metadata (creature count, etc.).
 
 Drop-in successor to the old scripts/exp_extract.py — same interface, output
 layout, and table set; adds --format and --docker-cmd (the latter used by the
-Raspberry Pi trial runner, which needs "sudo docker").
+Raspberry Pi trial runner, which needs "sudo docker"), and --runtime (used by
+CCAD, where postgres runs as a `singularity instance` — psql is invoked
+inside that already-running instance, not via a bare host-installed client).
 """
 
 import argparse
@@ -82,6 +85,10 @@ def main():
                    help="Output file format for the per-table extracts")
     p.add_argument("--docker-cmd", default="docker",
                    help='Docker invocation prefix, e.g. "sudo docker" on Pi nodes')
+    p.add_argument("--runtime", choices=["docker", "singularity"], default="docker",
+                   help='Container runtime "psql"/"pg_dump" run inside of. '
+                        '"singularity" (CCAD) execs into instance://<container> '
+                        'instead of a docker exec; --docker-cmd is ignored then.')
     p.add_argument("--skip-backup", action="store_true",
                    help="Skip pg_dump (faster, use when DB is still running long)")
     args = p.parse_args()
@@ -90,6 +97,7 @@ def main():
     container = args.container
     trial = args.trial
     docker_cmd = args.docker_cmd
+    runtime = args.runtime
     if trial is not None:
         out_dir = Path(args.out) / cond / f"trial_{trial}"
     else:
@@ -100,7 +108,7 @@ def main():
     print(f"Extracting {args.experiment}/{cond}{trial_label} from container "
           f"'{container}' …", file=sys.stderr)
 
-    creatures_rows = psql_copy(container, TABLES["creatures"][0], docker_cmd)
+    creatures_rows = psql_copy(container, TABLES["creatures"][0], docker_cmd, runtime)
     if len(creatures_rows) < 2:
         print("No creatures found — aborting.", file=sys.stderr)
         sys.exit(1)
@@ -112,13 +120,13 @@ def main():
         if table == "creatures":
             continue
         sql, post_process = TABLES[table]
-        rows = psql_copy(container, sql, docker_cmd)
+        rows = psql_copy(container, sql, docker_cmd, runtime)
         if post_process is not None:
             rows = post_process(rows)
         save(rows, out_dir, table, args.format, cond, trial)
 
     if not args.skip_backup:
-        pg_dump(container, out_dir / "db_backup.sql.gz", docker_cmd)
+        pg_dump(container, out_dir / "db_backup.sql.gz", docker_cmd, runtime)
 
     manifest_path = update_manifest(
         exp_dir=Path(args.out),

@@ -1,71 +1,84 @@
 ---
 # Runs on localhost after all trials complete. Uploads the collected data to
 # HuggingFace (never discard experiment data — see CLAUDE.md dev cycle) and,
-# opt-in, runs the experiment's analysis module.
-- name: "Upload {{ experiment_cfg.name }} to {{ experiment_cfg.upload.repo }}"
-  ansible.builtin.command:
-    argv:
-      - python3
-      - -m
-      - dl2l_data.upload
-      - --experiment
-      - "{{ experiment_cfg.name }}"
-      - --data-dir
-      - "{{ experiment_data_dir }}"
-      - --repo
-      - "{{ experiment_cfg.upload.repo }}"
-      - --prefix
-      - "{{ experiment_cfg.upload.prefix }}"
-    chdir: "{{ repo_root }}"
-  environment:
-    PYTHONPATH: "{{ repo_root }}/scripts"
-  when: experiment_cfg.upload.enabled
-  changed_when: true
+# opt-in, runs the experiment's analysis module and/or chains a training run.
+#
+# Gated on experiment_finished (default true — local/pi always complete
+# synchronously within one invocation; ccad's submit/rescue split sets this
+# to false until every condition's every trial is done, so upload/analyze/
+# train never fire on a partial dataset).
+- name: Upload, analyze, and (optionally) chain training
+  when: experiment_finished | default(true) | bool
+  block:
+    - name: "Upload {{ experiment_cfg.name }} to {{ experiment_cfg.upload.repo }}"
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -m
+          - dl2l_data.upload
+          - --experiment
+          - "{{ experiment_cfg.name }}"
+          - --data-dir
+          - "{{ experiment_data_dir }}"
+          - --repo
+          - "{{ experiment_cfg.upload.repo }}"
+          - --prefix
+          - "{{ experiment_cfg.upload.prefix }}"
+        chdir: "{{ repo_root }}"
+      environment:
+        PYTHONPATH: "{{ repo_root }}/scripts"
+      when: experiment_cfg.upload.enabled
+      changed_when: true
 
-- name: "Skip upload (upload.enabled: false in {{ experiment_cfg.name }}.yml)"
+    - name: "Skip upload (upload.enabled: false in {{ experiment_cfg.name }}.yml)"
+      ansible.builtin.debug:
+        msg: "upload.enabled is false — data stays local at {{ experiment_data_dir }}"
+      when: not experiment_cfg.upload.enabled
+
+    - name: "Run analysis for {{ experiment_cfg.name }}"
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -m
+          - dl2l_analysis
+          - --experiment
+          - "{{ experiment_cfg.name }}"
+        chdir: "{{ repo_root }}"
+      environment:
+        PYTHONPATH: "{{ repo_root }}/analysis"
+      when: (analyze | default(false) | bool) and (experiment_cfg.analysis is defined) and (experiment_cfg.analysis.module is defined)
+      changed_when: true
+
+    - name: "Analysis requested but no analysis.module set in {{ experiment_cfg.name }}.yml"
+      ansible.builtin.debug:
+        msg: "-e analyze=true was passed but experiments/{{ experiment_cfg.name }}.yml has no analysis.module — skipping."
+      when: (analyze | default(false) | bool) and not ((experiment_cfg.analysis is defined) and (experiment_cfg.analysis.module is defined))
+
+    - name: "Chain training run: {{ experiment_cfg.training | default('') }}"
+      # Ansible has no clean primitive for conditionally running a whole separate
+      # playbook from inside a task (import_playbook only works unconditionally
+      # at file scope) — shelling out to `ansible-playbook train-model.yml` is
+      # the pragmatic, honest choice here, and it's exactly what a human would
+      # do manually anyway, just automated. Reuses the same inventory dir
+      # convention (ansible/inventories/<env>) the outer playbook was invoked with.
+      ansible.builtin.command:
+        argv:
+          - ansible-playbook
+          - -i
+          - "inventories/{{ dl2l_env }}"
+          - train-model.yml
+          - -e
+          - "training={{ experiment_cfg.training }}"
+        chdir: "{{ repo_root }}/ansible"
+      when: (train | default(false) | bool) and (experiment_cfg.training is not none)
+      changed_when: true
+
+    - name: "Training requested but no training field set in {{ experiment_cfg.name }}.yml"
+      ansible.builtin.debug:
+        msg: "-e train=true was passed but experiments/{{ experiment_cfg.name }}.yml has no `training:` field — skipping."
+      when: (train | default(false) | bool) and (experiment_cfg.training is none)
+
+- name: "Experiment not finished yet — skipping upload/analyze/train"
   ansible.builtin.debug:
-    msg: "upload.enabled is false — data stays local at {{ experiment_data_dir }}"
-  when: not experiment_cfg.upload.enabled
-
-- name: "Run analysis for {{ experiment_cfg.name }}"
-  ansible.builtin.command:
-    argv:
-      - python3
-      - -m
-      - dl2l_analysis
-      - --experiment
-      - "{{ experiment_cfg.name }}"
-    chdir: "{{ repo_root }}"
-  environment:
-    PYTHONPATH: "{{ repo_root }}/analysis"
-  when: (analyze | default(false) | bool) and (experiment_cfg.analysis is defined) and (experiment_cfg.analysis.module is defined)
-  changed_when: true
-
-- name: "Analysis requested but no analysis.module set in {{ experiment_cfg.name }}.yml"
-  ansible.builtin.debug:
-    msg: "-e analyze=true was passed but experiments/{{ experiment_cfg.name }}.yml has no analysis.module — skipping."
-  when: (analyze | default(false) | bool) and not ((experiment_cfg.analysis is defined) and (experiment_cfg.analysis.module is defined))
-
-- name: "Chain training run: {{ experiment_cfg.training | default('') }}"
-  # Ansible has no clean primitive for conditionally running a whole separate
-  # playbook from inside a task (import_playbook only works unconditionally
-  # at file scope) — shelling out to `ansible-playbook train-model.yml` is
-  # the pragmatic, honest choice here, and it's exactly what a human would
-  # do manually anyway, just automated. Reuses the same inventory dir
-  # convention (ansible/inventories/<env>) the outer playbook was invoked with.
-  ansible.builtin.command:
-    argv:
-      - ansible-playbook
-      - -i
-      - "inventories/{{ dl2l_env }}"
-      - train-model.yml
-      - -e
-      - "training={{ experiment_cfg.training }}"
-    chdir: "{{ repo_root }}/ansible"
-  when: (train | default(false) | bool) and (experiment_cfg.training is not none)
-  changed_when: true
-
-- name: "Training requested but no training field set in {{ experiment_cfg.name }}.yml"
-  ansible.builtin.debug:
-    msg: "-e train=true was passed but experiments/{{ experiment_cfg.name }}.yml has no `training:` field — skipping."
-  when: (train | default(false) | bool) and (experiment_cfg.training is none)
+    msg: "Some trials are still running remotely — re-run with -e rescue=true later."
+  when: not (experiment_finished | default(true) | bool)

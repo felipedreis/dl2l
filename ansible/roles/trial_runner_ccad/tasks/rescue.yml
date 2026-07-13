@@ -1,0 +1,42 @@
+---
+- name: Check for a persisted job id mapping from a prior submission
+  delegate_to: localhost
+  ansible.builtin.stat:
+    path: "{{ repo_root }}/ansible/.run/experiment_{{ experiment_cfg.name }}.ccad.jobs"
+  register: _jobs_stat
+
+- name: Fail clearly if nothing was ever submitted
+  ansible.builtin.fail:
+    msg: >-
+      No job ids found at
+      {{ repo_root }}/ansible/.run/experiment_{{ experiment_cfg.name }}.ccad.jobs —
+      -e rescue=true only checks on jobs already submitted via
+      `ansible-playbook -i inventories/ccad run-experiment.yml -e experiment={{ experiment_cfg.name }}`
+      (without -e rescue=true). Submit it first.
+  when: not _jobs_stat.stat.exists
+
+- name: Read the persisted job id mapping
+  delegate_to: localhost
+  ansible.builtin.set_fact:
+    _ccad_job_ids: "{{ lookup('ansible.builtin.file', repo_root + '/ansible/.run/experiment_' + experiment_cfg.name + '.ccad.jobs') | from_yaml }}"
+
+- name: Check each condition's completion and sync back what's done
+  ansible.builtin.include_tasks: rescue_condition.yml
+  loop: "{{ experiment_cfg.conditions }}"
+  loop_control:
+    loop_var: cond
+    label: "{{ cond.key }}"
+
+- name: Report overall status
+  ansible.builtin.debug:
+    msg: >-
+      {{ _finished_conditions | default([]) | length }}/{{ experiment_cfg.conditions | length }}
+      conditions finished.
+      {{ 'All done — proceeding to upload.'
+         if (_finished_conditions | default([]) | length) == (experiment_cfg.conditions | length)
+         else 'Some conditions still running — re-run with -e rescue=true later.' }}
+
+- name: Mark experiment_finished
+  delegate_to: localhost
+  ansible.builtin.set_fact:
+    experiment_finished: "{{ (_finished_conditions | default([]) | length) == (experiment_cfg.conditions | length) }}"
