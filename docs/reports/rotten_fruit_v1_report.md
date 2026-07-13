@@ -21,7 +21,8 @@ before. The experiment compares three conditions:
 
 The JEPA model was trained exclusively on v3 data where `ROTTEN_APPLE` did not exist; it has
 no prior representation of this food type. The question is whether the JEPA-RPE prediction
-error mechanism can detect the novel item and adapt creature behaviour within a 2-hour trial.
+error mechanism can detect the novel item and adapt creature behaviour before creatures die
+(actual lifetimes: 1.6–2.4 min; `maxRuntimeMinutes=120` was the cap, never reached).
 
 ---
 
@@ -30,7 +31,7 @@ error mechanism can detect the novel item and adapt creature behaviour within a 
 - World layout: 1200×900, 5 creatures per trial.
 - Food: 500 RED_APPLE (caloric 0.2), 500 GREEN_APPLE (caloric 0.5), 500 ROTTEN_APPLE
   (caloric −0.3), 50 CACTUS, 100 ALOE. No GRAY_APPLE. `reposition=false` (finite supply).
-- `maxRuntimeMinutes=120` (double the standard 60-minute window to allow learning time).
+- `maxRuntimeMinutes=120` (cap; creatures die in 1.6–2.4 min due to rotten apple toxicity — the cap was never reached).
 - The `unified_critic` JEPA model (val L_pred = 0.0477) represents the species prior and was
   trained on data where ROTTEN_APPLE does not exist.
 - All other subsystems identical to the 20260709 base experiment (orexin, endocrine,
@@ -93,7 +94,7 @@ and its mean lifetime is actually lower (1.64 min vs 1.78 min).
 **H2: Not confirmed.** While H1 established that JEPA+RPE+Consol creatures *survive* longer
 (2.36 min vs 1.78 min), H2 asks a separate question: does any condition learn a *behavioral
 aversion* to rotten apples specifically? The answer is no. No condition reduces its rotten apple
-consumption proportion over the 2-hour window. The JEPA condition actually has the highest
+consumption proportion over their lifetime (1.6–2.4 min). The JEPA condition actually has the highest
 rotten apple percentage (34.6%) despite surviving the longest, though it has far fewer total
 eating events (439 vs 1,177 for baseline). The Memory+Consolidation condition shows a modest
 reduction in rotten proportion (26.0%), but this is not statistically distinguishable from
@@ -122,7 +123,7 @@ different.
 
 **H4: Marginally supported.** The JEPA condition shows a lower approach rate (4.8% vs 5.6%)
 and far fewer total encounters (81k vs 130k), but the per-encounter aversion rate does not
-indicate strong learned avoidance behaviour within 2 hours.
+indicate strong learned avoidance behaviour within the creatures' 1.6–2.4 min lifetimes.
 
 ### 4. Drive Regulation
 
@@ -208,10 +209,11 @@ vs 29.7%). Several complementary mechanisms explain this:
    rotten-specific aversion — is the primary survival driver.
 
 4. **Higher RPE signals priming learning.** The 5.7× higher |RPE| and 5.7× higher engram
-   |delta| indicate the system is actively responding to novel stimuli. Within 2 hours, the
-   consolidation adapter has not yet had enough repetitions to shift action selection, but the
-   learning substrate is clearly primed. A longer experiment would be needed to observe
-   behavioral aversion.
+   |delta| indicate the system is actively responding to novel stimuli. Within the ~2-minute
+   creature lifetimes, the consolidation adapter has not had enough repetitions to shift
+   action selection, but the learning substrate is clearly primed. A world where creatures
+   survive longer (e.g. milder toxicity or fewer rotten apples) would be needed to observe
+   full behavioural aversion.
 
 ### Memory+Consolidation in novel worlds
 
@@ -219,8 +221,8 @@ The Memory condition shows no survival advantage over baseline (98.6s vs 106.7s,
 and is actually numerically lower. This is expected: episodic memory records specific
 (perception, action, outcome) tuples. In a world where rotten apples are truly novel, the
 memory filter has no prior traces to evoke — creatures encounter rotten apples, eat them
-(forming a negative trace), but without enough repetitions in a 2-hour window, the memory
-filter does not yet consistently block the approach action.
+(forming a negative trace), but with lifetimes of only ~1.6 min there are too few
+repetitions for the memory filter to consistently block the approach action.
 
 JEPA's survival advantage in this novel world, by contrast, derives from a **prior world
 model** that generalises from the training distribution to novel observations, even without
@@ -264,10 +266,11 @@ rather than by learned specific aversion.
 
 **H2: Not confirmed.** H1 and H2 address distinct questions. H1 is about survival — confirmed.
 H2 asks whether any condition learns a *behavioral aversion to rotten apples specifically* —
-not confirmed. No condition reduces its rotten apple consumption proportion over the 2-hour
-window. JEPA creatures actually eat a slightly higher proportion of rotten apples (34.6% vs
-29.7%) despite having fewer absolute rotten eating events. Meaningful avoidance learning
-would likely require 4–8 hours or multiple repeated trials in the same world.
+not confirmed. No condition reduces its rotten apple consumption proportion over their lifetimes
+(1.6–2.4 min). JEPA creatures actually eat a slightly higher proportion of rotten apples
+(34.6% vs 29.7%) despite having fewer absolute rotten eating events. Meaningful avoidance
+learning would require creatures to survive long enough for the consolidation adapter to
+accumulate sufficient repetitions — e.g. a world with milder rotten-apple toxicity.
 
 **H3: Confirmed.** JEPA+RPE+Consol generates |RPE| 5.7× larger than baseline (0.4051 vs
 0.072), confirming the world model is actively producing prediction errors in response to
@@ -281,9 +284,10 @@ aversion has not reached behavioural significance within this time window.
 
 ## Next Steps
 
-1. **Extend experiment to 8 hours.** The JEPA RPE signal is primed but insufficient time has
-   elapsed for engram consolidation to shift action selection. A longer run with `maxRuntimeMinutes=480`
-   should reveal whether the WORLD_MODEL adapter learns rotten-apple aversion.
+1. **Reduce rotten apple toxicity to extend lifetimes.** Creatures die in ~2 min because
+   rotten apples (caloric value −0.3) cause rapid homeostatic failure — the 120-minute cap
+   is never reached. Reducing toxicity to e.g. −0.05 would allow creatures to survive long
+   enough for engram consolidation to accumulate and shift action selection toward aversion.
 
 2. **Track rotten% across life deciles.** The current analysis aggregates over the full
    lifetime. A decile-by-decile analysis of rotten% would show whether any condition begins
