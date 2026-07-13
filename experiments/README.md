@@ -73,3 +73,31 @@ experiment whose conditions 1-3 were rerun into a second data directory.
 
 `smoke.yml` is the minimal case (1 condition, 2 trials, no `analysis` key) —
 used to verify the deployment pipeline itself end-to-end.
+
+## Extending the pipeline
+
+These are code changes, not spec changes — you won't need a new experiment
+spec field for either of them.
+
+**Changing the Docker image** (new base image, added dependencies, etc.):
+all three environments build from the same `docker/Dockerfile` —
+`ansible/roles/image_local/tasks/main.yml`, `image_pi/tasks/main.yml`, and
+`image_cefet/tasks/main.yml` all just run `mvn package` + `docker build -f
+docker/Dockerfile` (or `buildx build --platform linux/arm64` for the Pi's
+cross-build). Edit `docker/Dockerfile` directly; every environment picks it
+up automatically next time `image.source: build` runs (the default — see
+the schema above). If you need a genuinely different build invocation (e.g.
+an extra `--build-arg`, or a second image variant), add it to the relevant
+`image_*` role's `docker build`/`buildx build` task — there is currently no
+per-experiment build-arg hook in the spec schema.
+
+**Extracting a new kind of data**: `scripts/dl2l_data/tables.py` has a
+`TABLES` dict, one entry per table: `name: (sql, post_process)`.
+`dl2l_data.extract` iterates that dict generically, so adding a table means
+adding one entry there (a SQL query against the `data` schema, plus an
+optional post-processing function run on the raw rows — see
+`_decode_object_type` for an example). No other file needs touching:
+- `extract.tables: all` (the default) picks up the new table automatically.
+- An experiment spec listing explicit `extract.tables` needs the new name
+  added to that list too (`scripts/validate_experiment.py` will reject an
+  unknown name either way, so a typo fails fast).
