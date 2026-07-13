@@ -6,12 +6,12 @@ Conditions:
   1_baseline               — no extra learning
   2_memory_only            — memory filter in action selection
   3_memory_consolidation   — memory filter + sleep consolidation (MemoryTraceConsolidator)
-  6_jepa_rpe_consolidation — JEPA world-model filter + JEPA RPE baseline + consolidation
-  7_jepa_rpe_only          — JEPA world-model filter + JEPA RPE baseline, no consolidation
+  4_jepa_rpe_only          — JEPA world-model filter + JEPA RPE baseline, no consolidation
+  5_jepa_rpe_consolidation — JEPA world-model filter + JEPA RPE baseline + consolidation
 
 Data directories:
   Conditions 1-3: ml/data_20260709_memory_vs_wm_v2/   (5 creatures — v2 rerun)
-  Conditions 6-7: ml/data_20260709_memory_vs_wm_v1/   (5 creatures)
+  Conditions 4-5: ml/data_20260709_memory_vs_wm_v1/   (5 creatures)
 
 Usage:
   python3 analysis/exp_20260709_memory_vs_wm_v1.py
@@ -42,8 +42,8 @@ COND_DIR   = {
     "1_baseline":               DIR_V2,
     "2_memory_only":            DIR_V2,
     "3_memory_consolidation":   DIR_V2,
-    "6_jepa_rpe_consolidation": DIR_V1,
-    "7_jepa_rpe_only":          DIR_V1,
+    "4_jepa_rpe_only":          DIR_V1,
+    "5_jepa_rpe_consolidation": DIR_V1,
 }
 FIG_DIR    = ROOT_DIR / "docs" / "reports" / "figures" / f"p{EXP[:8].replace('-','')[:8]}"
 REPORT_DIR = ROOT_DIR / "docs" / "reports"
@@ -54,8 +54,8 @@ CONDITIONS = [
     ("1_baseline",               "Baseline"),
     ("2_memory_only",            "Memory"),
     ("3_memory_consolidation",   "Mem+Consol"),
-    ("6_jepa_rpe_consolidation", "JEPA+RPE+Consol"),
-    ("7_jepa_rpe_only",          "JEPA+RPE"),
+    ("4_jepa_rpe_only",          "JEPA+RPE"),
+    ("5_jepa_rpe_consolidation", "JEPA+RPE+Consol"),
 ]
 COND_KEYS  = [c for c, _ in CONDITIONS]
 COND_LABELS= [l for _, l in CONDITIONS]
@@ -65,8 +65,8 @@ PALETTE = {
     "1_baseline":               "#9e9e9e",
     "2_memory_only":            "#5c85d6",
     "3_memory_consolidation":   "#2b5eb8",
-    "6_jepa_rpe_consolidation": "#7b2d8b",
-    "7_jepa_rpe_only":          "#b05ec4",
+    "4_jepa_rpe_only":          "#b05ec4",
+    "5_jepa_rpe_consolidation": "#7b2d8b",
 }
 
 DRIVE_COLS = [

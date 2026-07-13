@@ -230,8 +230,8 @@ having seen rotten apples specifically.
 
 ### Consolidation in novel vs. familiar worlds
 
-In the 20260709 experiment (familiar world), JEPA+RPE+Consol (condition 6) showed a corrected
-lifetime of 315s vs JEPA+RPE without consolidation (condition 7) at 441s — consolidation
+In the 20260709 experiment (familiar world), JEPA+RPE+Consol (condition 5) showed a corrected
+lifetime of 315s vs JEPA+RPE without consolidation (condition 4) at 441s — consolidation
 **hurt** performance in the familiar world. Here, consolidation is a design requirement for
 novel-world adaptation: without it, the higher RPE signals from rotten apple encounters would
 not feed back into the WORLD_MODEL adapter to shift future action probabilities. The trade-off
@@ -293,9 +293,9 @@ aversion has not reached behavioural significance within this time window.
    lifetime. A decile-by-decile analysis of rotten% would show whether any condition begins
    to reduce rotten consumption toward end-of-life (evidence of within-trial learning).
 
-3. **Compare with JEPA+RPE without consolidation.** In the familiar world (20260709, cond 7),
+3. **Compare with JEPA+RPE without consolidation.** In the familiar world (20260709, cond 4),
    removing consolidation improved survival. In the novel world, consolidation is necessary for
-   adaptation. Running condition 7 (no consolidation) in this novel world would quantify the
+   adaptation. Running condition 4 (no consolidation) in this novel world would quantify the
    consolidation benefit specifically for novel-food aversion.
 
 ---
@@ -306,5 +306,5 @@ aversion has not reached behavioural significance within this time window.
 ml/data_rotten_fruit_v1/   — 3 conditions × 5 trials × 5 creatures = 75 creatures
   1_baseline/trial_{1-5}/
   3_memory_consolidation/trial_{1-5}/
-  6_jepa_rpe_consolidation/trial_{1-5}/
+  5_jepa_rpe_consolidation/trial_{1-5}/
 ```

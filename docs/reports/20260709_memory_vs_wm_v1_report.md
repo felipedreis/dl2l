@@ -4,7 +4,7 @@
 **Date:** 2026-07-09 / 2026-07-12 / 2026-07-13  
 **Trials:** 5 trials × 5 conditions × 5 creatures = **125 creatures total**  
 **Analysis script:** `analysis/exp_20260709_memory_vs_wm_v1.py`  
-**Data:** `ml/data_20260709_memory_vs_wm_v1/` (conditions 6–7) · `ml/data_20260709_memory_vs_wm_v2/` (conditions 1–3)
+**Data:** `ml/data_20260709_memory_vs_wm_v1/` (conditions 4–5) · `ml/data_20260709_memory_vs_wm_v2/` (conditions 1–3)
 
 ---
 
@@ -57,17 +57,17 @@ wall-clock seconds metric.
 | 1 | `1_baseline` | TARGET_DIST, AFFORDANCE, RANDOM | — | DISCRETE |
 | 2 | `2_memory_only` | + MEMORY | — | DISCRETE |
 | 3 | `3_memory_consolidation` | + MEMORY | MemoryTraceConsolidator | DISCRETE |
-| 6 | `6_jepa_rpe_consolidation` | + WORLD_MODEL | MemoryConsolidator (adapter) | **JEPA** |
-| 7 | `7_jepa_rpe_only` | + WORLD_MODEL | — | **JEPA** |
+| 4 | `4_jepa_rpe_only` | + WORLD_MODEL | — | **JEPA** |
+| 5 | `5_jepa_rpe_consolidation` | + WORLD_MODEL | MemoryConsolidator (adapter) | **JEPA** |
 
 All conditions: `circadianEnabled=true`, `expectancyEnabled=true`, `neuromodulationEnabled=true`,
 `actionTendencyEnabled=true`, `orexinEnabled=true`, `endocrineEnabled=true`,
 `maxRuntimeMinutes=60`.
 
-Conditions 6 and 7 both use `expectancyMode=JEPA`, wiring `JepaExpectancyPredictor` so that
+Conditions 4 and 5 both use `expectancyMode=JEPA`, wiring `JepaExpectancyPredictor` so that
 phasic dopamine fires on world-model prediction error (actual emotional outcome vs.
-JEPA-predicted aversive cost) rather than the tabular running mean. Condition 7 differs from
-condition 6 only in `consolidationEnabled=false` — the adapter is not updated during sleep.
+JEPA-predicted aversive cost) rather than the tabular running mean. Condition 4 differs from
+condition 5 only in `consolidationEnabled=false` — the adapter is not updated during sleep.
 
 ---
 
@@ -247,7 +247,7 @@ filter selection, not altered hunger sensitivity.
 
 Memory conditions retain the best cactus avoidance (57–58%). JEPA+RPE+Consol recovers to
 56.3%, approaching Memory-condition levels. JEPA+RPE without consolidation drops to 54.6%
-(near baseline), suggesting the adapter consolidation in condition 6 contributes modestly to
+(near baseline), suggesting the adapter consolidation in condition 5 contributes modestly to
 learning aversive avoidance even if it reduces overall survival time.
 
 #### 8d. Behaviour over normalised lifetime
@@ -257,7 +257,7 @@ learning aversive avoidance even if it reduces overall survival time.
 Cumulative food-type curves show JEPA+RPE+Consol maintaining consistently higher Green Apple
 selection across the full lifetime (37.6% Green per decile vs 30.7% for baseline). JEPA+RPE
 shows similar per-decile proportions to baseline (43.6% Green), suggesting the quality shift
-in condition 6 is driven by the WORLD_MODEL+consolidation combination rather than by JEPA RPE
+in condition 5 is driven by the WORLD_MODEL+consolidation combination rather than by JEPA RPE
 alone.
 
 ### 9. Neuromodulators
@@ -283,7 +283,7 @@ than tonic.
 | **JEPA+RPE** | **0.6516** | 2.474 |
 
 Both JEPA+RPE conditions generate mean |RPE| of ~0.65 — approximately **15× larger** than
-all non-JEPA conditions (0.04–0.05). The values are nearly identical between conditions 6
+all non-JEPA conditions (0.04–0.05). The values are nearly identical between conditions 4
 and 7 (0.6625 vs 0.6516), confirming that the RPE signal quality is driven by
 `JepaExpectancyPredictor` and is independent of whether consolidation is enabled.
 
@@ -352,19 +352,19 @@ The creature is genuinely alive and experiencing the world during the inference 
 simply delaying its next action decision. The inference-corrected seconds (subtracting
 WORLD_MODEL overhead) should be treated as a secondary reference.
 
-- **JEPA+RPE (cond 7, no consol):** 720s raw / 441s corrected — the strongest survival
+- **JEPA+RPE (cond 4, no consol):** 720s raw / 441s corrected — the strongest survival
   result in this experiment; 52% above baseline in corrected terms (p = 0.0008 \*\*\*).
-- **JEPA+RPE+Consol (cond 6):** 544s raw / 315s corrected — above baseline in raw seconds
+- **JEPA+RPE+Consol (cond 5):** 544s raw / 315s corrected — above baseline in raw seconds
   (p < 0.0001) but not in corrected seconds (p = 0.35 ns). Consolidation overhead erases the
   survival advantage when inference latency is factored out.
 
 ### Consolidation cost in a familiar world
 
 The central finding is that **removing consolidation from JEPA+RPE improves performance**:
-- Corrected lifetime: 441s (cond 7) vs 315s (cond 6) — +40%, p = 0.030 \*
-- Decision ticks: 22,867 (cond 7) vs 19,122 (cond 6) — +19.6%
-- Sleep episodes: 415 (cond 7) vs 329 (cond 6) — +26%
-- Tedium: 0.74 (cond 7) vs 0.82 (cond 6) — lower (better)
+- Corrected lifetime: 441s (cond 4) vs 315s (cond 5) — +40%, p = 0.030 \*
+- Decision ticks: 22,867 (cond 4) vs 19,122 (cond 5) — +19.6%
+- Sleep episodes: 415 (cond 4) vs 329 (cond 5) — +26%
+- Tedium: 0.74 (cond 4) vs 0.82 (cond 5) — lower (better)
 
 The consolidation mechanism imposes a cognitive cost (sleep-time adapter updates interrupt
 or compete with regular sleep processing) that does not translate to a survival benefit in
@@ -382,7 +382,7 @@ JEPA+RPE conditions:
 
 - **|RPE| ≈ 0.65–0.66** vs 0.04–0.05 for non-JEPA conditions (15× larger)
 - **mean|emotion_delta| ≈ 0.143–0.145** vs 0.009–0.010 for non-JEPA (14× larger)
-- Values are **identical** between conditions 6 and 7, confirming the signal quality is
+- Values are **identical** between conditions 4 and 5, confirming the signal quality is
   independent of consolidation state.
 
 Both are direct measurements of the mechanism, not behavioural proxies.
@@ -393,7 +393,7 @@ Both JEPA+RPE conditions show dramatically lower Tedium (0.74–0.82 vs 2.33–2
 non-JEPA — a 66–70% reduction). JEPA+RPE without consolidation achieves the lowest Tedium
 overall (0.74). A plausible mechanism: the larger dopamine RPE signals fire more strongly on
 novel or unexpected outcomes, continuously refreshing the creature's curiosity and suppressing
-tedium accumulation. Since the Tedium effect is identical between conditions 6 and 7, it is
+tedium accumulation. Since the Tedium effect is identical between conditions 4 and 5, it is
 driven by the RPE signal itself, not by consolidation.
 
 ### Memory conditions perform below baseline
@@ -405,10 +405,10 @@ the MEMORY filter does not provide a genuine survival advantage over baseline in
 
 ### Cactus avoidance: consolidation trades off with survival
 
-JEPA+RPE+Consol (cond 6) avoids cacti at 56.3% — better than JEPA+RPE (cond 7, 54.6%)
+JEPA+RPE+Consol (cond 5) avoids cacti at 56.3% — better than JEPA+RPE (cond 4, 54.6%)
 and approaching Memory conditions (57–58%). This modest improvement in avoidance learning
 under consolidation comes at the cost of 40% lower corrected lifetime. The RPE-weighted
-engrams in condition 6 do appear to encode aversive events (cactus pain) more effectively,
+engrams in condition 5 do appear to encode aversive events (cactus pain) more effectively,
 but the magnitude is small relative to the survival cost.
 
 ---
@@ -435,14 +435,14 @@ but the magnitude is small relative to the survival cost.
 
 ## Conclusions
 
-**H1: Confirmed for JEPA+RPE (no consolidation).** JEPA+RPE (cond 7) survives 441s
+**H1: Confirmed for JEPA+RPE (no consolidation).** JEPA+RPE (cond 4) survives 441s
 corrected vs 290s baseline (p = 0.0008 \*\*\*) and achieves the highest tick count (22,867 vs
-21,417 baseline, p = 0.35 ns trend). JEPA+RPE+Consol (cond 6) does not show a significant
+21,417 baseline, p = 0.35 ns trend). JEPA+RPE+Consol (cond 5) does not show a significant
 corrected advantage over baseline (315s vs 290s, p = 0.35 ns), as consolidation overhead
 erases the benefit.
 
 **H2: Not confirmed — consolidation hurts in a familiar world.** JEPA+RPE without
-consolidation (cond 7) outperforms JEPA+RPE with consolidation (cond 6) by 40% in corrected
+consolidation (cond 4) outperforms JEPA+RPE with consolidation (cond 5) by 40% in corrected
 lifetime (441s vs 315s, p = 0.030 \*) and 20% in tick count (22,867 vs 19,122). In a world
 the JEPA model has already modelled well, consolidation imposes cognitive overhead without
 returning a proportional adaptation benefit.
@@ -456,7 +456,7 @@ survival benefit in this environment.
 
 **H5: Confirmed.** Both JEPA+RPE conditions generate |RPE| ≈ 0.65 — 15× larger than
 non-JEPA conditions (0.04–0.05) — and engram |emotion_delta| ≈ 0.143 — 14× larger than
-non-JEPA (0.009–0.010). The signal quality is identical between conditions 6 and 7,
+non-JEPA (0.009–0.010). The signal quality is identical between conditions 4 and 5,
 confirming it is a property of `JepaExpectancyPredictor` and independent of consolidation.
 
 ---
@@ -466,7 +466,7 @@ confirming it is a property of `JepaExpectancyPredictor` and independent of cons
 1. **JEPA+RPE is the winning condition for familiar worlds.** Remove consolidation
    (`consolidationEnabled=false`) as the default for familiar-world deployment. Reserve
    consolidation for novel-world adaptation experiments where the benefit has been shown
-   (`rotten_fruit_v1`: cond 6 survives 141.8s vs baseline 106.7s).
+   (`rotten_fruit_v1`: cond 5 survives 141.8s vs baseline 106.7s).
 
 2. **Investigate the consolidation-overhead trade-off more carefully.** Run an experiment
    with different consolidation schedules (less frequent adapter updates, smaller learning
@@ -486,7 +486,7 @@ confirming it is a property of `JepaExpectancyPredictor` and independent of cons
 ## Data Availability
 
 ```
-ml/data_20260709_memory_vs_wm_v1/   — conditions 6–7 (JEPA+RPE variants, 5 trials × 5 creatures)
+ml/data_20260709_memory_vs_wm_v1/   — conditions 4–5 (JEPA+RPE variants, 5 trials × 5 creatures)
 ml/data_20260709_memory_vs_wm_v2/   — conditions 1–3 (non-JEPA, 5 trials × 5 creatures)
 ```
 
