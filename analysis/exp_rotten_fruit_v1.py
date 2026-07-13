@@ -121,6 +121,19 @@ neuro["dopamine"]       = num(neuro["dopamine"])
 neuro["serotonin"]      = num(neuro["serotonin"])
 neuro["orexin"]         = num(neuro["orexin"])
 neuro["seq"]            = num(neuro["seq"])
+
+# Approximate wall-clock elapsed time for neuromodulator records.
+# seq is a tick-based counter (not wall-clock time): JEPA creatures have fewer
+# ticks per second than baseline, so raw seq is misleading as a time axis.
+# We linearly interpolate: elapsed_s ≈ (seq / max_seq_per_creature) × lifetime_s.
+_neuro_max_seq = (
+    neuro.groupby(["creature_key", "condition", "trial"])["seq"]
+    .max().reset_index(name="neuro_max_seq")
+)
+_neuro_lifetime = creatures[["creature_key", "condition", "trial", "lifetime_s"]].drop_duplicates()
+_neuro_max_seq = _neuro_max_seq.merge(_neuro_lifetime, on=["creature_key", "condition", "trial"], how="left")
+neuro = neuro.merge(_neuro_max_seq, on=["creature_key", "condition", "trial"], how="left")
+neuro["elapsed_s"] = (neuro["seq"] / neuro["neuro_max_seq"].clip(lower=1)) * num(neuro["lifetime_s"])
 expectancy["rpe"]       = num(expectancy["rpe"])
 expectancy["expected"]  = num(expectancy["expected"])
 expectancy["reward"]    = num(expectancy["reward"])
@@ -211,11 +224,11 @@ ticks_by_cond = {ck: creatures[creatures["condition"] == ck]["tick_count"].value
 fig, axes = plt.subplots(1, 2, figsize=(13, 5))
 
 ax = axes[0]
-bp = ax.boxplot([np.array(lifetimes[ck]) for ck, _ in CONDITIONS],
+bp = ax.boxplot([np.array(lifetimes[ck]) / 60 for ck, _ in CONDITIONS],
                 tick_labels=COND_LABELS, patch_artist=True)
 for patch, (ck, _) in zip(bp["boxes"], CONDITIONS):
     patch.set_facecolor(PALETTE[ck]); patch.set_alpha(0.7)
-ax.set_ylabel("Lifetime (s)")
+ax.set_ylabel("Lifetime (min)")
 ax.set_title("Wall-clock Lifetime")
 ax.grid(axis="y", alpha=0.3)
 
@@ -261,8 +274,12 @@ for ck, cl in CONDITIONS:
         total_mouth[total_mouth["condition"] == ck]
         .groupby("life_decile").size()
     )
-    pct = (rotten_by_decile / total_by_decile.clip(lower=1) * 100).reindex(range(10), fill_value=np.nan)
-    ax.plot(range(10), pct.values, color=PALETTE[ck], lw=2.5, marker="o", ms=5, label=cl)
+    # Reindex both to all 10 deciles before dividing to avoid NaN from missing keys.
+    # Deciles with total=0 → NaN (genuinely no data); deciles with total>0, rotten=0 → 0%.
+    r_filled = rotten_by_decile.reindex(range(10), fill_value=0)
+    t_filled = total_by_decile.reindex(range(10), fill_value=0)
+    pct = np.where(t_filled > 0, r_filled / t_filled.clip(lower=1) * 100, np.nan)
+    ax.plot(range(10), pct, color=PALETTE[ck], lw=2.5, marker="o", ms=5, label=cl)
 
 ax.set_xticks(range(10))
 ax.set_xticklabels(DECILE_LABELS, rotation=30, ha="right", fontsize=8)
@@ -467,8 +484,8 @@ print("  → 05_drives.png")
 # ══════════════════════════════════════════════════════════════════════════════
 print("\n=== 6. NEUROMODULATORS ===")
 
-BIN_N = 300
-neuro["time_bin"] = (neuro["seq"] // BIN_N).astype(int)
+BIN_S_NEURO = 5  # 5-second bins based on approximated wall-clock elapsed time
+neuro["time_bin"] = (neuro["elapsed_s"] // BIN_S_NEURO).clip(lower=0).astype(int)
 
 fig, axes = plt.subplots(1, 3, figsize=(16, 5))
 for ax, nm, nm_name in zip(axes, ["dopamine", "serotonin", "orexin"],
@@ -476,7 +493,7 @@ for ax, nm, nm_name in zip(axes, ["dopamine", "serotonin", "orexin"],
     for ck, cl in CONDITIONS:
         sub = neuro[neuro["condition"] == ck]
         gb  = sub.groupby("time_bin")[nm].mean()
-        t   = gb.index * BIN_N / 60
+        t   = gb.index * BIN_S_NEURO / 60
         ax.plot(t, gb, color=PALETTE[ck], lw=2, label=cl)
     ax.set_title(nm_name)
     ax.set_xlabel("Time (min)")

@@ -55,11 +55,11 @@ error mechanism can detect the novel item and adapt creature behaviour within a 
 
 ![Survival](figures/rotten_fruit_v1/01_survival.png)
 
-| Condition | Lifetime (s) | ± SD | n |
+| Condition | Lifetime (min) | ± SD | n |
 |-----------|:-----------:|:----:|:-:|
-| Baseline | 106.72 | 24.52 | 25 |
-| Mem+Consol | 98.58 | 25.86 | 25 |
-| **JEPA+RPE+Consol** | **141.84** | 30.87 | 25 |
+| Baseline | 1.78 | 0.41 | 25 |
+| Mem+Consol | 1.64 | 0.43 | 25 |
+| **JEPA+RPE+Consol** | **2.36** | 0.51 | 25 |
 
 Kruskal-Wallis: H = 21.714, p < 0.0001.
 
@@ -69,10 +69,10 @@ Kruskal-Wallis: H = 21.714, p < 0.0001.
 | Baseline vs JEPA+RPE+Consol | 0.0003 | *** |
 | Mem+Consol vs JEPA+RPE+Consol | < 0.0001 | *** |
 
-**H1: Confirmed.** JEPA+RPE+Consol creatures survive **33% longer** than baseline (141.8s vs
-106.7s, p = 0.0003) and **44% longer** than Memory+Consolidation (p < 0.0001). Notably, the
+**H1: Confirmed.** JEPA+RPE+Consol creatures survive **33% longer** than baseline (2.36 min vs
+1.78 min, p = 0.0003) and **44% longer** than Memory+Consolidation (p < 0.0001). Notably, the
 Memory condition shows no survival advantage over baseline in the novel world (p = 0.313 ns),
-and its mean lifetime is actually lower (98.6s vs 106.7s).
+and its mean lifetime is actually lower (1.64 min vs 1.78 min).
 
 ### 2. Rotten Apple Consumption
 
@@ -90,11 +90,14 @@ and its mean lifetime is actually lower (98.6s vs 106.7s).
 | Mem+Consol | 374 (42.4%) | 279 (31.6%) | 229 (26.0%) |
 | JEPA+RPE+Consol | 183 (41.7%) | 104 (23.7%) | 152 (34.6%) |
 
-**H2: Not confirmed.** None of the conditions show meaningful rotten apple avoidance within
-the 2-hour window. The JEPA condition has the highest rotten apple percentage (34.6%) despite
-surviving the longest, though it has far fewer total eating events (439 vs 1,177 for baseline).
-The Memory+Consolidation condition shows a modest reduction in rotten proportion (26.0%), but
-this is not statistically distinguishable from baseline-level variability within 5 trials.
+**H2: Not confirmed.** While H1 established that JEPA+RPE+Consol creatures *survive* longer
+(2.36 min vs 1.78 min), H2 asks a separate question: does any condition learn a *behavioral
+aversion* to rotten apples specifically? The answer is no. No condition reduces its rotten apple
+consumption proportion over the 2-hour window. The JEPA condition actually has the highest
+rotten apple percentage (34.6%) despite surviving the longest, though it has far fewer total
+eating events (439 vs 1,177 for baseline). The Memory+Consolidation condition shows a modest
+reduction in rotten proportion (26.0%), but this is not statistically distinguishable from
+baseline-level variability within 5 trials.
 
 JEPA creatures eat dramatically less overall (439 EAT events vs 1,177 baseline). This is not
 explained by food deprivation — these creatures survive longer, suggesting they are more
@@ -238,7 +241,7 @@ between consolidation overhead and adaptation benefit warrants further study.
 
 | Metric | Baseline | Mem+Consol | JEPA+RPE+Consol |
 |--------|:-------:|:----------:|:----------------:|
-| Lifetime (s) | 106.7 | 98.6 | **141.8** |
+| Lifetime (min) | 1.78 | 1.64 | **2.36** |
 | Ticks | 9,587 | 8,752 | **5,349** |
 | Total EAT | **1,177** | 882 | 439 |
 | Rotten EAT | 349 | 229 | 152 |
@@ -255,15 +258,16 @@ between consolidation overhead and adaptation benefit warrants further study.
 ## Conclusions
 
 **H1: Confirmed.** JEPA+RPE+Consol survives significantly longer in the novel rotten-fruit
-world (141.8s vs 106.7s baseline, p = 0.0003). The survival advantage is driven by systemic
+world (2.36 min vs 1.78 min baseline, p = 0.0003). The survival advantage is driven by systemic
 efficiency (lower arousal, fewer opportunistic eating events, fewer rotten encounters)
 rather than by learned specific aversion.
 
-**H2: Not confirmed.** No condition shows behavioural rotten-apple aversion within the
-2-hour experiment window. JEPA creatures actually eat a slightly higher proportion of rotten
-apples (34.6% vs 29.7%) despite having fewer absolute rotten eating events. Meaningful
-avoidance learning would likely require 4–8 hours or multiple repeated trials in the same
-world.
+**H2: Not confirmed.** H1 and H2 address distinct questions. H1 is about survival — confirmed.
+H2 asks whether any condition learns a *behavioral aversion to rotten apples specifically* —
+not confirmed. No condition reduces its rotten apple consumption proportion over the 2-hour
+window. JEPA creatures actually eat a slightly higher proportion of rotten apples (34.6% vs
+29.7%) despite having fewer absolute rotten eating events. Meaningful avoidance learning
+would likely require 4–8 hours or multiple repeated trials in the same world.
 
 **H3: Confirmed.** JEPA+RPE+Consol generates |RPE| 5.7× larger than baseline (0.4051 vs
 0.072), confirming the world model is actively producing prediction errors in response to
