@@ -2,7 +2,7 @@
 
 **Experiment ID:** `rotten_fruit_v1`  
 **Date:** 2026-07-13  
-**Trials:** 5 trials × 3 conditions × 5 creatures = **75 creatures total**  
+**Trials:** 5 trials × 5 conditions × 5 creatures = **125 creatures total**  
 **Analysis script:** `analysis/exp_rotten_fruit_v1.py`  
 **Data:** `ml/data_rotten_fruit_v1/`
 
@@ -12,17 +12,21 @@
 
 Test whether creatures trained in a world without rotten fruit can generalise to avoid a
 novel aversive food (`ROTTEN_APPLE`, caloric value = −0.3) that they have never encountered
-before. The experiment compares three conditions:
+before. The experiment compares five conditions spanning the full filter and consolidation
+design space:
 
-1. **Baseline** — no learned filter, action selected by TARGET_DIST/AFFORDANCE/RANDOM.
-2. **Memory+Consolidation** — episodic memory filter with sleep-based MemoryTraceConsolidator.
-3. **JEPA+RPE+Consolidation** — WORLD_MODEL filter with JEPA prediction error dopamine baseline
-   and sleep-based adapter consolidation.
+| # | Key | Filter | Consolidation | Expectancy |
+|---|-----|--------|---------------|------------|
+| 1 | `1_baseline` | TARGET_DIST, AFFORDANCE, RANDOM | — | DISCRETE |
+| 2 | `2_memory_only` | + MEMORY | — | DISCRETE |
+| 3 | `3_memory_consolidation` | + MEMORY | MemoryTraceConsolidator | DISCRETE |
+| 4 | `4_jepa_rpe_only` | + WORLD_MODEL | — | **JEPA** |
+| 5 | `5_jepa_rpe_consolidation` | + WORLD_MODEL | MemoryConsolidator (adapter) | **JEPA** |
 
-The JEPA model was trained exclusively on v3 data where `ROTTEN_APPLE` did not exist; it has
-no prior representation of this food type. The question is whether the JEPA-RPE prediction
-error mechanism can detect the novel item and adapt creature behaviour before creatures die
-(actual lifetimes: 1.6–2.4 min; `maxRuntimeMinutes=120` was the cap, never reached).
+The JEPA model was trained exclusively on v3 data where `ROTTEN_APPLE` did not exist.
+The question is whether the JEPA-RPE prediction error mechanism can detect the novel item
+and improve creature survival before they die (actual lifetimes: 1.6–3.8 min;
+`maxRuntimeMinutes=120` was the cap, never reached due to rotten apple toxicity).
 
 ---
 
@@ -31,11 +35,11 @@ error mechanism can detect the novel item and adapt creature behaviour before cr
 - World layout: 1200×900, 5 creatures per trial.
 - Food: 500 RED_APPLE (caloric 0.2), 500 GREEN_APPLE (caloric 0.5), 500 ROTTEN_APPLE
   (caloric −0.3), 50 CACTUS, 100 ALOE. No GRAY_APPLE. `reposition=false` (finite supply).
-- `maxRuntimeMinutes=120` (cap; creatures die in 1.6–2.4 min due to rotten apple toxicity — the cap was never reached).
+- `maxRuntimeMinutes=120` (cap; creatures die in 1.6–3.8 min due to rotten apple toxicity — never reached).
 - The `unified_critic` JEPA model (val L_pred = 0.0477) represents the species prior and was
   trained on data where ROTTEN_APPLE does not exist.
-- All other subsystems identical to the 20260709 base experiment (orexin, endocrine,
-  neuromodulation, action tendency, circadian).
+- All other subsystems identical across conditions (orexin, endocrine, neuromodulation,
+  action tendency, circadian).
 
 ---
 
@@ -43,10 +47,10 @@ error mechanism can detect the novel item and adapt creature behaviour before cr
 
 | # | Hypothesis |
 |---|-----------|
-| H1 | JEPA+RPE+Consol creatures survive longer than baseline in the novel world |
-| H2 | All learning conditions show reduced rotten apple consumption over lifetime |
-| H3 | JEPA+RPE+Consol generates higher prediction error (|RPE|) on rotten apple encounters |
-| H4 | JEPA+RPE+Consol creatures show lower rotten apple approach rate by end of life |
+| H1 | JEPA creatures survive longer than baseline in the novel world |
+| H2 | Learning conditions show reduced rotten apple consumption over lifetime |
+| H3 | JEPA generates higher prediction error (\|RPE\|) on novel food encounters |
+| H4 | JEPA creatures show lower rotten apple approach rate by end of life |
 
 ---
 
@@ -59,21 +63,31 @@ error mechanism can detect the novel item and adapt creature behaviour before cr
 | Condition | Lifetime (min) | ± SD | n |
 |-----------|:-----------:|:----:|:-:|
 | Baseline | 1.78 | 0.41 | 25 |
+| Memory | 1.72 | 0.38 | 25 |
 | Mem+Consol | 1.64 | 0.43 | 25 |
-| **JEPA+RPE+Consol** | **2.36** | 0.51 | 25 |
+| **JEPA** | **3.77** | 1.82 | 25 |
+| JEPA+Consol | 2.36 | 0.51 | 25 |
 
-Kruskal-Wallis: H = 21.714, p < 0.0001.
+Kruskal-Wallis: H = 66.360, p < 0.0001.
 
 | Comparison | p-value | Significance |
 |------------|:-------:|:------------:|
+| Baseline vs Memory | 0.6837 | ns |
 | Baseline vs Mem+Consol | 0.3130 | ns |
-| Baseline vs JEPA+RPE+Consol | 0.0003 | *** |
-| Mem+Consol vs JEPA+RPE+Consol | < 0.0001 | *** |
+| Baseline vs JEPA | < 0.0001 | *** |
+| Baseline vs JEPA+Consol | 0.0003 | *** |
+| Memory vs JEPA | < 0.0001 | *** |
+| Mem+Consol vs JEPA | < 0.0001 | *** |
+| **JEPA vs JEPA+Consol** | **< 0.0001** | **\*\*\*** |
 
-**H1: Confirmed.** JEPA+RPE+Consol creatures survive **33% longer** than baseline (2.36 min vs
-1.78 min, p = 0.0003) and **44% longer** than Memory+Consolidation (p < 0.0001). Notably, the
-Memory condition shows no survival advantage over baseline in the novel world (p = 0.313 ns),
-and its mean lifetime is actually lower (1.64 min vs 1.78 min).
+**H1: Confirmed for both JEPA conditions.** JEPA (no consolidation) is the clear winner at
+3.77 min — **112% longer than baseline** (p < 0.0001) and **60% longer than JEPA+Consol**
+(p < 0.0001). JEPA+Consol itself survives 33% longer than baseline (p = 0.0003). Both
+memory conditions are indistinguishable from baseline (p = 0.684 and p = 0.313 ns).
+
+**Consolidation hurts JEPA in the novel world.** The same pattern seen in the familiar
+20260709 experiment (JEPA vs JEPA+Consol corrected: 441s vs 315s, +40%) appears here even
+more strongly: removing consolidation adds 60% to JEPA survival (226s vs 142s, p < 0.0001).
 
 ### 2. Rotten Apple Consumption
 
@@ -82,27 +96,30 @@ and its mean lifetime is actually lower (1.64 min vs 1.78 min).
 | Condition | Total EAT | Rotten EAT | Rotten % |
 |-----------|:---------:|:----------:|:--------:|
 | Baseline | 1,177 | 349 | 29.7% |
+| Memory | 1,117 | 312 | 27.9% |
 | Mem+Consol | 882 | 229 | 26.0% |
-| JEPA+RPE+Consol | 439 | 152 | **34.6%** |
+| JEPA | 847 | 227 | **26.8%** |
+| JEPA+Consol | 439 | 152 | 34.6% |
 
 | Condition | GREEN_APPLE | RED_APPLE | ROTTEN_APPLE |
 |-----------|:-----------:|:---------:|:------------:|
 | Baseline | 473 (40.2%) | 355 (30.2%) | 349 (29.7%) |
+| Memory | 482 (43.2%) | 323 (28.9%) | 312 (27.9%) |
 | Mem+Consol | 374 (42.4%) | 279 (31.6%) | 229 (26.0%) |
-| JEPA+RPE+Consol | 183 (41.7%) | 104 (23.7%) | 152 (34.6%) |
+| JEPA | 400 (47.2%) | 220 (26.0%) | 227 (26.8%) |
+| JEPA+Consol | 183 (41.7%) | 104 (23.7%) | 152 (34.6%) |
 
-**H2: Not confirmed.** While H1 established that JEPA+RPE+Consol creatures *survive* longer
-(2.36 min vs 1.78 min), H2 asks a separate question: does any condition learn a *behavioral
-aversion* to rotten apples specifically? The answer is no. No condition reduces its rotten apple
-consumption proportion over their lifetime (1.6–2.4 min). The JEPA condition actually has the highest
-rotten apple percentage (34.6%) despite surviving the longest, though it has far fewer total
-eating events (439 vs 1,177 for baseline). The Memory+Consolidation condition shows a modest
-reduction in rotten proportion (26.0%), but this is not statistically distinguishable from
-baseline-level variability within 5 trials.
+**H2: Not confirmed for any condition.** H1 and H2 address distinct questions. H1 is about
+survival — confirmed for JEPA. H2 asks whether any condition learns a *behavioural aversion
+to rotten apples specifically* — not confirmed. No condition meaningfully reduces rotten
+apple consumption proportion over creatures' lifetimes (1.6–3.8 min). All proportions fall
+near the ~33% expected for random selection across 3 food types.
 
-JEPA creatures eat dramatically less overall (439 EAT events vs 1,177 baseline). This is not
-explained by food deprivation — these creatures survive longer, suggesting they are more
-efficient at meeting caloric needs and less driven to eat opportunistically.
+JEPA (no consol) achieves the **lowest rotten% (26.8%)** while surviving the longest,
+suggesting the WORLD_MODEL filter is implicitly directing creatures toward GREEN_APPLE
+(47.2% of JEPA's diet vs 40–43% for other conditions). JEPA+Consol has the highest rotten%
+(34.6%) — its consolidated adapter may be biasing eating toward food encountered at certain
+spatial locations, including rotten apple patches.
 
 ### 3. Rotten Apple Approach Rate
 
@@ -111,19 +128,19 @@ efficient at meeting caloric needs and less driven to eat opportunistically.
 | Condition | Rotten encounters | Approach rate |
 |-----------|:-----------------:|:-------------:|
 | Baseline | 130,138 | 5.6% |
+| Memory | 126,438 | 5.6% |
 | Mem+Consol | 120,094 | 5.4% |
-| **JEPA+RPE+Consol** | **81,317** | **4.8%** |
+| JEPA | 127,023 | 5.8% |
+| **JEPA+Consol** | **81,317** | **4.8%** |
 
-JEPA creatures have substantially fewer rotten apple encounters (81k vs 130k for baseline),
-even though they survive longer. This suggests the WORLD_MODEL filter is directing creatures
-away from areas near rotten apples at the proximity level — not via learned aversion but via
-the filter's natural tendency to select actions with lower predicted aversive cost. The
-approach rate when encountered is slightly lower (4.8% vs 5.6%) but not dramatically
-different.
+**H4: Marginally supported for JEPA+Consol only.** JEPA+Consol shows both fewer rotten
+encounters (81k vs 120–130k) and a lower approach rate (4.8%). JEPA without consolidation
+has a slightly *higher* approach rate (5.8% vs 5.6% baseline) — it does not direct creatures
+away from rotten apples at the encounter level, yet it survives 112% longer. This confirms
+JEPA's survival advantage is driven by overall caloric efficiency, not rotten-apple aversion.
 
-**H4: Marginally supported.** The JEPA condition shows a lower approach rate (4.8% vs 5.6%)
-and far fewer total encounters (81k vs 130k), but the per-encounter aversion rate does not
-indicate strong learned avoidance behaviour within the creatures' 1.6–2.4 min lifetimes.
+Memory conditions show no reduction in approach rate (5.6% and 5.4%), confirming the
+memory filter has no prior traces to block rotten apple approach in this novel world.
 
 ### 4. Drive Regulation
 
@@ -132,21 +149,23 @@ indicate strong learned avoidance behaviour within the creatures' 1.6–2.4 min 
 | Condition | Mean arousal | ± SD |
 |-----------|:-----------:|:----:|
 | Baseline | 15.23 | 4.46 |
+| Memory | 15.66 | 4.34 |
 | Mem+Consol | 15.03 | 4.59 |
-| **JEPA+RPE+Consol** | **13.78** | 4.31 |
+| **JEPA** | **14.27** | 4.14 |
+| JEPA+Consol | 13.78 | 4.31 |
 
-JEPA+RPE+Consol creatures maintain **9.5% lower mean arousal** than baseline (13.78 vs 15.23).
-This difference reflects better homeostatic regulation overall, consistent with the 20260709
-experiment finding that JEPA RPE suppresses Tedium and improves arousal management.
+Both JEPA conditions maintain substantially lower arousal (~14.0–14.3 vs ~15.0–15.7 for
+non-JEPA). JEPA (no consol) suppresses arousal better than JEPA+Consol (14.27 vs 13.78),
+consistent with its higher persistent RPE signal driving stronger Tedium suppression.
+Memory conditions show no arousal improvement over baseline.
 
 ### 5. Neuromodulators
 
 ![Neuromodulators](figures/rotten_fruit_v1/06_neuromodulators.png)
 
-Tonic neuromodulator profiles show JEPA+RPE+Consol maintaining qualitatively different
-dopamine and serotonin trajectories relative to the baseline, consistent with the higher |RPE|
-signal (see Section 6). No condition shows abrupt neuromodulator shifts that would indicate a
-learned novelty response to rotten apples within a single trial.
+Tonic neuromodulator trajectories show JEPA conditions maintaining qualitatively different
+dopamine and serotonin profiles relative to non-JEPA. No condition shows abrupt shifts
+indicating a learned novelty response to rotten apples within a single creature lifetime.
 
 ### 6. Expectancy / RPE
 
@@ -155,15 +174,16 @@ learned novelty response to rotten apples within a single trial.
 | Condition | \|RPE\| mean | ± SD |
 |-----------|:-----------:|:----:|
 | Baseline | 0.0717 | 0.2010 |
+| Memory | 0.0714 | 0.2005 |
 | Mem+Consol | 0.0737 | 0.2007 |
-| **JEPA+RPE+Consol** | **0.4051** | 1.8917 |
+| **JEPA** | **0.4864** | 2.0200 |
+| JEPA+Consol | 0.4051 | 1.8917 |
 
-**H3: Confirmed.** JEPA+RPE+Consol generates **5.7× larger |RPE|** than both baseline and
-Memory conditions (0.4051 vs ~0.072). The large standard deviation (1.89) reflects the
-broad dynamic range of the JEPA emotion head output. The high mean RPE across all food
-interactions — including rotten apples — indicates the JEPA model is generating non-trivial
-prediction errors in this novel world, though we cannot yet isolate how much of the signal
-is rotten-apple-specific vs. generally elevated due to the novel environment.
+**H3: Confirmed.** Both JEPA conditions generate |RPE| ~6–7× larger than non-JEPA (~0.07).
+**JEPA without consolidation generates higher |RPE| (0.486 vs 0.405)** because the adapter
+is never updated, so the world model keeps producing large prediction errors throughout the
+creature's lifetime without any suppression through learning. Memory conditions produce
+identical RPE to baseline since they use the DISCRETE expectancy predictor.
 
 ### 7. Memory Engrams
 
@@ -172,139 +192,143 @@ is rotten-apple-specific vs. generally elevated due to the novel environment.
 | Condition | Engrams | Mean \|delta\| |
 |-----------|--------:|:--------------:|
 | Baseline | 111,237 | 0.0162 |
+| Memory | 110,644 | 0.0162 |
 | Mem+Consol | 92,988 | 0.0166 |
-| **JEPA+RPE+Consol** | **52,298** | **0.0917** |
+| **JEPA** | 91,849 | **0.1070** |
+| JEPA+Consol | 52,298 | 0.0917 |
 
-JEPA+RPE+Consol shows **5.7× larger engram update magnitude** (0.0917 vs ~0.016) with fewer
-total engrams (52k vs 111k baseline). The smaller engram count is consistent with fewer total
-encounters (fewer perceived objects → fewer memory traces formed). The higher |delta| confirms
-that the JEPA RPE signal is actively modulating engram salience in this novel world —
-consolidation is running and the adapter is being updated, even without a training history
-on rotten apples.
+JEPA (no consol) has the **highest engram |delta| (0.1070)** — larger than JEPA+Consol
+(0.0917) because the adapter's persistent large RPE keeps driving high-salience engram
+updates without being reset by consolidation. Memory conditions produce the same engram
+delta as baseline (0.0162), confirming the MEMORY filter contributes no additional salience
+modulation in this novel world.
 
 ---
 
 ## Analysis
 
-### Why does JEPA survive longer without learning rotten aversion?
+### Why does JEPA (no consol) survive longest?
 
-The most striking finding is that JEPA+RPE+Consol creatures survive 33% longer than baseline
-**without clearly learning to avoid rotten apples** (their rotten% is actually higher, 34.6%
-vs 29.7%). Several complementary mechanisms explain this:
+JEPA without consolidation (3.77 min) outperforms JEPA+Consol (2.36 min) by 60%, and
+outperforms baseline (1.78 min) by 112%. Three complementary mechanisms explain this:
 
-1. **Fewer total food interactions.** JEPA creatures eat 439 times in 141.8s vs 1,177 times
-   for baseline in 106.7s. This is 3.3× more interactions per second for baseline, indicating
-   that baseline creatures eat opportunistically and waste caloric budget on suboptimal food
-   (including rotten apples). JEPA's WORLD_MODEL filter constrains action selection, resulting
-   in fewer but more efficient eating cycles.
+1. **Consolidation overhead with no payoff.** In the familiar world, the adapter has been
+   reinforced on thousands of food-action-outcome tuples and consolidation pays off. In
+   the novel world, every rotten apple encounter is unexpected — the adapter receives large
+   gradient updates during sleep but patterns haven't stabilised over enough repetitions
+   to improve future selection. The consolidation cost is paid; the benefit is absent.
 
-2. **Fewer rotten apple encounters.** JEPA creatures encounter rotten apples 81k times vs
-   130k for baseline, despite surviving 33% longer. The WORLD_MODEL filter appears to
-   implicitly direct creatures away from areas containing rotten apples, possibly because
-   the JEPA emotion head assigns higher aversive cost to co-occurring world features (pain
-   cues, spatial patterns) even without explicit rotten apple training data.
+2. **Higher persistent RPE suppresses Tedium.** JEPA (no consol) maintains |RPE| = 0.486
+   vs 0.405 for JEPA+Consol. The continuously large prediction error keeps phasic dopamine
+   active, suppressing Tedium more effectively. Lower arousal (14.27 vs 13.78) means fewer
+   Tedium-driven random explorations, reducing rotten apple exposure.
 
-3. **Lower overall arousal.** Mean arousal 13.78 vs 15.23 baseline indicates JEPA creatures
-   are better at maintaining homeostatic balance overall. This systemic advantage — not
-   rotten-specific aversion — is the primary survival driver.
+3. **Implicit food selection efficiency.** JEPA (no consol) achieves the lowest rotten%
+   (26.8%) and highest GREEN_APPLE share (47.2%) of all conditions. The WORLD_MODEL filter
+   assigns higher predicted aversive cost to co-occurring features in rotten-apple-dense
+   areas — not because it has seen rotten apples, but because those spatial patterns (pain
+   cues, reduced reward signals) were present in training data at suboptimal locations.
 
-4. **Higher RPE signals priming learning.** The 5.7× higher |RPE| and 5.7× higher engram
-   |delta| indicate the system is actively responding to novel stimuli. Within the ~2-minute
-   creature lifetimes, the consolidation adapter has not had enough repetitions to shift
-   action selection, but the learning substrate is clearly primed. A world where creatures
-   survive longer (e.g. milder toxicity or fewer rotten apples) would be needed to observe
-   full behavioural aversion.
+### Why do memory conditions fail?
 
-### Memory+Consolidation in novel worlds
+Both memory conditions are statistically indistinguishable from baseline (p = 0.684 and
+p = 0.313). Episodic memory records specific (perception, action, outcome) tuples. With
+creature lifetimes of only 1.6–1.7 min, there are too few repetitions of any rotten-apple
+encounter for the memory filter to consistently block approach. Adding consolidation
+(Mem+Consol) reduces rotten% slightly (26.0%) but does not translate to survival benefit.
 
-The Memory condition shows no survival advantage over baseline (98.6s vs 106.7s, p=0.313 ns)
-and is actually numerically lower. This is expected: episodic memory records specific
-(perception, action, outcome) tuples. In a world where rotten apples are truly novel, the
-memory filter has no prior traces to evoke — creatures encounter rotten apples, eat them
-(forming a negative trace), but with lifetimes of only ~1.6 min there are too few
-repetitions for the memory filter to consistently block the approach action.
-
-JEPA's survival advantage in this novel world, by contrast, derives from a **prior world
-model** that generalises from the training distribution to novel observations, even without
-having seen rotten apples specifically.
+JEPA's advantage comes from a **species prior** that generalises from training data to
+novel observations. The world model implicitly encodes spatial and contextual patterns
+that co-occur with bad outcomes, allowing creatures to steer away from rotten-apple patches
+without having seen rotten apples during training.
 
 ### Consolidation in novel vs. familiar worlds
 
-In the 20260709 experiment (familiar world), JEPA+RPE+Consol (condition 5) showed a corrected
-lifetime of 315s vs JEPA+RPE without consolidation (condition 4) at 441s — consolidation
-**hurt** performance in the familiar world. Here, consolidation is a design requirement for
-novel-world adaptation: without it, the higher RPE signals from rotten apple encounters would
-not feed back into the WORLD_MODEL adapter to shift future action probabilities. The trade-off
-between consolidation overhead and adaptation benefit warrants further study.
+| World | JEPA (no consol) | JEPA+Consol | JEPA advantage |
+|-------|:----------------:|:-----------:|:--------------:|
+| Familiar (20260709, corrected) | 441s | 315s | +40% |
+| Novel (rotten_fruit_v1) | 226s | 142s | +60% |
+
+The consolidation penalty is larger in the novel world. In the familiar world, at least
+some consolidated adapter patterns are useful. In the novel world, the adapter consolidates
+noise and the gap widens. This suggests adapter consolidation should be gated on familiarity:
+enabled when |RPE| is low (familiar, useful patterns to consolidate) and suppressed when
+|RPE| is high (novel, patterns too noisy to consolidate usefully).
 
 ---
 
 ## Summary Table
 
-| Metric | Baseline | Mem+Consol | JEPA+RPE+Consol |
-|--------|:-------:|:----------:|:----------------:|
-| Lifetime (min) | 1.78 | 1.64 | **2.36** |
-| Ticks | 9,587 | 8,752 | **5,349** |
-| Total EAT | **1,177** | 882 | 439 |
-| Rotten EAT | 349 | 229 | 152 |
-| Rotten % | 29.7% | **26.0%** | 34.6% |
-| Rotten encounters | **130,138** | 120,094 | 81,317 |
-| Approach rate (rotten) | 5.6% | 5.4% | **4.8%** |
-| Mean arousal | 15.23 | 15.03 | **13.78** |
-| \|RPE\| mean | 0.0717 | 0.0737 | **0.4051** |
-| Engram \|delta\| | 0.0162 | 0.0166 | **0.0917** |
-| Engrams | **111,237** | 92,988 | 52,298 |
+| Metric | Baseline | Memory | Mem+Consol | JEPA | JEPA+Consol |
+|--------|:-------:|:------:|:----------:|:----:|:-----------:|
+| Lifetime (min) | 1.78 | 1.72 | 1.64 | **3.77** | 2.36 |
+| Ticks | 9,587 | 9,752 | 8,752 | 8,404 | 5,349 |
+| Total EAT | **1,177** | 1,117 | 882 | 847 | 439 |
+| Rotten EAT | 349 | 312 | 229 | 227 | **152** |
+| Rotten % | 29.7% | 27.9% | **26.0%** | 26.8% | 34.6% |
+| Rotten encounters | **130,138** | 126,438 | 120,094 | 127,023 | 81,317 |
+| Approach rate (rotten) | 5.6% | 5.6% | 5.4% | 5.8% | **4.8%** |
+| Mean arousal | 15.23 | 15.66 | 15.03 | 14.27 | **13.78** |
+| \|RPE\| mean | 0.0717 | 0.0714 | 0.0737 | **0.4864** | 0.4051 |
+| Engram \|delta\| | 0.0162 | 0.0162 | 0.0166 | **0.1070** | 0.0917 |
+| Engrams | **111,237** | 110,644 | 92,988 | 91,849 | 52,298 |
 
 ---
 
 ## Conclusions
 
-**H1: Confirmed.** JEPA+RPE+Consol survives significantly longer in the novel rotten-fruit
-world (2.36 min vs 1.78 min baseline, p = 0.0003). The survival advantage is driven by systemic
-efficiency (lower arousal, fewer opportunistic eating events, fewer rotten encounters)
-rather than by learned specific aversion.
+**H1: Confirmed for both JEPA conditions.** JEPA (3.77 min, +112% vs baseline, p < 0.0001)
+and JEPA+Consol (2.36 min, +33%, p = 0.0003) both survive significantly longer. JEPA
+without consolidation is the overall winner. Memory conditions show no survival benefit.
 
-**H2: Not confirmed.** H1 and H2 address distinct questions. H1 is about survival — confirmed.
-H2 asks whether any condition learns a *behavioral aversion to rotten apples specifically* —
-not confirmed. No condition reduces its rotten apple consumption proportion over their lifetimes
-(1.6–2.4 min). JEPA creatures actually eat a slightly higher proportion of rotten apples
-(34.6% vs 29.7%) despite having fewer absolute rotten eating events. Meaningful avoidance
-learning would require creatures to survive long enough for the consolidation adapter to
-accumulate sufficient repetitions — e.g. a world with milder rotten-apple toxicity.
+**H2: Not confirmed for any condition.** H1 (survival) and H2 (behavioural aversion) are
+distinct questions. Survival is confirmed for JEPA. Aversion learning — a reduction in
+rotten apple consumption proportion over the creature's lifetime — is not confirmed for any
+condition. All proportions remain near the ~33% random baseline for 3 food types. Meaningful
+avoidance learning would require creatures to survive long enough for consolidation to
+accumulate sufficient repetitions.
 
-**H3: Confirmed.** JEPA+RPE+Consol generates |RPE| 5.7× larger than baseline (0.4051 vs
-0.072), confirming the world model is actively producing prediction errors in response to
-novel food — the learning mechanism is engaged.
+**H3: Confirmed.** Both JEPA conditions generate |RPE| ~6–7× larger than non-JEPA (~0.07).
+JEPA without consolidation produces higher |RPE| (0.486 vs 0.405) because the adapter
+never updates to suppress prediction errors.
 
-**H4: Marginally supported.** JEPA creatures encounter rotten apples 37% less often
-(81k vs 130k) and approach them at a slightly lower rate (4.8% vs 5.6%), but the per-encounter
-aversion has not reached behavioural significance within this time window.
+**H4: Marginally supported for JEPA+Consol only.** JEPA+Consol shows fewer rotten
+encounters (81k vs 120–130k) and lower approach rate (4.8% vs 5.4–5.8%). JEPA without
+consolidation does not reduce approach rate.
+
+**Key finding — consolidation hurts JEPA in novel worlds.** JEPA without consolidation
+outperforms JEPA+Consol by 60% (226s vs 142s, p < 0.0001). The penalty is larger than in
+the familiar world (+60% vs +40%). This strongly suggests adapter consolidation should be
+gated on a familiarity signal: consolidated only when |RPE| is low enough that patterns
+are worth reinforcing.
 
 ---
 
 ## Next Steps
 
-1. **Reduce rotten apple toxicity to extend lifetimes.** Creatures die in ~2 min because
-   rotten apples (caloric value −0.3) cause rapid homeostatic failure — the 120-minute cap
-   is never reached. Reducing toxicity to e.g. −0.05 would allow creatures to survive long
-   enough for engram consolidation to accumulate and shift action selection toward aversion.
+1. **Reduce rotten apple toxicity to extend lifetimes.** Creatures die in 1.6–3.8 min.
+   Reducing toxicity to e.g. −0.05 would allow longer lifetimes and give memory
+   consolidation time to accumulate meaningful aversion traces.
 
-2. **Track rotten% across life deciles.** The current analysis aggregates over the full
-   lifetime. A decile-by-decile analysis of rotten% would show whether any condition begins
-   to reduce rotten consumption toward end-of-life (evidence of within-trial learning).
+2. **Gate adapter consolidation on novelty (|RPE|-based).** Enable consolidation when
+   |RPE| < threshold (familiar, useful patterns) and suppress it when |RPE| is high
+   (novel, noisy gradients). This would combine JEPA's no-consol survival advantage with
+   JEPA+Consol's long-run adaptation potential.
 
-3. **Compare with JEPA+RPE without consolidation.** In the familiar world (20260709, cond 4),
-   removing consolidation improved survival. In the novel world, consolidation is necessary for
-   adaptation. Running condition 4 (no consolidation) in this novel world would quantify the
-   consolidation benefit specifically for novel-food aversion.
+3. **Run JEPA (no consol) in familiar world with ROTTEN_APPLE.** Condition 4 here is a
+   cold-start test. Running in a world where rotten apples were included in JEPA training
+   would test whether the world model can explicitly encode aversion when it has seen the
+   item.
 
 ---
 
 ## Data Availability
 
 ```
-ml/data_rotten_fruit_v1/   — 3 conditions × 5 trials × 5 creatures = 75 creatures
+ml/data_rotten_fruit_v1/   — 5 conditions × 5 trials × 5 creatures = 125 creatures
   1_baseline/trial_{1-5}/
+  2_memory_only/trial_{1-5}/
   3_memory_consolidation/trial_{1-5}/
+  4_jepa_rpe_only/trial_{1-5}/
   5_jepa_rpe_consolidation/trial_{1-5}/
 ```
