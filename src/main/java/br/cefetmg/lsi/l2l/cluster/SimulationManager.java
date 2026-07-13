@@ -169,7 +169,7 @@ public class SimulationManager extends UntypedActor {
         if (!everybodyReady)
             throw new IllegalStateException("There were a problem setting up the holders, you may restart everybody");
 
-        logger.info("Starting all world objects");
+        logger.info("Starting all world objects — worldObjectSettings.size=" + settings.getWorldObjectSettings().size() + " holders.size=" + holders.size() + " maxHolders=" + maxHolders);
 
         for (WorldObjectSetting objectSetting : settings.getWorldObjectSettings()) {
             List<SequentialId> objectIds = Sync.ask(idProvider, new AskForIds(objectSetting.getQuantity()), TIMEOUT);
@@ -179,6 +179,7 @@ public class SimulationManager extends UntypedActor {
 
             for (int i = 0; i < maxHolders; ++i) {
                 ActorRef holder = holders.get(i);
+                logger.info("Telling CreateWorldObjects type=" + objectSetting.getType() + " count=" + idsPerHolder.get(i).size() + " to " + holder);
                 holder.tell(new CreateWorldObjects(objectSetting.getType(), idsPerHolder.get(i).stream().toList()), self());
             }
         }
@@ -190,6 +191,7 @@ public class SimulationManager extends UntypedActor {
             List<SequentialId> creatureIds = Sync.ask(idProvider, new AskForIds(creatureSetting.getQuantity()), TIMEOUT);
             for (SequentialId id : creatureIds) {
                 ActorRef holder = holders.get((int) (id.key % maxHolders));
+                logger.info("Telling CreateCreature id=" + id + " to " + holder);
                 holder.tell(new CreateCreature(id), self());
             }
         }

@@ -11,7 +11,10 @@ import br.cefetmg.lsi.l2l.creature.ml.WorldModelEngine;
 import br.cefetmg.lsi.l2l.world.FruitType;
 import br.cefetmg.lsi.l2l.world.PlantType;
 
+import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.Map;
+import java.util.OptionalDouble;
 import java.util.Set;
 
 import java.util.ArrayList;
@@ -51,6 +54,11 @@ public class WorldModelFilter implements ActionFilter {
     // Null when running with a single-encoder model (contract.hasDualEncoder == false).
     private float[] currentInternalState;
 
+    // Per-cycle cache: action → aversiveCost scored during the last filter() call.
+    // Cleared at the start of each filter(); populated for every scored candidate.
+    // Volatile reference swap makes writes visible to JepaExpectancyPredictor on another thread.
+    private volatile Map<ActionType, Double> lastPredictedCosts = new EnumMap<>(ActionType.class);
+
     public WorldModelFilter(WorldModelEngine engine, ModelContract contract) {
         this.engine   = engine;
         this.contract = contract;
@@ -75,9 +83,20 @@ public class WorldModelFilter implements ActionFilter {
         return lastInferenceDurationMs;
     }
 
+    /**
+     * Returns the aversive cost the JEPA engine predicted for the given action during the most
+     * recent {@link #filter} call. Empty when the action was not scored (gated cycle, MODE_1_ONLY
+     * action, or inference failure).
+     */
+    public OptionalDouble getPredictedCost(ActionType action) {
+        Double v = lastPredictedCosts.get(action);
+        return v != null ? OptionalDouble.of(v) : OptionalDouble.empty();
+    }
+
     @Override
     public List<Action> filter(List<Action> actions, Emotion toRegulate) {
         lastInferenceDurationMs = 0L;
+        lastPredictedCosts = new EnumMap<>(ActionType.class);
 
         // Gate 1 — Mode-2 frequency gate
         if (actions.size() <= 1 || toRegulate.getLevel() < HIGH_AROUSAL_THRESHOLD)
@@ -105,7 +124,9 @@ public class WorldModelFilter implements ActionFilter {
                 lastInferenceDurationMs = (System.nanoTime() - t0) / 1_000_000L;
                 return actions;  // inference error → full Mode-1 fallback for this cycle
             }
-            scored.add(new ScoredAction(action, engine.aversiveCost(prediction)));
+            double cost = engine.aversiveCost(prediction);
+            lastPredictedCosts.put(action.type, cost);
+            scored.add(new ScoredAction(action, cost));
         }
         lastInferenceDurationMs = (System.nanoTime() - t0) / 1_000_000L;
 

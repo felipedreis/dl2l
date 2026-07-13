@@ -6,12 +6,12 @@ Conditions:
   1_baseline               — no extra learning
   2_memory_only            — memory filter in action selection
   3_memory_consolidation   — memory filter + sleep consolidation (MemoryTraceConsolidator)
-  4_jepa_only              — JEPA world-model filter (no consolidation)
-  5_jepa_consolidation     — JEPA world-model filter + MemoryConsolidator adapter fine-tuning
+  4_jepa_rpe_only          — JEPA world-model filter + JEPA RPE baseline, no consolidation
+  5_jepa_rpe_consolidation — JEPA world-model filter + JEPA RPE baseline + consolidation
 
 Data directories:
   Conditions 1-3: ml/data_20260709_memory_vs_wm_v2/   (5 creatures — v2 rerun)
-  Conditions 4-5: ml/data_20260709_memory_vs_wm_v1/   (5 creatures — original run)
+  Conditions 4-5: ml/data_20260709_memory_vs_wm_v1/   (5 creatures)
 
 Usage:
   python3 analysis/exp_20260709_memory_vs_wm_v1.py
@@ -35,15 +35,15 @@ warnings.filterwarnings("ignore")
 
 EXP        = "20260709_memory_vs_wm_v1"
 ROOT_DIR   = Path(__file__).resolve().parent.parent
-# Conditions 1-3 were rerun with 5 creatures in v2; conditions 4-5 from the original v1 run.
+# Conditions 1-3 from v2 rerun; conditions 6-7 from JEPA RPE runs (v1).
 DIR_V1     = ROOT_DIR / "ml" / "data_20260709_memory_vs_wm_v1"
 DIR_V2     = ROOT_DIR / "ml" / "data_20260709_memory_vs_wm_v2"
 COND_DIR   = {
-    "1_baseline":             DIR_V2,
-    "2_memory_only":          DIR_V2,
-    "3_memory_consolidation": DIR_V2,
-    "4_jepa_only":            DIR_V1,
-    "5_jepa_consolidation":   DIR_V1,
+    "1_baseline":               DIR_V2,
+    "2_memory_only":            DIR_V2,
+    "3_memory_consolidation":   DIR_V2,
+    "4_jepa_rpe_only":          DIR_V1,
+    "5_jepa_rpe_consolidation": DIR_V1,
 }
 FIG_DIR    = ROOT_DIR / "docs" / "reports" / "figures" / f"p{EXP[:8].replace('-','')[:8]}"
 REPORT_DIR = ROOT_DIR / "docs" / "reports"
@@ -51,22 +51,22 @@ REPORT_DIR = ROOT_DIR / "docs" / "reports"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 CONDITIONS = [
-    ("1_baseline",             "Baseline"),
-    ("2_memory_only",          "Memory"),
-    ("3_memory_consolidation", "Mem+Consol"),
-    ("4_jepa_only",            "JEPA"),
-    ("5_jepa_consolidation",   "JEPA+Consol"),
+    ("1_baseline",               "Baseline"),
+    ("2_memory_only",            "Memory"),
+    ("3_memory_consolidation",   "Mem+Consol"),
+    ("4_jepa_rpe_only",          "JEPA"),
+    ("5_jepa_rpe_consolidation", "JEPA+Consol"),
 ]
 COND_KEYS  = [c for c, _ in CONDITIONS]
 COND_LABELS= [l for _, l in CONDITIONS]
 TRIALS     = list(range(1, 6))
 
 PALETTE = {
-    "1_baseline":             "#9e9e9e",
-    "2_memory_only":          "#5c85d6",
-    "3_memory_consolidation": "#2b5eb8",
-    "4_jepa_only":            "#e07b39",
-    "5_jepa_consolidation":   "#c0392b",
+    "1_baseline":               "#9e9e9e",
+    "2_memory_only":            "#5c85d6",
+    "3_memory_consolidation":   "#2b5eb8",
+    "4_jepa_rpe_only":          "#b05ec4",
+    "5_jepa_rpe_consolidation": "#7b2d8b",
 }
 
 DRIVE_COLS = [
@@ -126,6 +126,8 @@ drives = drives.merge(born_lookup, on=["creature_key", "condition", "trial"], ho
 drives["elapsed_s"] = (drives["time"] - drives["born_time"]) / 1000.0
 behav["efficiency"] = num(behav["efficiency"])
 behav["time"]       = num(behav["time"])
+behav = behav.merge(born_lookup, on=["creature_key", "condition", "trial"], how="left")
+behav["elapsed_s"]  = (behav["time"] - behav["born_time"]) / 1000.0
 neuro["dopamine"]   = num(neuro["dopamine"])
 neuro["serotonin"]  = num(neuro["serotonin"])
 neuro["orexin"]     = num(neuro["orexin"])
@@ -304,7 +306,7 @@ for ax_idx, (ck, cl) in enumerate(CONDITIONS):
     ax.set_ylabel("Total Arousal")
     ax.grid(alpha=0.3)
 
-# Combined on 6th panel
+# Combined on 6th panel (index 5)
 ax = axes[5]
 for ck, cl in CONDITIONS:
     sub = drives[drives["condition"] == ck]
@@ -416,19 +418,19 @@ cond_stats(mean_eff, "Mean efficiency")
 
 fig, axes = plt.subplots(1, 2, figsize=(13, 5))
 
-# Time series
+# Time series — use elapsed seconds from each creature's birth
 ax = axes[0]
-BIN_E = 300
-behav["time_bin"] = (behav["time"] // BIN_E).astype(int)
+BIN_E_S = 30  # 30-second bins
+behav["time_bin"] = (behav["elapsed_s"] // BIN_E_S).clip(lower=0).astype(int)
 for ck, cl in CONDITIONS:
     sub = behav[behav["condition"] == ck]
     gb = sub.groupby("time_bin")["efficiency"].mean()
-    t = gb.index * BIN_E / 60
+    t = gb.index * BIN_E_S / 60
     ax.plot(t, gb, color=PALETTE[ck], lw=2, label=cl)
-ax.set_xlabel("Time (min)")
+ax.set_xlabel("Elapsed time (min)")
 ax.set_ylabel("Behavioural Efficiency")
 ax.set_title("Efficiency Over Time")
-ax.legend(fontsize=8)
+ax.legend(fontsize=9, loc="upper right", framealpha=0.9)
 ax.grid(alpha=0.3)
 
 # Boxplot
@@ -440,6 +442,7 @@ for patch, (ck, _) in zip(bp["boxes"], CONDITIONS):
     patch.set_alpha(0.7)
 ax.set_ylabel("Behavioural Efficiency")
 ax.set_title("Efficiency Distribution")
+ax.set_xticklabels(COND_LABELS, rotation=20, ha="right", fontsize=9)
 ax.grid(axis="y", alpha=0.3)
 
 plt.tight_layout()

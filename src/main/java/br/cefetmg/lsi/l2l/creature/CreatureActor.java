@@ -13,9 +13,11 @@ import br.cefetmg.lsi.l2l.creature.bd.CreatureState;
 import br.cefetmg.lsi.l2l.creature.components.*;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioningActor;
+import br.cefetmg.lsi.l2l.creature.actionSelector.WorldModelFilter;
 import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyMode;
 import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyPredictor;
 import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyPredictors;
+import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.JepaExpectancyPredictor;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystemActor;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
@@ -31,6 +33,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.logging.Logger;
 
@@ -134,11 +137,19 @@ public class CreatureActor implements Creature {
         // Register under this creature's key so components can find it via learningSettings(id.key).
         ext.configure(id.key, effective);
 
-        // Symbolic expectancy predictor (TypedActor facade — serialises the single writer, Valuation).
+        // Expectancy predictor (TypedActor facade — serialises the single writer, Valuation).
+        // JEPA mode: JepaExpectancyPredictor reads the WorldModelFilter's per-cycle prediction cache.
+        // The filter is created lazily in FullAppraisal.preStart(); the AtomicReference bridges
+        // the timing gap — it is null until preStart() fires, causing expected() to return 0.0.
         final ExpectancyMode expMode = effective.getExpectancyMode();
+        final AtomicReference<WorldModelFilter> wmFilterRef =
+                (expMode == ExpectancyMode.JEPA) ? new AtomicReference<>() : null;
+        final Creator<ExpectancyPredictor> expectancyCreator =
+                (expMode == ExpectancyMode.JEPA)
+                        ? () -> new JepaExpectancyPredictor(wmFilterRef)
+                        : () -> ExpectancyPredictors.forMode(expMode);
         expectancy = TypedActor.get(TypedActor.context())
-                .typedActorOf(new TypedProps<>(ExpectancyPredictor.class,
-                        (Creator<ExpectancyPredictor>) () -> ExpectancyPredictors.forMode(expMode)),
+                .typedActorOf(new TypedProps<>(ExpectancyPredictor.class, expectancyCreator),
                         "expectancy");
 
         if (effective.isConsolidationEnabled()) {
@@ -164,7 +175,7 @@ public class CreatureActor implements Creature {
         final MLServiceExtension.Impl mlExt = MLServiceExtension.of(context.system());
 
         SequentialId componentId = id;
-        for (Map.Entry<Class<?>, Function<SequentialId, CreatureComponent>> entry : componentFactories(effective, mlExt).entrySet()) {
+        for (Map.Entry<Class<?>, Function<SequentialId, CreatureComponent>> entry : componentFactories(effective, mlExt, wmFilterRef).entrySet()) {
             componentId = componentId.next();
             final SequentialId cid = componentId;
             final Class<?> componentType = entry.getKey();
@@ -189,7 +200,8 @@ public class CreatureActor implements Creature {
     }
 
     private LinkedHashMap<Class<?>, Function<SequentialId, CreatureComponent>> componentFactories(
-            LearningSettings effective, MLServiceExtension.Impl mlExt) {
+            LearningSettings effective, MLServiceExtension.Impl mlExt,
+            AtomicReference<WorldModelFilter> wmFilterRef) {
         LinkedHashMap<Class<?>, Function<SequentialId, CreatureComponent>> factories = new LinkedHashMap<>();
         factories.put(Eye.class,                   Eye::new);
         factories.put(Body.class,                  Body::new);
@@ -198,7 +210,7 @@ public class CreatureActor implements Creature {
         factories.put(SensoryCortex.class,         SensoryCortex::new);
         factories.put(EffectorCortex.class,        EffectorCortex::new);
         factories.put(PartialAppraisal.class,      id -> new PartialAppraisal(id, effective));
-        factories.put(FullAppraisal.class,         id -> new FullAppraisal(id, effective, mlExt));
+        factories.put(FullAppraisal.class,         id -> new FullAppraisal(id, effective, mlExt, wmFilterRef));
         factories.put(HomeostaticRegulation.class, id -> new HomeostaticRegulation(id, effective));
         factories.put(Valuation.class,             id -> new Valuation(id, effective));
         factories.put(NeuromodulatorSystem.class,  NeuromodulatorSystem::new);

@@ -1,11 +1,9 @@
 #!/bin/bash
-# Experiment: 20260709_memory_vs_wm_v1 — JEPA conditions only (4 + 5)
+# Run the two missing rotten_fruit_v1 conditions:
+#   2_memory_only         — MEMORY filter, no consolidation
+#   4_jepa_rpe_only       — WORLD_MODEL + JEPA RPE, no consolidation
 #
-#   4_jepa_rpe_only          — WORLD_MODEL filter + JEPA RPE, no consolidation
-#   5_jepa_rpe_consolidation — WORLD_MODEL filter + JEPA RPE + adapter consolidation
-#
-# Usage:
-#   ./scripts/run_exp_20260709_jepa.sh [N_TRIALS]   (default: 5)
+# Usage: bash scripts/run_rotten_fruit_v1_new_conds.sh [N_TRIALS]
 #
 set -euo pipefail
 
@@ -13,23 +11,23 @@ TRIALS=${1:-5}
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 COMPOSE_DIR="$ROOT_DIR/docker"
 DC="docker compose"
-EXP="20260709_memory_vs_wm_v1"
+EXP="rotten_fruit_v1"
 DATA_DIR="$ROOT_DIR/ml/data_${EXP}"
 
 CONDITION_KEYS=(
+  "2_memory_only"
   "4_jepa_rpe_only"
-  "5_jepa_rpe_consolidation"
 )
 
 COMPOSE_FILES=(
-  "docker-compose-20260709-memory-vs-wm-v1-4.yml"
-  "docker-compose-20260709-memory-vs-wm-v1-5.yml"
+  "docker-compose-rotten-fruit-v1-2.yml"
+  "docker-compose-rotten-fruit-v1-4.yml"
 )
 
 echo "========================================================"
-echo " EXP: $EXP (JEPA conditions only)"
+echo " EXP: $EXP  (new conditions only)"
 echo " Trials per condition : $TRIALS"
-echo " Conditions           : ${#CONDITION_KEYS[@]} (4_jepa_rpe_only, 5_jepa_rpe_consolidation)"
+echo " Conditions           : ${#CONDITION_KEYS[@]}"
 echo " Total runs           : $((TRIALS * ${#CONDITION_KEYS[@]}))"
 echo " Output               : $DATA_DIR"
 echo "========================================================"
@@ -40,7 +38,7 @@ for trial in $(seq 1 "$TRIALS"); do
   for idx in "${!CONDITION_KEYS[@]}"; do
     COND="${CONDITION_KEYS[$idx]}"
     COMPOSE="${COMPOSE_FILES[$idx]}"
-    PROJ="exp20260709_${COND}_t${trial}"
+    PROJ="exp_rotten_v1_${COND}_t${trial}"
 
     echo ""
     echo "────────────────────────────────────────────────────────"
