@@ -528,39 +528,28 @@ if not expectancy.empty and exp_conds:
         sub = expectancy[expectancy["condition"] == ck]["rpe"].dropna()
         print(f"    {dict(CONDITIONS)[ck]:<22s}  |RPE| mean={np.abs(sub).mean():.4f}  std={sub.std():.4f}")
 
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
-
-    ax = axes[0]
     BIN_EXP = 50
     expectancy["cycle_bin"] = (num(expectancy["cycle"]) // BIN_EXP).astype(int)
-    for ck in exp_conds:
+
+    n_panels = len(exp_conds)
+    fig, axes = plt.subplots(1, n_panels, figsize=(4 * n_panels, 4), sharey=False)
+    if n_panels == 1:
+        axes = [axes]
+
+    for ax, ck in zip(axes, exp_conds):
         sub = expectancy[expectancy["condition"] == ck]
-        if sub.empty: continue
+        if sub.empty:
+            ax.set_visible(False)
+            continue
         gb = sub.groupby("cycle_bin")["rpe"].apply(lambda x: np.abs(x).mean())
-        ax.plot(gb.index * BIN_EXP, gb, color=PALETTE[ck], lw=2, label=dict(CONDITIONS)[ck])
-    ax.set_xlabel("Cognitive cycle")
-    ax.set_ylabel("|RPE|  (log scale)")
-    ax.set_yscale("log")
-    ax.set_title("Mean |RPE| Over Time")
-    ax.legend(fontsize=9, loc="upper right", framealpha=0.9)
-    ax.grid(alpha=0.3, which="both")
+        ax.plot(gb.index * BIN_EXP, gb, color=PALETTE[ck], lw=2)
+        ax.fill_between(gb.index * BIN_EXP, gb, alpha=0.25, color=PALETTE[ck])
+        ax.set_title(dict(CONDITIONS)[ck], fontsize=11, color=PALETTE[ck], fontweight="bold")
+        ax.set_xlabel("Cognitive cycle")
+        ax.grid(alpha=0.3)
 
-    # Right panel: per-condition boxplot so the 5.7× JEPA vs baseline gap is immediately visible
-    ax = axes[1]
-    rpe_vals = [np.abs(expectancy[expectancy["condition"] == ck]["rpe"].dropna()).clip(0, 5).values
-                for ck in exp_conds]
-    cond_labels_exp = [dict(CONDITIONS)[ck] for ck in exp_conds]
-    bp = ax.boxplot(rpe_vals, tick_labels=cond_labels_exp, patch_artist=True,
-                    showfliers=False, widths=0.5)
-    for patch, ck in zip(bp["boxes"], exp_conds):
-        patch.set_facecolor(PALETTE[ck]); patch.set_alpha(0.75)
-    ax.set_xlabel("Condition")
-    ax.set_ylabel("|RPE|  (clipped 0–5, log scale)")
-    ax.set_yscale("log")
-    ax.set_title("|RPE| Distribution per Condition")
-    ax.set_xticklabels(cond_labels_exp, rotation=15, ha="right")
-    ax.grid(axis="y", alpha=0.3, which="both")
-
+    axes[0].set_ylabel("|RPE|")
+    fig.suptitle("Mean |RPE| Over Time — one panel per condition", fontsize=12)
     plt.tight_layout()
     fig.savefig(FIG_DIR / "07_rpe.png", dpi=150)
     plt.close(fig)
