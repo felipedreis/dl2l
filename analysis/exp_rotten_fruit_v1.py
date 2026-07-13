@@ -283,6 +283,7 @@ for ck, cl in CONDITIONS:
 
 ax.set_xticks(range(10))
 ax.set_xticklabels(DECILE_LABELS, rotation=30, ha="right", fontsize=8)
+ax.set_xlabel("Life decile")
 ax.set_ylabel("ROTTEN_APPLE % of EAT events")
 ax.set_title("A — Rotten Apple Consumption Rate Over Lifetime\n(declining = aversion learning)")
 ax.legend(fontsize=9)
@@ -308,6 +309,7 @@ for ck, cl in CONDITIONS:
 
 ax.set_xticks(range(10))
 ax.set_xticklabels(DECILE_LABELS, rotation=30, ha="right", fontsize=8)
+ax.set_xlabel("Life decile")
 ax.set_ylabel("Cumulative ROTTEN_APPLE eaten (avg per creature)")
 ax.set_title("B — Cumulative Rotten Apple Consumption\n(flattening slope = aversion kicking in)")
 ax.legend(fontsize=9)
@@ -357,6 +359,7 @@ for ck, cl in CONDITIONS:
 
 ax.set_xticks(range(10))
 ax.set_xticklabels(DECILE_LABELS, rotation=30, ha="right", fontsize=8)
+ax.set_xlabel("Life decile")
 ax.set_ylabel("% ROTTEN_APPLE encounters → APPROACH/EAT/TOUCH")
 ax.set_title("A — Approach Rate When Rotten Apple Perceived\n(declining = aversion learning)")
 ax.legend(fontsize=9)
@@ -452,12 +455,13 @@ for ck, cl in CONDITIONS:
 ax.set_xlabel("Elapsed time (min)")
 ax.set_ylabel("Mean Total Arousal")
 ax.set_title("Arousal Over Time")
-ax.legend(fontsize=9)
+ax.legend(fontsize=10, loc="upper right", framealpha=0.9)
 ax.grid(alpha=0.3)
 
 ax = axes[1]
 DRIVE_PLOT_COLS  = ["final_hunger", "final_sleep", "final_pain", "final_tedium"]
 DRIVE_PLOT_NAMES = ["Hunger", "Sleep", "Pain", "Tedium"]
+DRIVE_LS = {"final_hunger": "-", "final_sleep": "--", "final_pain": ":", "final_tedium": "-."}
 for col, name in zip(DRIVE_PLOT_COLS, DRIVE_PLOT_NAMES):
     if col not in drives.columns:
         continue
@@ -465,13 +469,12 @@ for col, name in zip(DRIVE_PLOT_COLS, DRIVE_PLOT_NAMES):
         sub = drives[drives["condition"] == ck]
         gb  = sub.groupby("time_bin")[col].mean()
         t   = gb.index * BIN_S / 60
-        ax.plot(t, gb, color=PALETTE[ck], lw=1.5,
-                linestyle={"final_hunger": "-", "final_sleep": "--",
-                            "final_pain": ":", "final_tedium": "-."}.get(col, "-"),
-                label=f"{name}/{cl}" if ck == COND_KEYS[0] else "_")
+        ax.plot(t, gb, color=PALETTE[ck], lw=1.5, linestyle=DRIVE_LS.get(col, "-"),
+                label=f"{name} ({cl})" if ck == COND_KEYS[0] else f"_ {col} {ck}")
 ax.set_xlabel("Elapsed time (min)")
 ax.set_ylabel("Drive Level")
 ax.set_title("Per-Drive Levels Over Time")
+ax.legend(fontsize=7, ncol=2, loc="upper right", framealpha=0.9)
 ax.grid(alpha=0.3)
 
 plt.tight_layout()
@@ -530,22 +533,27 @@ if not expectancy.empty and exp_conds:
         gb = sub.groupby("cycle_bin")["rpe"].apply(lambda x: np.abs(x).mean())
         ax.plot(gb.index * BIN_EXP, gb, color=PALETTE[ck], lw=2, label=dict(CONDITIONS)[ck])
     ax.set_xlabel("Cognitive cycle")
-    ax.set_ylabel("|RPE|")
+    ax.set_ylabel("|RPE|  (log scale)")
+    ax.set_yscale("log")
     ax.set_title("Mean |RPE| Over Time")
-    ax.legend(fontsize=9)
-    ax.grid(alpha=0.3)
+    ax.legend(fontsize=9, loc="upper right", framealpha=0.9)
+    ax.grid(alpha=0.3, which="both")
 
+    # Right panel: per-condition boxplot so the 5.7× JEPA vs baseline gap is immediately visible
     ax = axes[1]
-    for ck in exp_conds:
-        sub = expectancy[expectancy["condition"] == ck]["rpe"].dropna()
-        if sub.empty: continue
-        ax.hist(sub.clip(-5, 5), bins=50, alpha=0.5, color=PALETTE[ck],
-                label=dict(CONDITIONS)[ck], density=True)
-    ax.set_xlabel("RPE (clipped ±5)")
-    ax.set_ylabel("Density")
-    ax.set_title("RPE Distribution")
-    ax.legend(fontsize=9)
-    ax.grid(alpha=0.3)
+    rpe_vals = [np.abs(expectancy[expectancy["condition"] == ck]["rpe"].dropna()).clip(0, 5).values
+                for ck in exp_conds]
+    cond_labels_exp = [dict(CONDITIONS)[ck] for ck in exp_conds]
+    bp = ax.boxplot(rpe_vals, tick_labels=cond_labels_exp, patch_artist=True,
+                    showfliers=False, widths=0.5)
+    for patch, ck in zip(bp["boxes"], exp_conds):
+        patch.set_facecolor(PALETTE[ck]); patch.set_alpha(0.75)
+    ax.set_xlabel("Condition")
+    ax.set_ylabel("|RPE|  (clipped 0–5, log scale)")
+    ax.set_yscale("log")
+    ax.set_title("|RPE| Distribution per Condition")
+    ax.set_xticklabels(cond_labels_exp, rotation=15, ha="right")
+    ax.grid(axis="y", alpha=0.3, which="both")
 
     plt.tight_layout()
     fig.savefig(FIG_DIR / "07_rpe.png", dpi=150)
@@ -573,6 +581,7 @@ ax = axes[0]
 ax.bar(COND_LABELS, [engram_counts.get(ck, 0) for ck, _ in CONDITIONS],
        color=[PALETTE[ck] for ck, _ in CONDITIONS], alpha=0.8)
 ax.set_title("Engrams Formed (5 trials)")
+ax.set_xlabel("Condition")
 ax.set_ylabel("Count")
 ax.set_xticklabels(COND_LABELS, rotation=15, ha="right")
 ax.grid(axis="y", alpha=0.3)
