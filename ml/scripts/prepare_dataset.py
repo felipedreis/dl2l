@@ -12,7 +12,9 @@ Neuromodulators and endocrine are logged with seq (not simulation time),
 so the join uses normalised within-creature rank as a proxy for time.
 This is sound because tonic neuromodulator values change slowly.
 
-Writes train_dual.parquet, val_dual.parquet, stats.json to --out.
+Writes train.parquet, val.parquet (world-only, for --variant single),
+train_dual.parquet, val_dual.parquet (world+internal, for the dual variants),
+and stats.json to --out.
 Trials 1–13 → train; trials 14–15 → val (configurable via TRAIN_TRIALS / VAL_TRIALS).
 
 Usage:
@@ -135,7 +137,8 @@ def main():
     p.add_argument("--data", required=True,
                    help="Root directory containing exp_extract.py Parquet output")
     p.add_argument("--out",  default="data_prepared",
-                   help="Output directory for train_dual.parquet, val_dual.parquet, stats.json")
+                   help="Output directory for train.parquet, val.parquet, "
+                        "train_dual.parquet, val_dual.parquet, stats.json")
     args = p.parse_args()
 
     data_dir = Path(args.data)
@@ -332,6 +335,14 @@ def main():
         out_dir / "train_dual.parquet", index=False)
     df_val.drop(columns=drop_meta, errors="ignore").to_parquet(
         out_dir / "val_dual.parquet", index=False)
+
+    # Plain (world-only) variants for --variant single: same rows, minus the
+    # internal-state (h_t) columns, which TrajectoryDataset(dual=False) never reads.
+    drop_plain = drop_meta + INTERNAL_STATE_FEATURE_ORDER
+    df_train.drop(columns=drop_plain, errors="ignore").to_parquet(
+        out_dir / "train.parquet", index=False)
+    df_val.drop(columns=drop_plain, errors="ignore").to_parquet(
+        out_dir / "val.parquet", index=False)
 
     print(f"  train: {len(df_train):,} samples ({df_train['trial'].nunique()} trials)")
     print(f"  val:   {len(df_val):,} samples ({df_val['trial'].nunique()} trials)")

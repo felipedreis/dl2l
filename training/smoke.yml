@@ -1,0 +1,8 @@
+name: smoke
+source_experiment: rotten_fruit_v1
+prepared_dir: ml/data_prepared_smoke
+ckpt_dir: ml/checkpoints_smoke
+variants: [single, unified_critic]
+epochs: 2
+upload:
+  enabled: false

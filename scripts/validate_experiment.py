@@ -106,6 +106,17 @@ def validate(spec: dict) -> list:
                                 f"(valid: {sorted(TABLES)})"
                             )
 
+    training = spec.get("training")
+    if training is not None:
+        if not isinstance(training, str):
+            errors.append("'training' must be a string (name of a training/<name>.yml)")
+        else:
+            training_path = REPO_ROOT / "training" / f"{training}.yml"
+            if not training_path.exists():
+                errors.append(
+                    f"training '{training}' has no file at training/{training}.yml"
+                )
+
     cond_dir = spec.get("cond_dir")
     if cond_dir is not None:
         if not isinstance(cond_dir, dict):

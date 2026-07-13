@@ -45,3 +45,27 @@
   ansible.builtin.debug:
     msg: "-e analyze=true was passed but experiments/{{ experiment_cfg.name }}.yml has no analysis.module — skipping."
   when: (analyze | default(false) | bool) and not ((experiment_cfg.analysis is defined) and (experiment_cfg.analysis.module is defined))
+
+- name: "Chain training run: {{ experiment_cfg.training | default('') }}"
+  # Ansible has no clean primitive for conditionally running a whole separate
+  # playbook from inside a task (import_playbook only works unconditionally
+  # at file scope) — shelling out to `ansible-playbook train-model.yml` is
+  # the pragmatic, honest choice here, and it's exactly what a human would
+  # do manually anyway, just automated. Reuses the same inventory dir
+  # convention (ansible/inventories/<env>) the outer playbook was invoked with.
+  ansible.builtin.command:
+    argv:
+      - ansible-playbook
+      - -i
+      - "inventories/{{ dl2l_env }}"
+      - train-model.yml
+      - -e
+      - "training={{ experiment_cfg.training }}"
+    chdir: "{{ repo_root }}/ansible"
+  when: (train | default(false) | bool) and (experiment_cfg.training is not none)
+  changed_when: true
+
+- name: "Training requested but no training field set in {{ experiment_cfg.name }}.yml"
+  ansible.builtin.debug:
+    msg: "-e train=true was passed but experiments/{{ experiment_cfg.name }}.yml has no `training:` field — skipping."
+  when: (train | default(false) | bool) and (experiment_cfg.training is none)

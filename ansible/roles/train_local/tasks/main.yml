@@ -1,0 +1,60 @@
+---
+# For each requested variant: train_species.py -> check_collapse.py (hard
+# gate — non-zero exit aborts the play here) -> export_model.py, writing
+# straight into src/main/resources/models/<variant>/ (this IS the "save the
+# latest version in the repo" step; no separate checkpoint-then-copy needed).
+- name: "[{{ variant }}] Train"
+  ansible.builtin.command:
+    argv: >-
+      {{ [
+        'python3', '-m', 'scripts.train_species',
+        '--data', training_prepared_dir,
+        '--ckpt', training_ckpt_dir + '/' + variant,
+        '--epochs', training_cfg.epochs | string,
+        '--variant', variant,
+      ]
+      + (['--batch', training_cfg.hyperparams.batch | string] if 'batch' in training_cfg.hyperparams else [])
+      + (['--lr', training_cfg.hyperparams.lr | string] if 'lr' in training_cfg.hyperparams else [])
+      + (['--sigreg', training_cfg.hyperparams.sigreg | string] if 'sigreg' in training_cfg.hyperparams else [])
+      + (['--crit', training_cfg.hyperparams.crit | string] if 'crit' in training_cfg.hyperparams else [])
+      + (['--ema', training_cfg.hyperparams.ema | string] if 'ema' in training_cfg.hyperparams else [])
+      + (['--freeze-encoder'] if training_cfg.hyperparams.freeze_encoder | default(false) else [])
+      + (['--device', training_cfg.device] if training_cfg.device is defined else []) }}
+    chdir: "{{ repo_root }}/ml"
+  changed_when: true
+  loop: "{{ training_cfg.variants }}"
+  loop_control:
+    loop_var: variant
+    label: "{{ variant }}"
+
+- name: "[{{ variant }}] Check for encoder collapse (hard gate)"
+  ansible.builtin.command:
+    argv: >-
+      {{ [
+        'python3', '-m', 'scripts.check_collapse',
+        '--ckpt', training_ckpt_dir + '/' + variant,
+        '--data', training_prepared_dir,
+        '--variant', variant,
+      ] + (['--device', training_cfg.device] if training_cfg.device is defined else []) }}
+    chdir: "{{ repo_root }}/ml"
+  changed_when: false
+  loop: "{{ training_cfg.variants }}"
+  loop_control:
+    loop_var: variant
+    label: "{{ variant }}"
+
+- name: "[{{ variant }}] Export to src/main/resources/models/{{ variant }}"
+  ansible.builtin.command:
+    argv: >-
+      {{ [
+        'python3', '-m', 'scripts.export_model',
+        '--ckpt', training_ckpt_dir + '/' + variant,
+        '--out', repo_root + '/src/main/resources/models/' + variant,
+        '--variant', variant,
+      ] + (['--device', training_cfg.device] if training_cfg.device is defined else []) }}
+    chdir: "{{ repo_root }}/ml"
+  changed_when: true
+  loop: "{{ training_cfg.variants }}"
+  loop_control:
+    loop_var: variant
+    label: "{{ variant }}"

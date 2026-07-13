@@ -21,7 +21,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from jepa.dataset  import TrajectoryDataset
 from jepa.evaluate import check_collapse, collect_latents
-from jepa.model    import SpeciesModel, DualSpeciesModel, InternalCriticModel, InternalPredictorModel
+from jepa.model    import (SpeciesModel, DualSpeciesModel, InternalCriticModel,
+                           InternalPredictorModel, InternalCriticUnifiedModel)
 
 
 def parse_args():
@@ -31,7 +32,8 @@ def parse_args():
     p.add_argument("--batch",   type=int, default=512)
     p.add_argument("--device",  default=None)
     p.add_argument("--variant", default="single",
-                   choices=["single", "dual", "internal_critic", "internal_predictor"])
+                   choices=["single", "dual", "internal_critic", "internal_predictor",
+                            "unified_critic"])
     return p.parse_args()
 
 
@@ -50,7 +52,7 @@ def main():
     else:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    dual_variant = args.variant in ("dual", "internal_critic", "internal_predictor")
+    dual_variant = args.variant in ("dual", "internal_critic", "internal_predictor", "unified_critic")
     dual_kwargs = dict(
         input_dim           = stats["input_dim"],
         internal_state_dim  = stats["internal_state_dim"],
@@ -75,6 +77,8 @@ def main():
         model = DualSpeciesModel(**dual_kwargs).to(device)
     elif args.variant == "internal_critic":
         model = InternalCriticModel(**dual_kwargs).to(device)
+    elif args.variant == "unified_critic":
+        model = InternalCriticUnifiedModel(**dual_kwargs).to(device)
     else:
         model = InternalPredictorModel(**dual_kwargs).to(device)
 

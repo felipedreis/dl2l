@@ -60,6 +60,11 @@ analysis:                       # optional. Omit if no analysis script exists
                                  #   which must define a `run(cfg)` function.
   tables: [<str>, ...]          #   optional hint: subset of tables the
                                  #   analysis module actually loads.
+
+training: <str>                 # optional. Name of a training/<name>.yml — lets
+                                 # `-e train=true` chain a JEPA training run right
+                                 # after this experiment's data collection. See
+                                 # training/README.md for the training spec schema.
 ```
 
 ## Worked example

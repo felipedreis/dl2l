@@ -42,6 +42,7 @@
         'image': {'source': 'build'} | combine(_experiment_raw.image | default({})),
         'extract': {'format': 'parquet', 'backup': true, 'tables': 'all'} | combine(_experiment_raw.extract | default({})),
         'upload': {'enabled': true, 'repo': 'felipedreis/dl2l-experiments', 'prefix': _experiment_raw.name} | combine(_experiment_raw.upload | default({})),
+        'training': _experiment_raw.training | default(None),
       }, recursive=True) }}"
 
 - name: Resolve absolute data_dir

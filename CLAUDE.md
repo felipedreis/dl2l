@@ -185,10 +185,12 @@ The `ml/` directory contains everything for the species base world model:
 ```
 ml/
   jepa/             # PyTorch modules: model.py, train.py, export.py, dataset.py, evaluate.py
-  scripts/          # CLI entry points:
-    prepare_dataset.py   # assemble (s_t, a_t, emotion_target) tuples from CSV → parquet
-    train_species.py     # train single|dual|internal_critic|internal_predictor variant
-    check_collapse.py    # verify encoder did not collapse
+  scripts/          # CLI entry points (orchestrated by ansible/train-model.yml — see below):
+    prepare_dataset.py   # assemble (s_t, h_t, a_t, final_*) tuples from Parquet; writes both
+                         # plain (train.parquet/val.parquet, for --variant single) and dual
+                         # (train_dual.parquet/val_dual.parquet, for the other 4 variants)
+    train_species.py     # train single|dual|internal_critic|internal_predictor|unified_critic variant
+    check_collapse.py    # verify encoder did not collapse (hard gate — exit 1 = fail)
     export_model.py      # trace to TorchScript + write model_contract.json
     upload_hf.py         # push models to HF model repo + dataset to HF dataset repo
 ```
@@ -200,20 +202,42 @@ ml/
 | **dl2l-jepa** (model) | `https://huggingface.co/felipedreis/dl2l-jepa` | TorchScript `.pt` + `model_contract.json` per variant |
 | **dl2l-experiments** (dataset) | `https://huggingface.co/datasets/felipedreis/dl2l-experiments` | Parquet files + `stats.json`, one prefix per experiment (e.g. `p9/`) |
 
-To upload after training:
+### Training via Ansible
+
+Training is declared as a `training/<name>.yml` spec (which experiment's already-collected
+data to train from, which variants, hyperparameters) and run via the same Ansible pattern
+as experiments — standalone, or chained right after data collection:
+
 ```bash
-cd ml
-python3 -m scripts.upload_hf \
-    --repo felipedreis/dl2l-jepa \
-    --data-repo felipedreis/dl2l-experiments \
-    --ckpt checkpoints_p9 --data data_p9 --data-prefix p9
+cd ansible
+ansible-playbook -i inventories/local train-model.yml -e training=<name>   # this Mac
+ansible-playbook -i inventories/cefet train-model.yml -e training=<name>   # CEFET (blocked — see below)
+
+# or chain it onto a data-collection run (experiment spec needs a `training: <name>` field):
+ansible-playbook -i inventories/local run-experiment.yml -e experiment=<name> -e train=true
 ```
+
+Schema, worked example, and pipeline details are in `training/README.md`. Validate a spec
+standalone with `python3 scripts/validate_training.py training/<name>.yml`. `prepare_dataset.py`
+always runs locally (pandas-only, no GPU needed); only `train_species.py` → `check_collapse.py`
+(hard gate — non-zero exit aborts the run) → `export_model.py` moves to a remote environment.
+`export_model.py` writes straight into `src/main/resources/models/<variant>/` — that IS the
+"save the latest version in the repo" step, no separate copy needed — and `upload_hf.py`
+(pointed at that same directory, which already has the `<variant>/*.pt + *.json` shape it
+expects) pushes to HF afterward. Training does not run on the Pi cluster (no realistic
+compute there).
+
+**CEFET is a known-incomplete seam for training too**, separate from its data-collection
+seam: nothing in this repo or its history indicates what Python/conda/PyTorch environment
+is available there. `ansible/roles/train_cefet/tasks/python_setup.yml` fails fast until
+that's resolved — see `docs/plans/jepa-training-pipeline.md`.
 
 Model variants (all trained on p9 data, best val L_pred):
 - `internal_critic` — 0.1683 (predictor: world-only; critic: world+internal)
 - `single`          — 0.1732 (predictor: world-only; critic: world-only)
 - `internal_predictor` — 0.1750 (predictor: world+internal; critic: world-only)
 - `dual`            — 0.1884 (predictor: world+internal; critic: world+internal)
+- `unified_critic`  — internal_critic with predictor+critic merged into one exported module (in active use)
 
 Exported artifacts live in `src/main/resources/models/{variant}/` and are bundled into the fat JAR. The Java runtime selects the variant from `model_contract.json`'s `model_variant` field.
 

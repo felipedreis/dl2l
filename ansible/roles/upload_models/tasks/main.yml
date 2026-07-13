@@ -1,0 +1,31 @@
+---
+# Runs on localhost after training completes (regardless of which
+# environment trained). upload_hf.py already expects --ckpt <root> to
+# contain <variant>/*.pt + *.json — exactly the shape
+# src/main/resources/models/ already has after roles/train_local or
+# roles/train_cefet's sync-back step, so it's pointed at directly; no
+# separate "training checkpoint dir" -> "repo models dir" copy is needed.
+- name: "Upload trained models to {{ training_cfg.upload.repo }}"
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -m
+      - scripts.upload_hf
+      - --repo
+      - "{{ training_cfg.upload.repo }}"
+      - --data-repo
+      - "{{ training_cfg.upload.data_repo }}"
+      - --ckpt
+      - "{{ repo_root }}/src/main/resources/models"
+      - --data
+      - "{{ training_prepared_dir }}"
+      - --data-prefix
+      - "{{ training_cfg.upload.data_prefix }}"
+    chdir: "{{ repo_root }}/ml"
+  when: training_cfg.upload.enabled
+  changed_when: true
+
+- name: "Skip upload (upload.enabled: false in {{ training_cfg.name }}.yml)"
+  ansible.builtin.debug:
+    msg: "upload.enabled is false — trained models stay local under src/main/resources/models/"
+  when: not training_cfg.upload.enabled

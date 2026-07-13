@@ -17,7 +17,7 @@ remote_work_dir: "l2l"   # relative to the login user's $HOME, matches copyToClu
 # Headless cluster — no UI port to publish (unlike inventories/local).
 publish_ui: false
 
-# ── THE OPEN SEAM ────────────────────────────────────────────────────────
+# ── THE OPEN SEAM (data collection) ─────────────────────────────────────
 # CEFET has no docker, so there is no `dl2l-db` container for
 # scripts/dl2l_data/extract.py's --container flag to point at — extraction,
 # backup, and upload all currently assume a docker-composed postgres that
@@ -26,3 +26,14 @@ publish_ui: false
 # docs/plans/experiment-infra-ansible-refactor.md for what resolving this
 # requires. Do not change this value until that follow-up task lands.
 cefet_db_strategy: todo
+
+# ── THE OPEN SEAM (JEPA training) ────────────────────────────────────────
+# Nothing in this repo or its git history indicates what Python/conda/
+# PyTorch setup exists on CEFET. See
+# ansible/roles/train_cefet/tasks/python_setup.yml and
+# docs/plans/jepa-training-pipeline.md for what resolving this requires.
+# Do not change cefet_python_strategy until that follow-up task lands.
+cefet_python_strategy: todo
+# Once resolved, set this to whatever shell command activates the
+# environment, e.g. "module load anaconda3 && conda activate dl2l-jepa".
+cefet_python_activate: ""

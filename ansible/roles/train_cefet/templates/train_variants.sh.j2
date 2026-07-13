@@ -1,0 +1,32 @@
+#!/bin/bash
+# Rendered by ansible/roles/train_cefet — do not edit by hand.
+# Trains, collapse-checks, and exports every requested variant sequentially
+# inside one SLURM allocation. Aborts (set -e) on the first failure — matches
+# roles/train_local's "hard gate" behaviour: already-exported earlier
+# variants keep their files, fix and re-run with a narrowed variant list.
+#SBATCH --job-name=jepa_{{ training_cfg.name }}
+#SBATCH --cpus-per-task=12
+#SBATCH --qos={{ cefet_qos }}
+#SBATCH --partition={{ cefet_partition }}
+#SBATCH --output={{ remote_train_dir }}/slurm-%j.out
+set -euo pipefail
+
+{{ cefet_python_activate | default('# cefet_python_activate is not set (see ansible/roles/train_cefet/tasks/python_setup.yml)') }}
+
+cd "{{ remote_train_dir }}/ml"
+mkdir -p ../checkpoints ../models
+
+VARIANTS=({{ training_cfg.variants | join(' ') }})
+TRAIN_FLAGS=(--epochs {{ training_cfg.epochs }}{% if 'batch' in training_cfg.hyperparams %} --batch {{ training_cfg.hyperparams.batch }}{% endif %}{% if 'lr' in training_cfg.hyperparams %} --lr {{ training_cfg.hyperparams.lr }}{% endif %}{% if 'sigreg' in training_cfg.hyperparams %} --sigreg {{ training_cfg.hyperparams.sigreg }}{% endif %}{% if 'crit' in training_cfg.hyperparams %} --crit {{ training_cfg.hyperparams.crit }}{% endif %}{% if 'ema' in training_cfg.hyperparams %} --ema {{ training_cfg.hyperparams.ema }}{% endif %}{% if training_cfg.hyperparams.freeze_encoder | default(false) %} --freeze-encoder{% endif %}{% if training_cfg.device is defined %} --device {{ training_cfg.device }}{% endif %})
+DEVICE_FLAG=({% if training_cfg.device is defined %}--device {{ training_cfg.device }}{% endif %})
+
+for VARIANT in "${VARIANTS[@]}"; do
+  echo "=== [$VARIANT] train_species ==="
+  python3 -m scripts.train_species --data ../data_prepared --ckpt "../checkpoints/$VARIANT" --variant "$VARIANT" "${TRAIN_FLAGS[@]}"
+
+  echo "=== [$VARIANT] check_collapse ==="
+  python3 -m scripts.check_collapse --ckpt "../checkpoints/$VARIANT" --data ../data_prepared --variant "$VARIANT" "${DEVICE_FLAG[@]}"
+
+  echo "=== [$VARIANT] export_model ==="
+  python3 -m scripts.export_model --ckpt "../checkpoints/$VARIANT" --out "../models/$VARIANT" --variant "$VARIANT" "${DEVICE_FLAG[@]}"
+done

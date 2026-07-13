@@ -1,0 +1,58 @@
+---
+# Runs on the "runner" host (the CEFET login node). prepare_dataset.py
+# already ran locally (see roles/prepare_dataset) — only the actual
+# training step moves here, since CEFET may have GPU compute this Mac
+# doesn't. The prepared dataset and ml/ code are synced up, one SLURM job
+# trains+checks+exports every requested variant sequentially, and the
+# exported models are synced back to this Mac's src/main/resources/models/.
+#
+# python_setup.yml runs FIRST and unconditionally fails while
+# cefet_python_strategy is 'todo' (the default) — a plain ansible.builtin.fail
+# is a local action (no remote connection needed), so none of the sync/submit
+# steps below, nor any SSH connection to the login node, ever happen today.
+# This role is exercised via --syntax-check / --check only until the
+# python-env seam is resolved (see python_setup.yml).
+- name: Check the Python/PyTorch seam before touching any infrastructure
+  ansible.builtin.include_tasks: python_setup.yml
+
+- name: Compute the remote training work dir
+  ansible.builtin.set_fact:
+    remote_train_dir: "{{ remote_work_dir }}/training/{{ training_cfg.name }}"
+
+- name: Sync the prepared dataset and ml/ scripts+package to the login node
+  ansible.posix.synchronize:
+    src: "{{ item.src }}"
+    dest: "{{ remote_train_dir }}/{{ item.dest }}"
+  loop:
+    - { src: "{{ training_prepared_dir }}/", dest: "data_prepared/" }
+    - { src: "{{ repo_root }}/ml/scripts/", dest: "ml/scripts/" }
+    - { src: "{{ repo_root }}/ml/jepa/", dest: "ml/jepa/" }
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: Render the training job script onto the login node
+  ansible.builtin.template:
+    src: train_variants.sh.j2
+    dest: "{{ remote_train_dir }}/train_variants.sh"
+    mode: "0755"
+
+- name: Submit the training job (all variants, sequential, one sbatch allocation)
+  ansible.builtin.command:
+    argv: [sbatch, --wait, "{{ remote_train_dir }}/train_variants.sh"]
+    chdir: "{{ remote_train_dir }}"
+  async: "{{ training_slurm_wait_async }}"
+  poll: "{{ training_slurm_wait_poll }}"
+  changed_when: true
+
+- name: Sync exported models back to this Mac
+  # mode: pull -> src interpreted on the play's target host (the login node,
+  # remote from the mac's point of view), dest on the control machine — no
+  # delegate_to needed (synchronize always executes rsync from the control
+  # node regardless of which host the enclosing task nominally targets).
+  ansible.posix.synchronize:
+    mode: pull
+    src: "{{ remote_train_dir }}/models/{{ variant }}/"
+    dest: "{{ repo_root }}/src/main/resources/models/{{ variant }}/"
+  loop: "{{ training_cfg.variants }}"
+  loop_control:
+    loop_var: variant

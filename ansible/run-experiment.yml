@@ -13,6 +13,9 @@
 #   experiment=<name>     required, matches experiments/<name>.yml
 #   build_image=false      skip mvn package + docker build, reuse an existing image
 #   analyze=true            run the experiment's analysis module after upload
+#   train=true              chain a training run (train-model.yml) after upload —
+#                            requires the experiment spec's optional `training: <name>`
+#                            field (see experiments/README.md, training/README.md)
 
 - name: Load and validate experiment spec, build image
   hosts: localhost

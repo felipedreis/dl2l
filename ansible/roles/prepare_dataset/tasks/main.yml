@@ -1,0 +1,18 @@
+---
+# Always runs on localhost regardless of dl2l_env — prepare_dataset.py is
+# pandas-only (no GPU needed) and the source data already lives on this Mac
+# (either collected here directly, or synced back by the pi/cefet trial
+# runners' own final play). Training itself is the only step that may move
+# to a remote environment (cefet) — see roles/train_cefet.
+- name: Assemble the training dataset (prepare_dataset.py)
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -m
+      - scripts.prepare_dataset
+      - --data
+      - "{{ training_source_data_dir }}"
+      - --out
+      - "{{ training_prepared_dir }}"
+    chdir: "{{ repo_root }}/ml"
+  changed_when: true

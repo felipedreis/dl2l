@@ -1,0 +1,44 @@
+---
+# Entry point for training JEPA world-model variants from an already-
+# collected experiment's data, on any environment.
+#
+# Usage:
+#   ansible-playbook -i ansible/inventories/local ansible/train-model.yml -e training=smoke
+#   ansible-playbook -i ansible/inventories/cefet ansible/train-model.yml -e training=p9_variants
+#
+# The target environment is selected by which inventory you pass with -i
+# (local or cefet — training is not supported on the pi cluster, see
+# training/README.md); each inventory's group_vars/all.yml sets dl2l_env,
+# which in turn selects the per-env role (train_{{ dl2l_env }}).
+#
+# Extra-vars:
+#   training=<name>   required, matches training/<name>.yml
+
+- name: Load training spec, prepare the dataset
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - ansible.builtin.include_role:
+        name: training_spec
+    - ansible.builtin.include_role:
+        name: prepare_dataset
+
+- name: Train
+  hosts: runner
+  gather_facts: false
+  tasks:
+    - ansible.builtin.include_role:
+        name: training_spec
+    - ansible.builtin.include_role:
+        name: "train_{{ dl2l_env }}"
+
+- name: Save exported models and upload
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - ansible.builtin.include_role:
+        name: training_spec
+    - ansible.builtin.include_role:
+        name: upload_models
