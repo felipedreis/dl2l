@@ -1,9 +1,8 @@
 #!/bin/bash
-# Experiment: 20260709_memory_vs_wm_v1 — JEPA conditions only (4 + 5 + 6)
+# Experiment: 20260709_memory_vs_wm_v1 — JEPA conditions only (4 + 5)
 #
-#   4_jepa_only              — WORLD_MODEL filter, no consolidation
-#   5_jepa_consolidation     — WORLD_MODEL filter + sleep consolidation
-#   6_jepa_rpe_consolidation — WORLD_MODEL filter + JEPA RPE baseline + consolidation
+#   4_jepa_rpe_only          — WORLD_MODEL filter + JEPA RPE, no consolidation
+#   5_jepa_rpe_consolidation — WORLD_MODEL filter + JEPA RPE + adapter consolidation
 #
 # Usage:
 #   ./scripts/run_exp_20260709_jepa.sh [N_TRIALS]   (default: 5)
@@ -18,21 +17,19 @@ EXP="20260709_memory_vs_wm_v1"
 DATA_DIR="$ROOT_DIR/ml/data_${EXP}"
 
 CONDITION_KEYS=(
-  "4_jepa_only"
-  "5_jepa_consolidation"
-  "6_jepa_rpe_consolidation"
+  "4_jepa_rpe_only"
+  "5_jepa_rpe_consolidation"
 )
 
 COMPOSE_FILES=(
   "docker-compose-20260709-memory-vs-wm-v1-4.yml"
   "docker-compose-20260709-memory-vs-wm-v1-5.yml"
-  "docker-compose-20260709-memory-vs-wm-v1-6.yml"
 )
 
 echo "========================================================"
 echo " EXP: $EXP (JEPA conditions only)"
 echo " Trials per condition : $TRIALS"
-echo " Conditions           : ${#CONDITION_KEYS[@]} (4_jepa_only, 5_jepa_consolidation, 6_jepa_rpe_consolidation)"
+echo " Conditions           : ${#CONDITION_KEYS[@]} (4_jepa_rpe_only, 5_jepa_rpe_consolidation)"
 echo " Total runs           : $((TRIALS * ${#CONDITION_KEYS[@]}))"
 echo " Output               : $DATA_DIR"
 echo "========================================================"
