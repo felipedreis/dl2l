@@ -1,14 +1,9 @@
 #!/bin/bash
-# Experiment: rotten_fruit_v1 — novel world with ROTTEN_APPLE
+# Run the two missing rotten_fruit_v1 conditions:
+#   2_memory_only         — MEMORY filter, no consolidation
+#   4_jepa_rpe_only       — WORLD_MODEL + JEPA RPE, no consolidation
 #
-#   1_baseline               — TARGET_DIST + AFFORDANCE + RANDOM, no learning
-#   2_memory_only            — MEMORY filter, no consolidation
-#   3_memory_consolidation   — MEMORY filter + MemoryTraceConsolidator
-#   4_jepa_rpe_only          — WORLD_MODEL + JEPA RPE, no consolidation
-#   5_jepa_rpe_consolidation — WORLD_MODEL + JEPA RPE + adapter consolidation
-#
-# Usage:
-#   ./scripts/run_exp_rotten_fruit_v1.sh [N_TRIALS]   (default: 5)
+# Usage: bash scripts/run_rotten_fruit_v1_new_conds.sh [N_TRIALS]
 #
 set -euo pipefail
 
@@ -20,23 +15,17 @@ EXP="rotten_fruit_v1"
 DATA_DIR="$ROOT_DIR/ml/data_${EXP}"
 
 CONDITION_KEYS=(
-  "1_baseline"
   "2_memory_only"
-  "3_memory_consolidation"
   "4_jepa_rpe_only"
-  "5_jepa_rpe_consolidation"
 )
 
 COMPOSE_FILES=(
-  "docker-compose-rotten-fruit-v1-1.yml"
   "docker-compose-rotten-fruit-v1-2.yml"
-  "docker-compose-rotten-fruit-v1-3.yml"
   "docker-compose-rotten-fruit-v1-4.yml"
-  "docker-compose-rotten-fruit-v1-5.yml"
 )
 
 echo "========================================================"
-echo " EXP: $EXP"
+echo " EXP: $EXP  (new conditions only)"
 echo " Trials per condition : $TRIALS"
 echo " Conditions           : ${#CONDITION_KEYS[@]}"
 echo " Total runs           : $((TRIALS * ${#CONDITION_KEYS[@]}))"

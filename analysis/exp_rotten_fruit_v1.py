@@ -1,11 +1,13 @@
 """
 Analysis: rotten_fruit_v1
-Novel-world aversion learning — 3 conditions × 5 trials × 5 creatures
+Novel-world aversion learning — 5 conditions × 5 trials × 5 creatures
 
 Conditions:
-  1_baseline              — no learning filters
-  3_memory_consolidation  — MEMORY filter + MemoryTraceConsolidator
-  6_jepa_rpe_consolidation — WORLD_MODEL + JEPA RPE expectancy + adapter consolidation
+  1_baseline               — no learning filters
+  2_memory_only            — MEMORY filter, no consolidation
+  3_memory_consolidation   — MEMORY filter + MemoryTraceConsolidator
+  4_jepa_rpe_only          — WORLD_MODEL + JEPA RPE, no consolidation
+  5_jepa_rpe_consolidation — WORLD_MODEL + JEPA RPE + adapter consolidation
 
 World: 500 RED_APPLE, 500 GREEN_APPLE, 500 ROTTEN_APPLE (novel, caloricValue=-0.3),
        50 CACTUS, 100 ALOE. No GRAY_APPLE. maxRuntimeMinutes=120.
@@ -44,8 +46,10 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 CONDITIONS = [
     ("1_baseline",               "Baseline"),
+    ("2_memory_only",            "Memory"),
     ("3_memory_consolidation",   "Mem+Consol"),
-    ("6_jepa_rpe_consolidation", "JEPA+RPE+Consol"),
+    ("4_jepa_rpe_only",          "JEPA"),
+    ("5_jepa_rpe_consolidation", "JEPA+Consol"),
 ]
 COND_KEYS   = [c for c, _ in CONDITIONS]
 COND_LABELS = [l for _, l in CONDITIONS]
@@ -53,8 +57,10 @@ TRIALS      = list(range(1, 6))
 
 PALETTE = {
     "1_baseline":               "#9e9e9e",
+    "2_memory_only":            "#5c85d6",
     "3_memory_consolidation":   "#2b5eb8",
-    "6_jepa_rpe_consolidation": "#7b2d8b",
+    "4_jepa_rpe_only":          "#b05ec4",
+    "5_jepa_rpe_consolidation": "#7b2d8b",
 }
 
 FOOD_TYPES  = ["RED_APPLE", "GREEN_APPLE", "ROTTEN_APPLE"]
