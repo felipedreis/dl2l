@@ -214,9 +214,10 @@ ansible-playbook -i inventories/local train-model.yml -e training=<name>   # thi
 
 # CCAD (GPU cluster, https://www.ccad.cefetmg.br/guia/ — NOT cluster.decom.cefetmg.br,
 # which is CPU-only and used only for simulations): requires the CEFET VPN, which drops
-# on idle, so this is submit-then-collect, not submit-and-wait:
-ansible-playbook -i inventories/ccad train-model.yml -e training=<name> -e ccad_user=<cpf>              # submit, returns immediately
-ansible-playbook -i inventories/ccad train-model.yml -e training=<name> -e ccad_user=<cpf> -e rescue=true  # later: collect + upload
+# on idle, so this is submit-then-collect, not submit-and-wait. Username comes from a
+# gitignored .env.local (CCAD_USERNAME=<cpf>, see training/README.md), not a flag:
+ansible-playbook -i inventories/ccad train-model.yml -e training=<name>              # submit, returns immediately
+ansible-playbook -i inventories/ccad train-model.yml -e training=<name> -e rescue=true  # later: collect + upload
 
 # or chain it onto a data-collection run (experiment spec needs a `training: <name>` field):
 ansible-playbook -i inventories/local run-experiment.yml -e experiment=<name> -e train=true

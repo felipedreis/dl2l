@@ -17,7 +17,7 @@ Run with:
 cd ansible
 ansible-playbook -i inventories/local run-experiment.yml -e experiment=<name>   # collect data first, if not done yet
 ansible-playbook -i inventories/local train-model.yml   -e training=<name>     # then train (this Mac)
-ansible-playbook -i inventories/ccad  train-model.yml   -e training=<name> -e ccad_user=<cpf>  # or on CCAD's GPUs
+ansible-playbook -i inventories/ccad  train-model.yml   -e training=<name>     # or on CCAD's GPUs
 ```
 
 Training can also be chained directly onto a data-collection run: set the
@@ -98,9 +98,11 @@ L40S 48GB across nodes c1/c2, `--partition=gpu --qos=gpu_qos`, max 2 GPUs/user,
 2-day time cap.
 
 Login: `login.ccad.cefetmg.br`, authenticated with institutional credentials
-(CPF, no punctuation, as username) — pass yours via `-e ccad_user=<cpf>`.
-`$HOME` is a shared NFS filesystem visible from both the login node and every
-compute node.
+(CPF, no punctuation, as username). Create a `.env.local` at the repo root
+(gitignored — never commit it) with `CCAD_USERNAME=<cpf-no-punctuation>` and
+ansible picks it up automatically; `-e ccad_user=<cpf>` also works and takes
+precedence, for CI/portable use. `$HOME` is a shared NFS filesystem visible
+from both the login node and every compute node.
 
 **One-time setup** (creates the `dl2l-jepa` conda env via `module load
 miniforge3` + `mamba install torch numpy pandas pyarrow scikit-learn`,
@@ -108,7 +110,7 @@ mirroring `ml/requirements.txt` — only needs network access once, at
 provisioning time, since the env lives on the shared NFS `$HOME`):
 
 ```bash
-cd ansible && ansible-playbook -i inventories/ccad provision-ccad.yml -e ccad_user=<cpf>
+cd ansible && ansible-playbook -i inventories/ccad provision-ccad.yml
 ```
 
 Untested against the live cluster: if `provision-ccad.yml` or a training job
@@ -125,13 +127,13 @@ session. So training on CCAD is submit-and-collect, not submit-and-wait:
 # 1. Submit — syncs data, submits the SLURM job, and returns immediately.
 #    The sbatch script trains/checks/exports every variant autonomously
 #    under $HOME (shared NFS); no live connection is needed once submitted.
-cd ansible && ansible-playbook -i inventories/ccad train-model.yml -e training=<name> -e ccad_user=<cpf>
+cd ansible && ansible-playbook -i inventories/ccad train-model.yml -e training=<name>
 
 # 2. Later, whenever you're back on the VPN — checks whether the job
 #    finished (a DONE sentinel the job script writes on exit); if so, syncs
 #    the exported models back and uploads them; if not, reports "still
 #    running" and exits cleanly. Safe to run repeatedly.
-ansible-playbook -i inventories/ccad train-model.yml -e training=<name> -e ccad_user=<cpf> -e rescue=true
+ansible-playbook -i inventories/ccad train-model.yml -e training=<name> -e rescue=true
 ```
 
 If a job dies without the trap firing (OOM-killed, walltime exceeded, node

@@ -4,7 +4,7 @@
 #
 # Usage:
 #   ansible-playbook -i ansible/inventories/local ansible/train-model.yml -e training=smoke
-#   ansible-playbook -i ansible/inventories/ccad  ansible/train-model.yml -e training=p9_variants -e ccad_user=<cpf>
+#   ansible-playbook -i ansible/inventories/ccad  ansible/train-model.yml -e training=p9_variants
 #
 # The target environment is selected by which inventory you pass with -i
 # (local or ccad — training is not supported on the pi cluster, and not on
