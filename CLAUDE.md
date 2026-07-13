@@ -211,7 +211,12 @@ as experiments — standalone, or chained right after data collection:
 ```bash
 cd ansible
 ansible-playbook -i inventories/local train-model.yml -e training=<name>   # this Mac
-ansible-playbook -i inventories/cefet train-model.yml -e training=<name>   # CEFET (blocked — see below)
+
+# CCAD (GPU cluster, https://www.ccad.cefetmg.br/guia/ — NOT cluster.decom.cefetmg.br,
+# which is CPU-only and used only for simulations): requires the CEFET VPN, which drops
+# on idle, so this is submit-then-collect, not submit-and-wait:
+ansible-playbook -i inventories/ccad train-model.yml -e training=<name> -e ccad_user=<cpf>              # submit, returns immediately
+ansible-playbook -i inventories/ccad train-model.yml -e training=<name> -e ccad_user=<cpf> -e rescue=true  # later: collect + upload
 
 # or chain it onto a data-collection run (experiment spec needs a `training: <name>` field):
 ansible-playbook -i inventories/local run-experiment.yml -e experiment=<name> -e train=true
@@ -220,17 +225,12 @@ ansible-playbook -i inventories/local run-experiment.yml -e experiment=<name> -e
 Schema, worked example, and pipeline details are in `training/README.md`. Validate a spec
 standalone with `python3 scripts/validate_training.py training/<name>.yml`. `prepare_dataset.py`
 always runs locally (pandas-only, no GPU needed); only `train_species.py` → `check_collapse.py`
-(hard gate — non-zero exit aborts the run) → `export_model.py` moves to a remote environment.
-`export_model.py` writes straight into `src/main/resources/models/<variant>/` — that IS the
-"save the latest version in the repo" step, no separate copy needed — and `upload_hf.py`
+(hard gate — non-zero exit aborts the run) → `export_model.py` moves to CCAD when training
+there. `export_model.py` writes straight into `src/main/resources/models/<variant>/` — that IS
+the "save the latest version in the repo" step, no separate copy needed — and `upload_hf.py`
 (pointed at that same directory, which already has the `<variant>/*.pt + *.json` shape it
-expects) pushes to HF afterward. Training does not run on the Pi cluster (no realistic
-compute there).
-
-**CEFET is a known-incomplete seam for training too**, separate from its data-collection
-seam: nothing in this repo or its history indicates what Python/conda/PyTorch environment
-is available there. `ansible/roles/train_cefet/tasks/python_setup.yml` fails fast until
-that's resolved — see `docs/plans/jepa-training-pipeline.md`.
+expects) pushes to HF afterward. Training does not run on the Pi cluster or on
+`cluster.decom.cefetmg.br` (no realistic compute there for this workload).
 
 Model variants (all trained on p9 data, best val L_pred):
 - `internal_critic` — 0.1683 (predictor: world-only; critic: world+internal)

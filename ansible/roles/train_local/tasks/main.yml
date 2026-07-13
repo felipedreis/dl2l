@@ -58,3 +58,7 @@
   loop_control:
     loop_var: variant
     label: "{{ variant }}"
+
+- name: Mark training as finished (local training always completes within one invocation)
+  ansible.builtin.set_fact:
+    training_finished: true

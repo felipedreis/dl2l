@@ -27,13 +27,7 @@ publish_ui: false
 # requires. Do not change this value until that follow-up task lands.
 cefet_db_strategy: todo
 
-# ── THE OPEN SEAM (JEPA training) ────────────────────────────────────────
-# Nothing in this repo or its git history indicates what Python/conda/
-# PyTorch setup exists on CEFET. See
-# ansible/roles/train_cefet/tasks/python_setup.yml and
-# docs/plans/jepa-training-pipeline.md for what resolving this requires.
-# Do not change cefet_python_strategy until that follow-up task lands.
-cefet_python_strategy: todo
-# Once resolved, set this to whatever shell command activates the
-# environment, e.g. "module load anaconda3 && conda activate dl2l-jepa".
-cefet_python_activate: ""
+# NOTE: JEPA training does NOT target this cluster. cluster.decom.cefetmg.br
+# (this inventory) is CPU-only and used only for running simulations — GPU
+# training targets the separate CCAD cluster instead, see
+# ansible/inventories/ccad/ and training/README.md.

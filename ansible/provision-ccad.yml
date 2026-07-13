@@ -1,0 +1,61 @@
+---
+# One-time (idempotent) setup for the CCAD HPC cluster's JEPA training
+# environment. Run once before the first `train-model.yml -i inventories/ccad`.
+#
+# $HOME is a shared NFS filesystem on this cluster (per
+# https://www.ccad.cefetmg.br/guia/), so a conda env created here on the
+# login node is automatically visible on the compute nodes too — no network
+# access is needed from compute nodes at job runtime, only here at
+# provisioning time (module load miniforge3; conda/mamba need internet to
+# resolve+download packages).
+#
+# Usage:
+#   cd ansible && ansible-playbook -i inventories/ccad provision-ccad.yml
+#
+# CAVEAT (untested against the live cluster): `module load` is often a bash
+# function only defined in login/interactive shells via a sourced profile
+# script (e.g. /etc/profile.d/modules.sh) — ansible's command/shell modules
+# run non-interactive, non-login shells over SSH, which can mean `module`
+# isn't defined at all in that context on some HPC systems. If these tasks
+# fail with "module: command not found", the fix is almost certainly adding
+# `source /etc/profile.d/modules.sh &&` (or whatever this cluster's
+# equivalent path is) before each `module load` line here and in
+# roles/train_ccad/templates/train_variants.sh.j2.
+
+- name: Create the dl2l-jepa conda environment
+  hosts: runner
+  gather_facts: false
+  tasks:
+    - name: "Check whether {{ ccad_conda_env }} already exists"
+      ansible.builtin.shell: |
+        module load miniforge3
+        conda env list | grep -q '^{{ ccad_conda_env }} '
+      args:
+        executable: /bin/bash
+      register: _env_exists
+      failed_when: false
+      changed_when: false
+
+    - name: "Create the {{ ccad_conda_env }} conda environment (python 3.11)"
+      ansible.builtin.shell: |
+        module load miniforge3
+        conda create -n {{ ccad_conda_env }} python=3.11 -y
+      args:
+        executable: /bin/bash
+      when: _env_exists.rc != 0
+      changed_when: true
+
+    - name: "Install training dependencies (mirrors ml/requirements.txt)"
+      ansible.builtin.shell: |
+        module load miniforge3
+        conda activate {{ ccad_conda_env }}
+        mamba install -y torch numpy pandas pyarrow scikit-learn
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: "Ensure {{ remote_work_dir }} exists"
+      ansible.builtin.file:
+        path: "{{ remote_work_dir }}"
+        state: directory
+        mode: "0755"

@@ -1,3 +1,0 @@
----
-training_slurm_wait_async: 86400   # 24h ceiling; training jobs can run long
-training_slurm_wait_poll: 60

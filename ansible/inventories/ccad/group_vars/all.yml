@@ -1,0 +1,23 @@
+---
+dl2l_env: ccad
+
+# Repo root, resolved relative to this playbook's location on the control
+# machine (the macbook running ansible-playbook) — NOT a path on the cluster.
+repo_root: "{{ playbook_dir | dirname }}"
+
+# GPU partition — 4x NVIDIA L40S 48GB across nodes c1/c2, max 2 GPUs/user,
+# 2-day time cap. See https://www.ccad.cefetmg.br/guia/
+ccad_partition: gpu
+ccad_qos: gpu_qos
+ccad_gres: "gpu:1"
+
+remote_work_dir: "l2l"   # relative to the login user's $HOME (shared NFS)
+
+# The conda env created once by provision-ccad.yml (module load miniforge3;
+# $HOME/.conda/envs/ is on shared NFS, so this is visible on compute nodes
+# too without needing network access at job runtime).
+ccad_conda_env: dl2l-jepa
+ccad_python_activate: "module load miniforge3 && conda activate {{ ccad_conda_env }}"
+
+# Headless cluster — no UI port to publish (unlike inventories/local).
+publish_ui: false

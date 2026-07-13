@@ -1,0 +1,28 @@
+---
+# CCAD requires the CEFET VPN, which drops the connection when idle — a
+# training job can run for hours, far longer than the VPN will tolerate a
+# held-open SSH session. So this role NEVER blocks waiting for the job:
+#
+#   -e rescue=false (default) — submit.yml: sync assets, submit the job
+#     (plain `sbatch`, no --wait), report the job id, and return
+#     immediately. The sbatch script (templates/train_variants.sh.j2) does
+#     everything else autonomously — train, check, export, and write its
+#     own results under $HOME (shared NFS) — no live connection needed for
+#     any of it.
+#
+#   -e rescue=true — rescue.yml: check whether that job has finished (a
+#     DONE sentinel file the job script writes on exit, any exit); if so,
+#     sync the exported models back so play 3 can upload them; if not,
+#     report "still running" and exit cleanly. Run this again later,
+#     whenever you're back on the VPN.
+- name: Compute the remote training work dir
+  ansible.builtin.set_fact:
+    remote_train_dir: "{{ remote_work_dir }}/training/{{ training_cfg.name }}"
+
+- name: Submit the training job
+  ansible.builtin.include_tasks: submit.yml
+  when: not (rescue | default(false) | bool)
+
+- name: Check on / collect a previously submitted training job
+  ansible.builtin.include_tasks: rescue.yml
+  when: rescue | default(false) | bool

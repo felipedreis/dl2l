@@ -108,6 +108,42 @@ upload:
 5. `--syntax-check` + `--check` for `-i ansible/inventories/cefet` — confirm the python-env seam fails fast (`unreachable=0`, same proof pattern as the postgres seam) before any sync/submit is attempted.
 6. `--check` on `run-experiment.yml -e experiment=<spec-with-training-field> -e train=true` — confirm the chaining task's `when:` evaluates true and the assembled `ansible-playbook train-model.yml ...` command is correctly formed (check mode won't actually execute it).
 
+## Addendum: CEFET training seam resolved → CCAD, submit/rescue model
+
+The "unknown Python/PyTorch environment" seam above was resolved by reading CEFET's
+CCAD HPC cluster user guide (https://www.ccad.cefetmg.br/guia/). Two corrections to
+the original plan:
+
+1. **Wrong cluster.** `cluster.decom.cefetmg.br` (`ansible/inventories/cefet`) turned
+   out to be CPU-only and used solely for simulation jobs (`lsi-1`/`part6h`) — it was
+   never the right target for GPU training. The actual GPU cluster is CCAD
+   (`login.ccad.cefetmg.br`, `--partition=gpu --qos=gpu_qos`, 4x L40S 48GB), a
+   *separate* cluster with its own inventory (`ansible/inventories/ccad/`) and role
+   (`roles/train_ccad/`). `roles/train_cefet/` (and its now-moot python_setup seam)
+   was deleted. Environment: `module load miniforge3` → conda env in `$HOME/.conda/envs/`
+   (shared NFS, so provisioning — `provision-ccad.yml` — only needs network access
+   once, at env-creation time; training jobs on compute nodes need no network).
+
+2. **Submit/rescue, not submit-and-wait.** CCAD requires the CEFET VPN, which drops
+   the connection when idle — incompatible with `sbatch --wait` + async/poll (the
+   pattern used for the Pi cluster's SLURM jobs), since a training job can run for
+   hours. `roles/train_ccad` instead: submits the job (plain `sbatch`, no `--wait`)
+   and returns immediately (`submit.yml`); the sbatch script
+   (`templates/train_variants.sh.j2`) trains/checks/exports every variant
+   autonomously under `$HOME`, with a `trap ... EXIT` writing a `DONE` sentinel file
+   (its own exit code) regardless of success or failure. A later, separate
+   invocation with `-e rescue=true` (`rescue.yml`) checks for that sentinel; if
+   present, syncs the exported models back and lets `train-model.yml`'s upload play
+   proceed; if absent, reports "still running" and exits cleanly — safe to re-run
+   whenever back on the VPN. `train-model.yml` gates its upload play on a
+   `training_finished` fact (always `true` for local training, which completes
+   synchronously within one invocation).
+
+Known limitation: if a CCAD job dies without the trap firing (OOM-kill, walltime
+exceeded, node failure), the DONE sentinel never appears and `-e rescue=true` will
+report "still running" forever — check `squeue`/`sacct` or the job's
+`slurm-<jobid>.out` manually in that case.
+
 ## Housekeeping note
 
 PR #69 (the original ansible refactor) is still open on `feat/experiment-infra-ansible-refactor`. This work continues as additional commits on that same branch/PR unless told otherwise.
