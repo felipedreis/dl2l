@@ -39,7 +39,24 @@ TRIAL="${SLURM_ARRAY_TASK_ID:?must be run as a SLURM array task}"
 TRIAL_DIR="{{ remote_work_dir }}/data/{{ experiment_cfg.name }}/{{ cond.key }}/trial_${TRIAL}"
 mkdir -p "$TRIAL_DIR"
 
-trap 'echo "$?" > "'"$TRIAL_DIR"'/DONE"; singularity instance stop --all >/dev/null 2>&1 || true; rm -f "'"$TRIAL_DIR"'/pg_overlay.img"' EXIT
+# Singularity writes per-instance logs (postgres/manager/detector/holder) to
+# $HOME/.singularity/... — CCAD's NFS-mounted home, so every line written is
+# network I/O, not local disk, and CONFIRMED LIVE one such log accumulated
+# 240MB+ across a single session. TRIED pointing $HOME (and separately
+# SINGULARITY_CONFIGDIR) at node-local scratch to keep that traffic off the
+# network — CONFIRMED LIVE neither works cleanly: `$HOME` is ignored
+# entirely for instance state (logs kept landing in the real, NFS-mounted
+# home regardless), and `SINGULARITY_CONFIGDIR` redirects the logs
+# correctly but leaves `instance list`/`instance stop` looking in a
+# different, inconsistent location (both then report no instances found —
+# this pipeline depends on `instance list`/`instance stop` throughout, so
+# that's not a viable trade). Fixed at the actual source instead:
+# config/ccad-config.conf's akka loglevel was DEBUG (copied verbatim from
+# docker-config.conf, fine for local disk, not for NFS) — the gossip/
+# heartbeat/serialization-warning spam that made these logs so large was
+# happening at DEBUG specifically. Turned down to INFO there; this trap
+# needs no scratch-copying dance now that the volume itself is the fix.
+trap 'echo "$?" > "'"$TRIAL_DIR"'/DONE"; singularity instance stop --all >/dev/null 2>&1 || true; rm -rf "/scratch/dl2l_${SLURM_JOB_ID:-unknown}"' EXIT
 
 # CONFIRMED LIVE (25-trial real run): 6/25 trials failed fast (~35s vs 3-4min
 # for a real run) with "No creatures found" despite every instance reporting
@@ -63,15 +80,35 @@ INITDB_BIND="{{ remote_work_dir }}/config/init-db.sql:/docker-entrypoint-initdb.
 # DDL bootstrap + WAL churn hit "PANIC: could not write to file
 # pg_wal/xlogtemp.NN: No space left on device" — --writable-tmpfs has no
 # size flag, and its default is evidently just a few tens of MB. postgres
-# instead gets its own disk-backed (not RAM-backed) ext3 overlay image,
-# sized generously — confirmed live this survives a 200MB write with room
-# to spare. Ephemeral is still intentional (deleted in the trap below, not
-# a shortcut): mirrors how the local/Pi docker-compose postgres has no
-# named volume either — extraction below copies everything needed out to
-# the shared NFS before teardown.
+# instead gets its own disk-backed (not RAM-backed) ext3 overlay image.
+# Ephemeral is still intentional (deleted in the trap below, not a
+# shortcut): mirrors how the local/Pi docker-compose postgres has no named
+# volume either — extraction below copies everything needed out to the
+# shared NFS before teardown.
+#
+# CONFIRMED LIVE, twice:
+# 1) A 1024 (1GB) overlay, sized only against a quick smoke write, filled up
+#    after just ~12.5 minutes of a real 10-creature/40-minute trial. Once
+#    full, EVERY subsequent postgres write failed with "No space left on
+#    device" and the app retried in a tight loop — 700K+/500K+ duplicate
+#    exception lines across holder/db logs in the remaining ~27 minutes.
+#    That retry-loop spam, not verbose app logging, was the real source of
+#    this session's multi-hundred-MB/GB log files. Bumped to 8192 (8GB) —
+#    /scratch has 500GB+ free per node, so headroom is cheap; revisit if a
+#    full-duration trial still exhausts this.
+# 2) The overlay image lived at $TRIAL_DIR, under remote_work_dir — CCAD's
+#    NFS-mounted $HOME — so every one of postgres's internal writes to it
+#    (WAL, subtrans, every BDActor flush) was network I/O, same class of
+#    problem as the singularity-instance-log issue above. Moved to
+#    node-local /scratch (confirmed present and writable on every compute
+#    node — a dedicated local disk mount, not NFS) instead; only the final
+#    extracted parquet/pg_dump (far smaller, and only written once at the
+#    end) still crosses the network into $TRIAL_DIR.
+SCRATCH_DIR="/scratch/dl2l_${SLURM_JOB_ID}"
+mkdir -p "$SCRATCH_DIR"
 WRITABLE="--writable-tmpfs"
-PG_OVERLAY="$TRIAL_DIR/pg_overlay.img"
-singularity overlay create --size 1024 "$PG_OVERLAY"
+PG_OVERLAY="$SCRATCH_DIR/pg_overlay.img"
+singularity overlay create --size 8192 "$PG_OVERLAY"
 
 # --- postgres --------------------------------------------------------------
 # Runs from a pre-built sandbox directory (roles/image_ccad), not `docker://`
@@ -98,6 +135,23 @@ done
 # fails opaquely ("No creatures found") instead of pointing at the real
 # problem. Every wait loop below now fails fast with the instance's own log.
 [ "$pg_ready" = 1 ] || { echo "FATAL: postgres never became ready"; singularity instance list; exit 1; }
+
+# Completion detection below watches THIS log (see rationale further down),
+# not the holder's — same APPEND-across-invocations behavior as any other
+# instance log here, so record the pre-start size to only look at bytes
+# THIS trial's manager writes.
+#
+# CONFIRMED LIVE BUG: no `|| true` here killed the whole script instantly
+# the first time this ran against a freshly-cleaned instances/logs/ dir (no
+# dl2l-manager.err existed anywhere yet) — under `set -e`+`pipefail`, `ls`
+# matching nothing fails, that failure propagates through the pipe to
+# `head -1`, and the plain `VAR=$(...)` assignment is NOT a context `set -e`
+# exempts, so the script exited right here — before ever reaching the
+# `[ -n "$MANAGER_LOG" ]` check below that was supposed to handle exactly
+# this "doesn't exist yet" case gracefully.
+MANAGER_LOG=$(ls $HOME/.singularity/instances/logs/*/*/dl2l-manager.err 2>/dev/null | head -1) || true
+MANAGER_LOG_OFFSET=0
+[ -n "$MANAGER_LOG" ] && MANAGER_LOG_OFFSET=$(wc -c < "$MANAGER_LOG")
 
 # --- manager (+ idProvider) --------------------------------------------------
 singularity instance start $WRITABLE \
@@ -137,15 +191,85 @@ sleep 3
 singularity instance list 2>/dev/null | grep -q '^dl2l-holder ' \
   || { echo "FATAL: holder never came up"; singularity instance list; exit 1; }
 
-# Wait for the holder's own process to exit (the simulation's "Finish" ->
-# no `docker wait` equivalent under Singularity). NOTE (untested against
-# the live cluster): assumes `singularity instance list` stops showing
-# dl2l-holder once its PID 1 process exits — if that doesn't hold in
-# practice, tail the holder's log for its own completion message instead.
+# CONFIRMED LIVE BUG: polling `singularity instance list` for dl2l-holder to
+# disappear is NOT reliable completion detection — under a real (non-smoke)
+# 25-trial run, 6 trials were cut short after ~35-175s instead of running
+# toward the 40-minute in-sim deadline, with ZERO natural creature deaths
+# logged (no "Sending remove order to holder" messages) and the holder's own
+# log showing "Starting coordinated shutdown from JVM shutdown hook" — proof
+# the JVM was killed by an EXTERNAL signal, not a natural game-over. The
+# likely culprit: `instance list` has some transient hiccup under load from
+# 4 concurrently-running instances, `grep` finds no match on that one poll,
+# the loop breaks, and this script's own EXIT trap (`instance stop --all`)
+# then kills the STILL-RUNNING simulation itself.
+#
+# TRIED watching the holder's own log for Holder.java's handleFinish()
+# message ("Received stop order from manager. Stopping") next — CONFIRMED
+# LIVE this message (and its natural-death sibling, "This holder has
+# finished his work.") never appears in EITHER dl2l-holder.out or
+# dl2l-holder.err, even on a validation run that demonstrably reached
+# "Maximum runtime reached" on the manager side. Holder.java's logger field
+# uses plain java.util.logging (`Logger.getLogger(...)`), unlike the
+# akka/SLF4J-based logging everything else here goes through — it appears
+# to have no configured handler in this JVM and its output goes nowhere
+# capturable.
+#
+# manager's own logger DOES work reliably (confirmed live: "Simulation
+# runtime limited to 40 minutes" and "Maximum runtime reached — stopping
+# simulation" both showed up exactly as expected) — SimulationManager logs
+# "All creatures dead in holder <id>" for the natural-death path and
+# "Maximum runtime reached — stopping simulation" for the forced-timeout
+# path, both from the same onReceive handler, both BEFORE stopSimulation()
+# sends Finish to every holder/idProvider/collisionDetector — so watching
+# manager's log for either one is a strictly earlier and, unlike holder's,
+# actually-visible completion signal.
+#
+# TRIED adding a `singularity instance list` short-circuit on top (3
+# consecutive missing-dl2l-holder polls, ~15s of confirmed absence, treated
+# as a real crash) so a genuinely-dead holder wouldn't have to wait out the
+# full ceiling below — CONFIRMED LIVE this is STILL a false positive even
+# with that debounce: a run using this exact 3-strikes logic was killed by
+# its own EXIT trap at ~90s in (`instance list` reporting dl2l-holder gone
+# for 3 straight 5s-apart polls) while the holder's own log shows it was
+# actively processing right up to the same second the trap's `instance stop
+# --all` tore everything down (last app activity 2-3s before the kill, no
+# exception, no OOM, no "shutting down" of its own). No other job was
+# sharing this node at the time (checked via `sacct`), so this isn't the
+# known same-node port-collision risk either — `instance list` itself is
+# apparently unreliable enough, even 3-for-3, to fail a perfectly healthy
+# trial. Given that a false-positive kill silently produces truncated,
+# scientifically-invalid data (exactly what caused the original 25-trial
+# experiment to need rerunning) while a false-negative (a genuinely-dead
+# holder just sitting until the ceiling below) only costs wall-clock time
+# on an async submit-and-rescue job, dropped the `instance list` check
+# entirely — completion detection now rests solely on manager's log,
+# backstopped by the ceiling below and, ultimately, SBATCH --time.
 echo "Waiting for the simulation to finish..."
-while singularity instance list 2>/dev/null | grep -q '^dl2l-holder '; do
+sim_done=0
+# ~65 min ceiling: generous margin beyond the in-sim maxRuntimeMinutes cap.
+# CONFIRMED LIVE a tighter 50-min ceiling raced against a simulation that
+# legitimately ran its full 40-minute in-sim deadline plus real-world JVM/
+# processing overhead — SBATCH --time is the ultimate backstop regardless.
+for _ in $(seq 1 780); do
+  MANAGER_LOG=$(ls $HOME/.singularity/instances/logs/*/*/dl2l-manager.err 2>/dev/null | head -1) || true
+  if [ -n "$MANAGER_LOG" ] && tail -c "+$((MANAGER_LOG_OFFSET + 1))" "$MANAGER_LOG" 2>/dev/null \
+      | grep -qE "All creatures dead in holder|Maximum runtime reached"; then
+    sim_done=1
+    break
+  fi
   sleep 5
 done
+if [ "$sim_done" != 1 ]; then
+  echo "FATAL: simulation did not finish within the wait timeout"
+  [ -n "$MANAGER_LOG" ] && tail -c "+$((MANAGER_LOG_OFFSET + 1))" "$MANAGER_LOG" | tail -80
+  exit 1
+fi
+
+# manager logging "Maximum runtime reached"/"All creatures dead" only means
+# stopSimulation() has been TOLD to run, not that the holder has actually
+# finished flushing/exiting yet (its own Finish handling and JVM teardown
+# take a few more seconds) — give it a moment before extracting.
+sleep 10
 
 # --- extract (before teardown; dl2l_data.extract does its own pg_dump backup) -
 # The system python3 has no pandas/pyarrow (needed for --format parquet) —

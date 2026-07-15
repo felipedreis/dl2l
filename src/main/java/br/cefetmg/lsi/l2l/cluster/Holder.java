@@ -153,7 +153,7 @@ public class Holder extends AbstractActor implements Registrable {
 
             worldObjects.put(id, worldObject);
             worldObjecttypes.put(id, type);
-            logger.info("Created a new world object with id " + id);
+            logger.fine("Created a new world object with id " + id);
         } else if (type instanceof PlantType) {
             ActorRef worldObject = context().actorOf(
                     Plant.props(id, type, factory.nextPosition(), collisionDetector),
@@ -161,7 +161,7 @@ public class Holder extends AbstractActor implements Registrable {
 
             worldObjects.put(id, worldObject);
             worldObjecttypes.put(id, type);
-            logger.info("Created a new plant world object with id " + id);
+            logger.fine("Created a new plant world object with id " + id);
         }
     }
 
@@ -187,18 +187,18 @@ public class Holder extends AbstractActor implements Registrable {
             } else if (worldObjects.containsKey(stimulus.target)) {
                 targetComp = worldObjects.get(stimulus.target);
                 targetComp.tell(stimulus, sender());
-                logger.info("Stimulus routed to a component in current holder " + targetComp);
+                logger.fine("Stimulus routed to a component in current holder " + targetComp);
             }
 
         } else  if(holders.containsKey(holderId)){
             ActorRef targetHolder = holders.get(holderId);
             targetHolder.tell(stimulus, sender());
-            logger.info("Stimulus routed to a known holder " + targetHolder);
+            logger.fine("Stimulus routed to a known holder " + targetHolder);
         } else {
             ActorRef holder = lookupHolder(holderId);
             holder.tell(stimulus, sender());
             holders.put(holderId, holder);
-            logger.info("Unknown holder. Holder lookup executed with success and stimulus routed");
+            logger.fine("Unknown holder. Holder lookup executed with success and stimulus routed");
         }
     }
 
@@ -233,14 +233,14 @@ public class Holder extends AbstractActor implements Registrable {
                 manager.tell(new Repose(type), self());
             }
         } else {
-            logger.info("There is no simulation component with identified as " + id);
+            logger.fine("There is no simulation component with identified as " + id);
         }
         if(componentActor != null)
             context().stop(componentActor);
 
         collisionDetector.tell(id, self());
 
-        logger.info("Removed simulation component " + id);
+        logger.fine("Removed simulation component " + id);
     }
 
     @Override

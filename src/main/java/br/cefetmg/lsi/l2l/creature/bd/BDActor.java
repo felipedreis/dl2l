@@ -24,7 +24,7 @@ public class BDActor extends UntypedActor {
     public void onReceive(Object message) throws Exception {
         if (message instanceof List) {
             List states = (List) message;
-            logger.info("Persisting " + states.size() + " states");
+            logger.fine("Persisting " + states.size() + " states");
 
             em.getTransaction().begin();
             for (Object state : states) {

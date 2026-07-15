@@ -27,7 +27,7 @@ public class Fruit extends WorldObject {
     @Override
     public void onReceive(Object message) {
         if (message instanceof DestructiveStimulus) {
-            logger.info("Fruit " +  id + " was eaten");
+            logger.fine("Fruit " +  id + " was eaten");
 
             sender().tell(new EnergeticStimulus(id, nextStimulusId(), type.caloricValue, type), self());
             context().parent().tell(id, self());

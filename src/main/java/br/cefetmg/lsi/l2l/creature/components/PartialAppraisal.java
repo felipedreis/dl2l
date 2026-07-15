@@ -190,7 +190,7 @@ public class PartialAppraisal extends CreatureComponent {
             metricsExt.setGauge("dl2l_creature_arousal", id.toString(), maxEmotion.getLevel());
         }
 
-        logger.info(String.format("PartialAppraisal[%s]: arousal=%.3f perceptions=%d behaviouralEfficiency=%.3f",
+        logger.fine(String.format("PartialAppraisal[%s]: arousal=%.3f perceptions=%d behaviouralEfficiency=%.3f",
                 id, maxEmotion.getLevel(), perceptions.size(), behaviouralEfficiency));
         perceptions.forEach(p -> logger.fine(String.format("PartialAppraisal[%s]:   perception type=%s angle=%.3f dist=%.1f",
                 id, p.objectType, p.angle, p.distance)));

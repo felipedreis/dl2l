@@ -197,7 +197,7 @@ public class CreatureActor implements Creature {
         clock = TypedActor.context().system().scheduler()
                 .schedule(Duration.apply(5, TimeUnit.SECONDS),
                         Duration.apply(1000, TimeUnit.MILLISECONDS), () -> {
-                            logger.info("Clocking");
+                            logger.fine("Clocking");
                             partial.tell("", ActorRef.noSender());
                         }, TypedActor.context().dispatcher());
 
