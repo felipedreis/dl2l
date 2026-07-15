@@ -163,15 +163,23 @@
             <version>0.26.0</version>
         </dependency>
         <!--
-          Platform-specific PyTorch native library.
-          For local dev (macOS ARM64): osx-aarch64
-          For Docker (Linux x86_64):   linux-x86_64
-          Swap the classifier or use a Maven profile per deployment target.
+          Platform-specific PyTorch native library, bundled so the fat jar
+          never needs to reach publish.djl.ai at runtime to auto-download it
+          — CONFIRMED LIVE this download is unreachable from CCAD compute
+          nodes (no internet access there), which silently crashed every
+          Holder's preStart() (MLServiceExtension -> DJL PtEngine init) on
+          CCAD specifically. Every other environment this ran in (local Mac,
+          Pi cluster) has internet, so a classifier mismatch here was masked
+          by DJL's runtime fallback download and never surfaced before.
+          linux-x86_64 matches what docker/Dockerfile actually builds/runs
+          (the image used everywhere except local Mac dev) — for local dev
+          on macOS ARM64, DJL auto-downloads the correct osx-aarch64 native
+          lib on first run instead (Mac dev always has internet).
         -->
         <dependency>
             <groupId>ai.djl.pytorch</groupId>
             <artifactId>pytorch-native-cpu</artifactId>
-            <classifier>osx-aarch64</classifier>
+            <classifier>linux-x86_64</classifier>
             <version>2.1.1</version>
             <scope>runtime</scope>
         </dependency>
