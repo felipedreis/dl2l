@@ -80,8 +80,13 @@ public class PartialAppraisal extends CreatureComponent {
      * record the final action before the creature is removed from the simulation.
      */
     private void checkDeath() {
-        if (emotionalSystem.getMaxDriveArousal().getLevel() >= Constants.MAX_AROUSAL_LEVEL)
+        Emotion dominant = emotionalSystem.getMaxDriveArousal();
+        if (dominant.getLevel() >= Constants.MAX_AROUSAL_LEVEL) {
+            if (metricsExt != null) {
+                metricsExt.incrementCounter("dl2l_creature_deaths_total", "cause", dominant.getName());
+            }
             creature.kill();
+        }
     }
 
     /**

@@ -154,10 +154,16 @@ MANAGER_LOG_OFFSET=0
 [ -n "$MANAGER_LOG" ] && MANAGER_LOG_OFFSET=$(wc -c < "$MANAGER_LOG")
 
 # --- manager (+ idProvider) --------------------------------------------------
+# METRICS_PORT: every role's JVM starts a MetricsExtension /metrics endpoint
+# unconditionally (see Main.java) — on CCAD all 4 roles share the node's
+# network namespace (no per-container ports like docker-compose gets for
+# free), so each needs its own fixed port or they'd all fight over the
+# default :9091. Only manager's is actually polled below; detector/holder
+# just need a non-colliding port so their own binds don't fail.
 singularity instance start $WRITABLE \
   --bind "$CONFIG_BIND" \
   --env ROLE=manager,idProvider --env SIMULATION={{ cond.simulation }} \
-  --env HOST=localhost --env PORT=2551 \
+  --env HOST=localhost --env PORT=2551 --env METRICS_PORT=9091 \
   --env DL2L_DB_URL=jdbc:postgresql://localhost:5432/l2l \
   {{ remote_work_dir }}/dl2l_sandbox dl2l-manager
 
@@ -173,14 +179,14 @@ done
 singularity instance start $WRITABLE \
   --bind "$CONFIG_BIND" \
   --env ROLE=collisionDetector --env SIMULATION={{ cond.simulation }} \
-  --env HOST=localhost --env PORT=2552 \
+  --env HOST=localhost --env PORT=2552 --env METRICS_PORT=9093 \
   {{ remote_work_dir }}/dl2l_sandbox dl2l-detector
 
 # --- holder -------------------------------------------------------------------
 singularity instance start $WRITABLE \
   --bind "$CONFIG_BIND" \
   --env ROLE=holder --env SIMULATION={{ cond.simulation }} \
-  --env HOST=localhost --env PORT=2553 \
+  --env HOST=localhost --env PORT=2553 --env METRICS_PORT=9092 \
   --env DL2L_DB_URL=jdbc:postgresql://localhost:5432/l2l \
   {{ remote_work_dir }}/dl2l_sandbox dl2l-holder
 
@@ -190,6 +196,36 @@ singularity instance start $WRITABLE \
 sleep 3
 singularity instance list 2>/dev/null | grep -q '^dl2l-holder ' \
   || { echo "FATAL: holder never came up"; singularity instance list; exit 1; }
+
+# CONFIRMED LIVE BUG: the instance being up is not the same as the simulation
+# actually having started. Job 200 (2026-07-15): holder joined the Akka
+# cluster fine (its own "Welcome from [manager]" logged) and MLServiceExtension
+# loaded fine, but it never sent its application-level Register message to
+# manager — manager's log shows zero "Registering a new holder"/"Starting all
+# creatures" for the entire run. Since completion detection below only checks
+# for manager's COMPLETION messages, not that the run ever started, the
+# forced-timeout path still fires 40 minutes later regardless — the trial
+# "succeeds" from run_trial.sh's point of view while extraction finds zero
+# creatures. Fail fast instead of burning 40+ minutes on a silently-empty
+# trial: give the registration handshake a couple of minutes, watching
+# manager's log for the same "Starting all creatures" signal
+# startSimulation() logs once every holder has ack'd ready.
+echo "Waiting for the simulation to actually start (holder registration)..."
+sim_started=0
+for _ in $(seq 1 24); do
+  MANAGER_LOG=$(ls $HOME/.singularity/instances/logs/*/*/dl2l-manager.err 2>/dev/null | head -1) || true
+  if [ -n "$MANAGER_LOG" ] && tail -c "+$((MANAGER_LOG_OFFSET + 1))" "$MANAGER_LOG" 2>/dev/null \
+      | grep -q "Starting all creatures"; then
+    sim_started=1
+    break
+  fi
+  sleep 5
+done
+if [ "$sim_started" != 1 ]; then
+  echo "FATAL: simulation never started — holder came up but never registered with manager within 2 minutes"
+  [ -n "$MANAGER_LOG" ] && tail -c "+$((MANAGER_LOG_OFFSET + 1))" "$MANAGER_LOG" | tail -80
+  exit 1
+fi
 
 # CONFIRMED LIVE BUG: polling `singularity instance list` for dl2l-holder to
 # disappear is NOT reliable completion detection — under a real (non-smoke)
@@ -244,6 +280,16 @@ singularity instance list 2>/dev/null | grep -q '^dl2l-holder ' \
 # on an async submit-and-rescue job, dropped the `instance list` check
 # entirely — completion detection now rests solely on manager's log,
 # backstopped by the ceiling below and, ultimately, SBATCH --time.
+# NEW: SimulationManager now also exposes a `dl2l_simulation_running` gauge
+# (0/1) over its own /metrics endpoint (docs/plans/ccad-metrics-completion-detection.md)
+# — a direct, synchronous query against live process state, with none of the
+# log-grep path's dependency on Singularity flushing the instance log to NFS
+# in a timely way. Checked FIRST every poll; the log-grep above is kept as a
+# fallback for this validation cycle (not yet proven live on CCAD — in
+# particular, whether Akka HTTP responds promptly inside a Singularity
+# instance the same way it does under docker-compose) rather than an
+# outright replacement. Drop the fallback once a couple of real trials
+# confirm the two signals agree on timing.
 echo "Waiting for the simulation to finish..."
 sim_done=0
 # ~65 min ceiling: generous margin beyond the in-sim maxRuntimeMinutes cap.
@@ -251,9 +297,15 @@ sim_done=0
 # legitimately ran its full 40-minute in-sim deadline plus real-world JVM/
 # processing overhead — SBATCH --time is the ultimate backstop regardless.
 for _ in $(seq 1 780); do
+  if curl -s -m 3 http://localhost:9091/metrics 2>/dev/null | grep -qE '^dl2l_simulation_running\{[^}]*\} 0(\.0)?$'; then
+    echo "Completion detected via /metrics (dl2l_simulation_running=0)"
+    sim_done=1
+    break
+  fi
   MANAGER_LOG=$(ls $HOME/.singularity/instances/logs/*/*/dl2l-manager.err 2>/dev/null | head -1) || true
   if [ -n "$MANAGER_LOG" ] && tail -c "+$((MANAGER_LOG_OFFSET + 1))" "$MANAGER_LOG" 2>/dev/null \
       | grep -qE "All creatures dead in holder|Maximum runtime reached"; then
+    echo "Completion detected via manager log fallback"
     sim_done=1
     break
   fi

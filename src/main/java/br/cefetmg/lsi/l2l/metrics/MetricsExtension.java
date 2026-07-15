@@ -45,7 +45,14 @@ public class MetricsExtension extends AbstractExtensionId<MetricsExtension.Impl>
 
         private static final Logger logger = Logger.getLogger(Impl.class.getName());
         private static final String HOST = "0.0.0.0";
-        private static final int PORT = 9091;
+        // Every role's JVM calls MetricsExtension.of(system) unconditionally (see Main.java),
+        // and on CCAD all four roles share the node's network namespace (no per-container
+        // ports like docker-compose) — so a fixed port here means only the first JVM to bind
+        // wins and the rest fail silently. METRICS_PORT lets run_trial.sh.j2 give each role
+        // its own port; unset (the default everywhere else — local/Pi docker-compose already
+        // isolates each role in its own container/network namespace) behavior is unchanged.
+        private static final int PORT = Integer.parseInt(
+                System.getenv().getOrDefault("METRICS_PORT", "9091"));
 
         private final PrometheusMeterRegistry registry;
 
@@ -86,6 +93,21 @@ public class MetricsExtension extends AbstractExtensionId<MetricsExtension.Impl>
                     registry.gauge(name, Tags.of("creature", creatureId),
                             new AtomicReference<>(value), AtomicReference::get)
             ).set(value);
+        }
+
+        /**
+         * Get-or-create a role/cluster-level gauge with no per-creature dimension
+         * (simulation lifecycle, live population count, ...) and set its value.
+         */
+        public void setGauge(String name, double value) {
+            gaugeHolders.computeIfAbsent(name, k ->
+                    registry.gauge(name, new AtomicReference<>(value), AtomicReference::get)
+            ).set(value);
+        }
+
+        /** Get-or-create a single-tag counter and increment it by 1. */
+        public void incrementCounter(String name, String tagKey, String tagValue) {
+            registry.counter(name, Tags.of(tagKey, tagValue)).increment();
         }
 
         private void bindHttpServer(ExtendedActorSystem system) {

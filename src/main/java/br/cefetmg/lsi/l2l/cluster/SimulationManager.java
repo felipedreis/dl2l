@@ -8,6 +8,7 @@ import br.cefetmg.lsi.l2l.cluster.settings.CreatureSetting;
 import br.cefetmg.lsi.l2l.cluster.settings.Simulation;
 import br.cefetmg.lsi.l2l.cluster.settings.WorldObjectSetting;
 import br.cefetmg.lsi.l2l.common.SequentialId;
+import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 import org.apache.commons.collections4.ListUtils;
 import scala.concurrent.duration.Duration;
@@ -43,6 +44,8 @@ public class SimulationManager extends UntypedActor {
     private final long maxHolders;
     private final int repositionDelaySeconds;
 
+    private MetricsExtension.Impl metricsExt;
+
     SimulationManager(Simulation settings) {
         holders = new ArrayList<>();
         holdersCount = 0;
@@ -57,6 +60,7 @@ public class SimulationManager extends UntypedActor {
 
     @Override
     public void preStart() throws Exception {
+        metricsExt = MetricsExtension.of(context().system());
         cluster.subscribe(self(), MemberUp.class, MemberJoined.class, MemberExited.class);
         int maxRuntime = settings.getMaxRuntimeMinutes();
         if (maxRuntime > 0) {
@@ -158,6 +162,7 @@ public class SimulationManager extends UntypedActor {
 
     private void startSimulation() throws IllegalStateException {
         logger.info("Starting the simulation");
+        metricsExt.setGauge("dl2l_simulation_running", 1);
 
         boolean everybodyReady = true;
 
@@ -200,6 +205,7 @@ public class SimulationManager extends UntypedActor {
     }
 
     private void stopSimulation() {
+        metricsExt.setGauge("dl2l_simulation_running", 0);
         idProvider.tell(new Finish(), self());
         collisionDetector.tell(new Finish(), self());
 
@@ -207,6 +213,21 @@ public class SimulationManager extends UntypedActor {
             holder.tell(new Finish(), self());
         }
 
+        // TRIED delaying this by a few seconds (scheduler.scheduleOnce) so the
+        // /metrics HTTP server would have a real window to serve the 0 reading
+        // before disappearing — CONFIRMED LIVE (local docker-compose, 2026-07-15)
+        // this backfires: something in Akka's own shutdown path (cluster member
+        // removal triggers coordinated shutdown, independent of this actor) tears
+        // the ActorSystem down almost immediately regardless, which force-runs the
+        // scheduler's pending tasks early during `LightArrayRevolverScheduler.close()`
+        // — by then this actor's own context() is already null, so the delayed
+        // callback NPEs (`Cannot invoke "ActorContext.stop(ActorRef)" because the
+        // return value of "context()" is null`). Not worth fighting Akka's own
+        // shutdown machinery for this: the gauge flipping to 0 is still real and
+        // correct the instant it's set below, just not reliably observable
+        // externally afterward — run_trial.sh.j2's metrics check is opportunistic
+        // (falls through to the log-grep fallback when it doesn't catch it), so
+        // this is an accepted, harmless limitation rather than a bug to chase.
         context().stop(self());
         context().system().terminate();
     }

@@ -13,6 +13,7 @@ import akka.pattern.Patterns;
 import akka.util.Timeout;
 import br.cefetmg.lsi.l2l.analysis.DataAnalyser;
 import br.cefetmg.lsi.l2l.creature.ml.MLServiceExtension;
+import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.cluster.settings.Simulation;
 import br.cefetmg.lsi.l2l.common.Point;
@@ -68,6 +69,8 @@ public class Holder extends AbstractActor implements Registrable {
 
     private LearningSettings learningSettings;
 
+    private MetricsExtension.Impl metricsExt;
+
     public Holder(Simulation settings, String saveDir) {
         this.saveDir = saveDir;
 
@@ -86,6 +89,7 @@ public class Holder extends AbstractActor implements Registrable {
     @Override
     public void preStart() throws Exception {
         super.preStart();
+        metricsExt = MetricsExtension.of(context().system());
         cluster.subscribe(self(), MemberUp.class);
         logger.setLevel(Level.SEVERE);
         // Register learning settings before any creature is spawned so components can read them.
@@ -173,6 +177,7 @@ public class Holder extends AbstractActor implements Registrable {
                 "creature-" + order.id());
         creature.init();
         creatures.put(order.id(), creature);
+        metricsExt.setGauge("dl2l_creatures_alive", creatures.size());
         logger.info("Created a new creature");
     }
 
@@ -208,6 +213,7 @@ public class Holder extends AbstractActor implements Registrable {
         if(creatures.containsKey(id)) {
             componentActor = TypedActor.get(context()).getActorRefFor(creatures.get(id));
             creatures.remove(id);
+            metricsExt.setGauge("dl2l_creatures_alive", creatures.size());
 
             if(creatures.isEmpty()) {
                 EntityManager em = Persistence.createEntityManagerFactory("L2LPU",

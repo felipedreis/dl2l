@@ -1,0 +1,27 @@
+# Infra validation, not a scientific experiment: single condition/trial,
+# reusing 20260714_memory_vs_wm_dense_reposition's baseline (10-creature,
+# 40-min, dense-world) config to exercise the same real-world duration and
+# write load that surfaced the CCAD postgres-overlay bug. Run through the
+# real ansible/dl2l_data pipeline (not a hand-built sbatch script) so the
+# validation actually exercises submit.yml/rescue.yml end-to-end.
+name: _validation_dense_reposition
+trials: 1
+
+conditions:
+  - key: 1_baseline
+    simulation: simulations/20260714_memory_vs_wm_dense_reposition_1_baseline.conf
+    label: Baseline
+    color: "#9e9e9e"
+
+image:
+  source: registry
+
+data_dir: ml/data__validation_dense_reposition
+
+extract:
+  format: parquet
+  backup: true
+  tables: all
+
+upload:
+  enabled: false
