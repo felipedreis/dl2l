@@ -103,7 +103,8 @@ public class CreatureActor implements Creature {
         this.position = position;
         this.worldBoundaries = worldBoundaries;
         this.learningSettings = learningSettings;
-        this.em = Persistence.createEntityManagerFactory("L2LPU").createEntityManager();
+        this.em = Persistence.createEntityManagerFactory("L2LPU",
+                br.cefetmg.lsi.l2l.creature.bd.JpaPersister.jdbcUrlOverride()).createEntityManager();
     }
 
     public void init() {

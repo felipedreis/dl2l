@@ -210,7 +210,8 @@ public class Holder extends AbstractActor implements Registrable {
             creatures.remove(id);
 
             if(creatures.isEmpty()) {
-                EntityManager em = Persistence.createEntityManagerFactory("L2LPU")
+                EntityManager em = Persistence.createEntityManagerFactory("L2LPU",
+                        br.cefetmg.lsi.l2l.creature.bd.JpaPersister.jdbcUrlOverride())
                         .createEntityManager();
 
                 DataAnalyser analyser = new DataAnalyser(em,  saveDir);

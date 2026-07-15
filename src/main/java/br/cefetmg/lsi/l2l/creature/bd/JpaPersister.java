@@ -25,8 +25,14 @@ public final class JpaPersister implements Persister {
      * instances on CCAD, which share the host's network namespace and use localhost/a
      * per-role port instead of Docker's per-container DNS) point at their actual postgres
      * address without touching persistence.xml. Unset -> identical to today's hardcoded URL.
+     *
+     * CONFIRMED LIVE: every "L2LPU" createEntityManagerFactory call site must use this —
+     * Holder, CreatureActor, BDActor, MemoryConsolidator and MemoryTraceConsolidator each
+     * had their own uncovered call that silently ignored DL2L_DB_URL and always hit the
+     * hardcoded dl2l-db hostname, which crashed creature persistence outright on CCAD
+     * (no dl2l-db DNS entry there).
      */
-    private static Map<String, Object> jdbcUrlOverride() {
+    public static Map<String, Object> jdbcUrlOverride() {
         Map<String, Object> overrides = new HashMap<>();
         String dbUrl = System.getenv("DL2L_DB_URL");
         if (dbUrl != null && !dbUrl.isEmpty()) {

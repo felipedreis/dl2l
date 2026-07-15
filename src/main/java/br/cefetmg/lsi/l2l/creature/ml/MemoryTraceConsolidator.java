@@ -42,7 +42,8 @@ public class MemoryTraceConsolidator extends UntypedActor {
 
     private final long creatureKey;
     private MemorySystem memory;
-    private final EntityManager em = Persistence.createEntityManagerFactory("L2LPU").createEntityManager();
+    private final EntityManager em = Persistence.createEntityManagerFactory("L2LPU",
+            br.cefetmg.lsi.l2l.creature.bd.JpaPersister.jdbcUrlOverride()).createEntityManager();
 
     public MemoryTraceConsolidator(long creatureKey) {
         this.creatureKey = creatureKey;

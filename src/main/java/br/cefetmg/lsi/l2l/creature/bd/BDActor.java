@@ -4,7 +4,6 @@ import akka.actor.PoisonPill;
 import akka.actor.UntypedActor;
 
 import javax.persistence.EntityManager;
-import javax.persistence.Persistence;
 import java.util.List;
 import java.util.logging.Logger;
 
@@ -13,7 +12,7 @@ import java.util.logging.Logger;
  */
 public class BDActor extends UntypedActor {
 
-    private EntityManager em = Persistence.createEntityManagerFactory("L2LPU").createEntityManager();
+    private EntityManager em;
 
     private Logger logger = Logger.getLogger(BDActor.class.getSimpleName());
 

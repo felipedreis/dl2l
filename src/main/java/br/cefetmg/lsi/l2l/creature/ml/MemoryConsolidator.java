@@ -89,7 +89,8 @@ public class MemoryConsolidator extends UntypedActor {
     private final AtomicBoolean abortFlag = new AtomicBoolean(false);
     private CompletableFuture<?> consolidationTask;
 
-    private final EntityManager em = Persistence.createEntityManagerFactory("L2LPU").createEntityManager();
+    private final EntityManager em = Persistence.createEntityManagerFactory("L2LPU",
+            br.cefetmg.lsi.l2l.creature.bd.JpaPersister.jdbcUrlOverride()).createEntityManager();
 
     public MemoryConsolidator(long creatureKey) {
         this.creatureKey = creatureKey;
