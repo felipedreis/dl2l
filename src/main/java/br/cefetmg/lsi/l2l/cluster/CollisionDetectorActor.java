@@ -67,7 +67,7 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
                     geometrySourceProvider.updateCreature(geometry);
                 })
                 .match(WorldObjectPositioningAttr.class, attr -> {
-                    logger.info("Received a world object positioning attribute update");
+                    logger.fine("Received a world object positioning attribute update");
 
                     ObjectGeometry geometry = new ObjectGeometry(attr);
                     objectAttrs.put(attr.id, geometry);
@@ -75,7 +75,7 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
                     geometrySourceProvider.updateObject(geometry);
                 })
                 .match(SequentialId.class, id -> {
-                    logger.info("A world object or creature (" + id + ") was removed");
+                    logger.fine("A world object or creature (" + id + ") was removed");
 
                     if(objectAttrs.containsKey(id)) {
                         ObjectGeometry geometry = objectAttrs.remove(id);
@@ -132,7 +132,7 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
                     geom.noseRef.tell(new SmellStimulus(obj.id, null, obj.type, obj.point), ActorRef.noSender());
                 }
             });
-            logger.info("Elapsed time: %d".formatted(System.currentTimeMillis() - time));
+            logger.fine("Elapsed time: %d".formatted(System.currentTimeMillis() - time));
         } catch (Exception ex) {
             logger.log(Level.WARNING, ex.getMessage(), ex);
         }

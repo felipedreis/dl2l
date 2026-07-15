@@ -1,0 +1,7 @@
+---
+# `sbatch --wait` itself blocks until every array task in a condition's job
+# finishes, so this async ceiling is a safety net (in case sbatch's own
+# --wait misbehaves or hangs), not the primary wait mechanism — mirrors
+# trial_runner_local's holder_wait_async/poll pattern for consistency.
+slurm_wait_async: 43200   # 12h ceiling per condition's whole array
+slurm_wait_poll: 60

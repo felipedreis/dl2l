@@ -1,0 +1,57 @@
+---
+# Loads experiments/<experiment>.yml into the `experiment_cfg` fact and
+# validates it with scripts/validate_experiment.py before any infrastructure
+# is touched.
+#
+# NOTE: the extra-var is `experiment` (a plain string, e.g. -e experiment=smoke).
+# Extra-vars have the highest precedence in Ansible, so the parsed spec is
+# deliberately stored under a *different* fact name (`experiment_cfg`) —
+# `set_fact: experiment: {...}` would silently be ignored otherwise.
+- name: Require experiment extra-var
+  ansible.builtin.assert:
+    that:
+      - experiment is defined
+      - experiment | length > 0
+    fail_msg: >-
+      Pass -e experiment=<name> (matching a file in experiments/<name>.yml)
+
+- name: Compute experiment spec path
+  ansible.builtin.set_fact:
+    experiment_spec_path: "{{ repo_root }}/experiments/{{ experiment }}.yml"
+
+- name: Validate experiment spec
+  # delegate_to: localhost because this role is included from plays that
+  # target remote hosts (e.g. the pi/cefet "runner" group) — the spec file
+  # and validator only exist on the control machine's repo checkout, and
+  # `command` otherwise executes on whatever host the enclosing play targets.
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ repo_root }}/scripts/validate_experiment.py"
+      - "{{ experiment_spec_path }}"
+  delegate_to: localhost
+  changed_when: false
+
+- name: Load experiment spec
+  ansible.builtin.set_fact:
+    _experiment_raw: "{{ lookup('ansible.builtin.file', experiment_spec_path) | from_yaml }}"
+
+- name: Apply experiment spec defaults
+  ansible.builtin.set_fact:
+    experiment_cfg: "{{ _experiment_raw | combine({
+        'image': {'source': 'build'} | combine(_experiment_raw.image | default({})),
+        'extract': {'format': 'parquet', 'backup': true, 'tables': 'all'} | combine(_experiment_raw.extract | default({})),
+        'upload': {'enabled': true, 'repo': 'felipedreis/dl2l-experiments', 'prefix': _experiment_raw.name} | combine(_experiment_raw.upload | default({})),
+        'training': _experiment_raw.training | default(None),
+      }, recursive=True) }}"
+
+- name: Resolve absolute data_dir
+  ansible.builtin.set_fact:
+    experiment_data_dir: "{{ repo_root }}/{{ experiment_cfg.data_dir }}"
+
+- name: Report loaded experiment
+  ansible.builtin.debug:
+    msg: >-
+      experiment={{ experiment_cfg.name }} env={{ dl2l_env }}
+      conditions={{ experiment_cfg.conditions | map(attribute='key') | list }}
+      trials={{ experiment_cfg.trials }} data_dir={{ experiment_data_dir }}

@@ -1,0 +1,52 @@
+#!/bin/bash
+# {{ ansible_managed | default("Rendered by ansible/roles/trial_runner_pi — do not edit by hand.") }}
+#
+# SLURM array job body for one DL2L trial on the Raspberry Pi cluster.
+# Submitted once per condition via:
+#   sbatch --wait --array=1-<trials> --exclusive --export=ALL,EXPERIMENT=...,
+#          CONDITION=...,SIMULATION=...,DL2L_IMAGE=...,SHARED_FS=... {{ shared_fs }}/jobs/dl2l_trial.sh
+#
+# Mirrors scripts/run_exp_p7_pi.sh's per-trial semantics (down -> up -> wait
+# -> extract -> down) but runs node-side under SLURM instead of over SSH from
+# the Mac, and delegates the backup/extract step entirely to
+# dl2l_data.extract (Phase 1) instead of a separate manual pg_dump.
+#SBATCH --nodes=1
+#SBATCH --exclusive
+set -euo pipefail
+
+# Injected by sbatch --export: EXPERIMENT CONDITION SIMULATION DL2L_IMAGE SHARED_FS
+: "${EXPERIMENT:?}" "${CONDITION:?}" "${SIMULATION:?}" "${DL2L_IMAGE:?}" "${SHARED_FS:?}"
+
+TRIAL="${SLURM_ARRAY_TASK_ID:?dl2l_trial.sh must be run as a SLURM array task}"
+PROJ="exp_${EXPERIMENT}_${CONDITION}_t${TRIAL}"
+COMPOSE="{{ shared_fs }}/config/docker-compose.{{ experiment_cfg.name }}.yml"
+OUT="${SHARED_FS}/data/${EXPERIMENT}"
+export SIMULATION
+
+dc() { sudo -E docker compose -p "$PROJ" -f "$COMPOSE" "$@"; }
+
+# Backstop teardown in case anything below fails; the happy path tears down
+# explicitly at the end, after extraction (which includes its own pg_dump
+# backup) has already completed.
+trap 'dc down -v --remove-orphans >/dev/null 2>&1 || true' EXIT
+
+dc down -v --remove-orphans >/dev/null 2>&1 || true
+dc up -d
+
+HOLDER_ID=$(dc ps -q dl2l-holder)
+DB_ID=$(dc ps -q dl2l-db)
+
+sudo docker wait "$HOLDER_ID"
+
+mkdir -p "${OUT}/${CONDITION}"
+PYTHONPATH="${SHARED_FS}/scripts" python3 -m dl2l_data.extract \
+    --experiment "$EXPERIMENT" \
+    --condition "$CONDITION" \
+    --trial "$TRIAL" \
+    --out "$OUT" \
+    --container "$DB_ID" \
+    --docker-cmd "sudo docker" \
+    --format {{ experiment_cfg.extract.format }}{% if not experiment_cfg.extract.backup %} \
+    --skip-backup{% endif %}
+
+dc down -v

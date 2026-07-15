@@ -232,7 +232,7 @@ public class FullAppraisal extends CreatureComponent {
                 action.perception, cognitiveCycle);
         memorySystem.addShortTermMemory(stm);
 
-        logger.info(String.format("FullAppraisal[%s]: selected=%s for=%s angle=%.3f dist=%.1f",
+        logger.fine(String.format("FullAppraisal[%s]: selected=%s for=%s angle=%.3f dist=%.1f",
                 id, action.type, action.perception.objectType,
                 action.perception.angle, action.perception.distance));
     }
@@ -277,7 +277,7 @@ public class FullAppraisal extends CreatureComponent {
                 sleepEpisode.batchTickCount = 0;
             }
             if (sleepEpisode.onSleepTick(cognitiveCycle)) {
-                logger.info(String.format("FullAppraisal[%s]: SLEEP onset at cycle %d", id, cognitiveCycle));
+                logger.fine(String.format("FullAppraisal[%s]: SLEEP onset at cycle %d", id, cognitiveCycle));
                 creature.memoryConsolidator().tell(new SleepStarted(cognitiveCycle));
             }
         } else if (sleepEpisode.isActive()) {
@@ -285,14 +285,14 @@ public class FullAppraisal extends CreatureComponent {
                 creature.homeostatic().tell(new CholinergicStimulus(id, nextStimulusId(),
                         sleepEpisode.batchTickCount * Constants.CHOLINERGIC_DELTA));
             }
-            logger.info(String.format("FullAppraisal[%s]: WAKE after %d sleep cycles at cycle %d",
+            logger.fine(String.format("FullAppraisal[%s]: WAKE after %d sleep cycles at cycle %d",
                     id, sleepEpisode.dwellTicks, cognitiveCycle));
             persist(new SleepEpisodeState(id.key, sleepEpisode.onsetCycle, cognitiveCycle, sleepEpisode.dwellTicks));
             sleepEpisode.onWake();
         }
 
         CorticalStimulus cortical = produceCortical(action, behaviouralEfficiency);
-        logger.info(String.format("FullAppraisal[%s]: cortical angle=%.3f speed=%.3f",
+        logger.fine(String.format("FullAppraisal[%s]: cortical angle=%.3f speed=%.3f",
                 id, cortical.angle, cortical.speed));
         return cortical;
     }

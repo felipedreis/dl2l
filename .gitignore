@@ -16,6 +16,14 @@ __pycache__/
 data/
 ml/data/
 ml/checkpoints/
+# Ansible per-run scratch state (rendered docker-compose.yml, etc.)
+ansible/.run/
+
+# Local secrets/PII — never commit (e.g. CCAD_USERNAME, a CPF)
+.env.local
+.env.*.local
+.env
+
 # Ignore raw Java/IDE project files
 .classpath
 .project

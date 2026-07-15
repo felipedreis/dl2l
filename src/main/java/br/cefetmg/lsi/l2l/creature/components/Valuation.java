@@ -80,7 +80,7 @@ public class Valuation extends CreatureComponent {
     private void evaluateLegacy(EvaluationStimulus evaluation) {
         boolean valence = evaluation.arousalVariation < 0;
 
-        logger.info(String.format("Valuation[%s]: action=%s type=%s arousalVariation=%.3f valence=%s",
+        logger.fine(String.format("Valuation[%s]: action=%s type=%s arousalVariation=%.3f valence=%s",
                 id, evaluation.executedAction, evaluation.type,
                 evaluation.arousalVariation, valence ? "positive" : "negative"));
 
@@ -109,7 +109,7 @@ public class Valuation extends CreatureComponent {
         creature.neuromodulators().tell(new DopaminergicStimulus(
                 id, nextStimulusId(), rpe, evaluation.type, evaluation.executedAction));
 
-        logger.info(String.format(
+        logger.fine(String.format(
                 "Valuation[%s]: action=%s type=%s drive=%s level=%.3f reward=%.3f expected=%.3f rpe=%.3f",
                 id, evaluation.executedAction, evaluation.type, ctx.dominantDriveName(),
                 ctx.dominantDriveLevel(), reward, expected, rpe));

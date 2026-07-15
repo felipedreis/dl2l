@@ -1,0 +1,52 @@
+---
+# One-time (idempotent) setup for the Raspberry Pi SLURM+Docker cluster.
+# Run once before the first `run-experiment.yml -i inventories/pi`, and
+# again any time a new node joins the cluster.
+#
+# Usage:
+#   cd ansible && ansible-playbook -i inventories/pi provision-pi.yml
+
+- name: Install Python parquet/pandas deps on all Pi nodes
+  hosts: pi_nodes
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Install pandas + pyarrow (dl2l_data.extract runs node-side here)
+      ansible.builtin.pip:
+        name: [pandas, pyarrow]
+        executable: pip3
+      # NOTE: recent Raspberry Pi OS (Bookworm+) marks the system Python as
+      # "externally managed" (PEP 668) and this task will fail with that
+      # error until either `--break-system-packages` is added here or
+      # pandas/pyarrow are installed into a venv on the image instead. Left
+      # as a known follow-up since it depends on the actual OS image in use
+      # on each node — untested against live hardware in this session.
+
+- name: Create the shared filesystem directory tree (once, from the controller)
+  hosts: runner
+  gather_facts: false
+  tasks:
+    - name: "Ensure {{ shared_fs }}/{jobs,logs,data,config,scripts} exist"
+      ansible.builtin.file:
+        path: "{{ shared_fs }}/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: [jobs, logs, data, config, scripts]
+
+- name: Verify the private docker registry is reachable from every worker
+  hosts: workers
+  gather_facts: false
+  tasks:
+    - name: "GET http://{{ registry }}/v2/"
+      ansible.builtin.uri:
+        url: "http://{{ registry }}/v2/"
+        status_code: [200, 401]
+      register: _registry_check
+      failed_when: false
+
+    - name: Report registry reachability
+      ansible.builtin.debug:
+        msg: >-
+          registry {{ registry }}:
+          {{ 'reachable' if (_registry_check.status | default(0)) in [200, 401]
+              else 'UNREACHABLE (status=' + (_registry_check.status | default('n/a') | string) + ')' }}

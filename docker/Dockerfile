@@ -8,6 +8,15 @@ COPY simulations/ ./simulations/
 COPY target/l2l-*-wd.jar ./dl2l.jar
 COPY scripts/run-dl2l.sh ./
 
+# Fixed, absolute cache dir (not $HOME-relative) so it's found at runtime
+# regardless of which uid/$HOME the container actually runs under. Warming
+# it here (build time, has internet) means the running container never
+# needs to reach publish.djl.ai itself — required on hosts with no outbound
+# internet (e.g. CCAD compute nodes; see DjlCacheWarmup's javadoc).
+ENV DJL_CACHE_DIR "/opt/djl-cache"
+RUN java -cp dl2l.jar br.cefetmg.lsi.l2l.creature.ml.DjlCacheWarmup \
+    && find /opt/djl-cache -type f
+
 ENV HOST "localhost"
 ENV PORT "2551"
 ENV ROLE ""

@@ -1,0 +1,94 @@
+---
+# Loads training/<training>.yml into the `training_cfg` fact, resolves the
+# referenced source_experiment's data_dir, and validates both with
+# scripts/validate_training.py before any infrastructure is touched.
+#
+# NOTE: the extra-var is `training` (a plain string, e.g. -e training=smoke).
+# Mirrors experiment_spec's naming: the parsed spec goes into a *different*
+# fact (`training_cfg`), since the `training` extra-var itself takes
+# precedence and a same-named set_fact would be silently ignored.
+- name: Require training extra-var
+  ansible.builtin.assert:
+    that:
+      - training is defined
+      - training | length > 0
+    fail_msg: >-
+      Pass -e training=<name> (matching a file in training/<name>.yml)
+
+- name: Compute training spec path
+  ansible.builtin.set_fact:
+    training_spec_path: "{{ repo_root }}/training/{{ training }}.yml"
+
+- name: Validate training spec
+  # delegate_to: localhost — same reasoning as experiment_spec's equivalent
+  # task: the spec file and validator only exist on the control machine, and
+  # this role is included from plays that may target a remote runner (cefet).
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ repo_root }}/scripts/validate_training.py"
+      - "{{ training_spec_path }}"
+  delegate_to: localhost
+  changed_when: false
+
+- name: Load training spec
+  ansible.builtin.set_fact:
+    _training_raw: "{{ lookup('ansible.builtin.file', training_spec_path) | from_yaml }}"
+
+- name: Apply training spec defaults
+  ansible.builtin.set_fact:
+    training_cfg: "{{ _training_raw | combine({
+        'prepared_dir': _training_raw.prepared_dir | default('ml/data_prepared_' + _training_raw.name),
+        'ckpt_dir': _training_raw.ckpt_dir | default('ml/checkpoints_' + _training_raw.name),
+        'variants': _training_raw.variants | default(['single', 'dual', 'internal_critic', 'internal_predictor', 'unified_critic']),
+        'epochs': _training_raw.epochs | default(100),
+        'hyperparams': _training_raw.hyperparams | default({}),
+        'upload': {'enabled': true, 'repo': 'felipedreis/dl2l-jepa', 'data_repo': 'felipedreis/dl2l-experiments', 'data_prefix': _training_raw.source_experiment} | combine(_training_raw.upload | default({})),
+      }, recursive=True) }}"
+
+- name: Resolve absolute prepared/ckpt dirs
+  ansible.builtin.set_fact:
+    training_prepared_dir: "{{ repo_root }}/{{ training_cfg.prepared_dir }}"
+    training_ckpt_dir: "{{ repo_root }}/{{ training_cfg.ckpt_dir }}"
+
+- name: Load source experiment spec (for its data_dir)
+  # `lookup('file', ...)` always executes on the control machine regardless
+  # of which host this role is included from — no delegate_to needed here.
+  # Only reads the raw YAML for `data_dir`; does not replicate
+  # experiment_spec's full defaulting logic, since that's all training needs.
+  #
+  # NOTE: if source_experiment uses a `cond_dir` override (see
+  # experiments/README.md), only the primary `data_dir` is searched —
+  # prepare_dataset.py takes a single --data root. A split-data experiment
+  # would need its historical data consolidated into one directory first.
+  ansible.builtin.set_fact:
+    _source_experiment_raw: "{{ lookup('ansible.builtin.file', repo_root + '/experiments/' + training_cfg.source_experiment + '.yml') | from_yaml }}"
+
+- name: Resolve source experiment data_dir
+  ansible.builtin.set_fact:
+    training_source_data_dir: "{{ repo_root }}/{{ _source_experiment_raw.data_dir }}"
+
+- name: Ensure the source experiment's data has actually been collected
+  delegate_to: localhost
+  ansible.builtin.stat:
+    path: "{{ training_source_data_dir }}"
+  register: _source_data_stat
+
+- name: Fail if source data is missing
+  ansible.builtin.assert:
+    that:
+      - _source_data_stat.stat.exists
+      - _source_data_stat.stat.isdir
+    fail_msg: >-
+      source_experiment '{{ training_cfg.source_experiment }}' has no data at
+      {{ training_source_data_dir }} — run the data-collection experiment
+      first: cd ansible && ansible-playbook -i inventories/<env>
+      run-experiment.yml -e experiment={{ training_cfg.source_experiment }}
+
+- name: Report loaded training spec
+  ansible.builtin.debug:
+    msg: >-
+      training={{ training_cfg.name }} env={{ dl2l_env }}
+      source_experiment={{ training_cfg.source_experiment }}
+      variants={{ training_cfg.variants }} epochs={{ training_cfg.epochs }}
+      prepared_dir={{ training_prepared_dir }}

@@ -1,0 +1,85 @@
+---
+# Runs on the "runner" host (the SLURM controller, 192.168.1.200). Deploys
+# shared assets onto {{ shared_fs }} and drives one SLURM array job per
+# condition. dl2l_trial.sh extracts data locally on whichever node runs each
+# trial (straight onto the shared filesystem), so this role does no per-trial
+# extraction itself — only submission and the final sync back to the mac.
+
+- name: "Ensure {{ shared_fs }}/{jobs,logs,data,config,scripts} exist"
+  ansible.builtin.file:
+    path: "{{ shared_fs }}/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: [jobs, logs, data, config, scripts]
+
+- name: Render docker-compose.yml onto the shared filesystem
+  ansible.builtin.template:
+    src: "{{ role_path }}/../common/templates/docker-compose.yml.j2"
+    dest: "{{ shared_fs }}/config/docker-compose.{{ experiment_cfg.name }}.yml"
+    mode: "0644"
+  vars:
+    holder_combines_detector: "{{ experiment_cfg.holder_combines_detector | default(false) }}"
+
+- name: Copy init-db.sql and docker-config.conf onto the shared filesystem
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/config/{{ item }}"
+    dest: "{{ shared_fs }}/config/{{ item }}"
+    mode: "0644"
+  loop:
+    - init-db.sql
+    - docker-config.conf
+
+- name: Render the SLURM job script onto the shared filesystem
+  ansible.builtin.template:
+    src: dl2l_trial.sh.j2
+    dest: "{{ shared_fs }}/jobs/dl2l_trial.sh"
+    mode: "0755"
+
+- name: Sync scripts/dl2l_data/ onto the shared filesystem
+  # rsync (not `copy`) because dl2l_data/ picks up __pycache__ and future
+  # growth; idempotent and only ships deltas, matching run_exp_p7_pi.sh's
+  # existing reliance on rsync between the controller and worker nodes.
+  ansible.posix.synchronize:
+    src: "{{ repo_root }}/scripts/dl2l_data/"
+    dest: "{{ shared_fs }}/scripts/dl2l_data/"
+    recursive: true
+    delete: true
+
+- name: Submit one SLURM array job per condition
+  ansible.builtin.command:
+    argv: >-
+      {{ [
+        'sbatch', '--wait',
+        '--array=1-' + (experiment_cfg.trials | string),
+        '--exclusive',
+        '--job-name=dl2l_' + experiment_cfg.name + '_' + item.key,
+        '--output=' + shared_fs + '/logs/%x_%A_%a.out',
+        '--export=ALL,EXPERIMENT=' + experiment_cfg.name + ',CONDITION=' + item.key +
+          ',SIMULATION=' + item.simulation + ',DL2L_IMAGE=' + dl2l_image +
+          ',SHARED_FS=' + shared_fs,
+        shared_fs + '/jobs/dl2l_trial.sh'
+      ] }}
+  loop: "{{ experiment_cfg.conditions }}"
+  loop_control:
+    label: "{{ item.key }}"
+  async: "{{ slurm_wait_async }}"
+  poll: "{{ slurm_wait_poll }}"
+  changed_when: true
+
+- name: "Sync {{ shared_fs }}/data/{{ experiment_cfg.name }}/ back to the macbook"
+  # mode: pull -> src is interpreted on the play's target host (the
+  # controller, a remote host from the mac's point of view), dest on the
+  # ansible control machine (this mac) — exactly the direction we want, no
+  # delegate_to needed (synchronize always executes rsync from the control
+  # node regardless of which host the enclosing task nominally targets).
+  ansible.posix.synchronize:
+    mode: pull
+    src: "{{ shared_fs }}/data/{{ experiment_cfg.name }}/"
+    dest: "{{ experiment_data_dir }}/"
+    recursive: true
+
+- name: Mark experiment as finished (pi runs always complete within one invocation)
+  delegate_to: localhost
+  delegate_facts: true
+  ansible.builtin.set_fact:
+    experiment_finished: true

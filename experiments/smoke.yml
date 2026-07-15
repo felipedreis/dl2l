@@ -1,0 +1,27 @@
+# Verification workhorse for the ansible/dl2l_data pipeline itself — not a
+# real scientific experiment. Uses simulations/exp_p58_smoke.conf (small,
+# fast world) with a fresh data_dir so it never clobbers real data.
+name: smoke
+
+trials: 2
+
+conditions:
+  - key: smoke
+    simulation: simulations/exp_p58_smoke.conf
+    label: Smoke
+    color: "#333333"
+
+image:
+  source: build
+
+data_dir: ml/data_p58_smoke_v2
+
+extract:
+  format: parquet
+  backup: true
+  tables: all
+
+upload:
+  enabled: true
+  repo: felipedreis/dl2l-experiments
+  prefix: smoke_ci

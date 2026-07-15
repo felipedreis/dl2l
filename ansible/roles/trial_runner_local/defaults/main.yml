@@ -1,0 +1,3 @@
+---
+holder_wait_async: 21600   # 6h ceiling per trial; simulations run up to ~120min
+holder_wait_poll: 30

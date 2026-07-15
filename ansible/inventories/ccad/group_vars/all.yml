@@ -1,0 +1,64 @@
+---
+dl2l_env: ccad
+
+# Repo root, resolved relative to this playbook's location on the control
+# machine (the macbook running ansible-playbook) — NOT a path on the cluster.
+repo_root: "{{ playbook_dir | dirname }}"
+
+# GPU partition — 4x NVIDIA L40S 48GB across nodes c1/c2, max 2 GPUs/user,
+# 2-day time cap. See https://www.ccad.cefetmg.br/guia/ (training only)
+ccad_partition: gpu
+ccad_qos: gpu_qos
+ccad_gres: "gpu:1"
+
+# CPU partitions (dev/short/normal/long/extended, nodes c1-c11) — for running
+# simulations (pure CPU/JVM work, no GPU needed). Distinct from the
+# training-only ccad_partition/ccad_qos/ccad_gres above.
+# CONFIRMED LIVE: the guide didn't list a required qos per CPU partition, but
+# there is one — a job submitted to `short` with no --qos pended forever
+# ("Job's QOS not permitted to use this partition (short allows
+# short_qos,priority_qos not dev_qos)" — the account's default qos, dev_qos,
+# isn't valid there).
+ccad_sim_partition: short
+ccad_sim_qos: short_qos
+
+# --exclusive was dropped (see run_trial.sh.j2's KNOWN FOLLOW-UP note), so
+# every trial requests a modest fixed CPU count instead of a whole node.
+# --time is a wall-clock cap on top of the simulation's own in-conf
+# maxRuntimeMinutes — generous margin for JVM/postgres startup + extraction,
+# well under the `short` partition's own 24h MaxTime. Bumped from 2h to 3h
+# alongside maxRuntimeMinutes going 40->60 in
+# simulations/20260714_memory_vs_wm_dense_reposition_*.conf, to keep the
+# same proportional margin over run_trial.sh.j2's ~90 min wait-loop ceiling.
+ccad_sim_cpus: 6
+ccad_sim_time: "03:00:00"
+
+remote_work_dir: "l2l"   # relative to the login user's $HOME (shared NFS)
+
+# No local docker daemon on CCAD — images come from GHCR (CI pushes here on
+# every push to main, see .github/workflows/cd.yml), pulled as a Singularity
+# SIF by roles/image_ccad.
+#
+# STOPGAP (revert to :latest once the pom.xml DJL-classifier fix — see
+# docs/plans/ccad-singularity-experiments.md's 2026-07-14/15 update — lands
+# on main via the normal CI path): :latest was built with the wrong DJL
+# PyTorch native-library classifier, which crashes every Holder on CCAD
+# specifically (no internet to fall back to a runtime download). This tag
+# was built+pushed manually with the fix and isn't tracked by CI.
+dl2l_image: "ghcr.io/felipedreis/dl2l:ccad-djl-fix"
+
+# The conda env created once by provision-ccad.yml (module load miniforge3;
+# $HOME/.conda/envs/ is on shared NFS, so this is visible on compute nodes
+# too without needing network access at job runtime).
+ccad_conda_env: dl2l-jepa
+ccad_python_activate: "module load miniforge3 && conda activate {{ ccad_conda_env }}"
+
+# Headless cluster — no UI port to publish (unlike inventories/local).
+publish_ui: false
+
+# CCAD username: read once from a gitignored .env.local at the repo root
+# (CCAD_USERNAME=<cpf-no-punctuation> — see .gitignore; NEVER commit that
+# file, it's PII). Override per-invocation with -e ccad_user=<cpf> instead
+# if you'd rather not use .env.local (extra-vars take precedence over this
+# group_var automatically). NEVER print this value in any debug/report task.
+ccad_user: "{{ (lookup('ansible.builtin.file', repo_root + '/.env.local', errors='ignore') | default('', true)) | regex_findall('^CCAD_USERNAME=(.+)$', multiline=True) | first | default('', true) }}"

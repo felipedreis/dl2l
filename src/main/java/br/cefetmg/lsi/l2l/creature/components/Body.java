@@ -35,7 +35,7 @@ public class Body extends CreatureComponent{
                 Point nextPosition = currentPosition.move(speedVector);
                 creature.setPosition(nextPosition);
 
-                logger.info(String.format("Body[%s]: angle=%.3f speed=%.3f  (%.1f,%.1f)->(%.1f,%.1f)  vec(%.3f,%.3f)",
+                logger.fine(String.format("Body[%s]: angle=%.3f speed=%.3f  (%.1f,%.1f)->(%.1f,%.1f)  vec(%.3f,%.3f)",
                         id, muscular.angle, muscular.speed,
                         currentPosition.x, currentPosition.y, nextPosition.x, nextPosition.y,
                         speedVector.x, speedVector.y));

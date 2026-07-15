@@ -89,7 +89,8 @@ public class MemoryConsolidator extends UntypedActor {
     private final AtomicBoolean abortFlag = new AtomicBoolean(false);
     private CompletableFuture<?> consolidationTask;
 
-    private final EntityManager em = Persistence.createEntityManagerFactory("L2LPU").createEntityManager();
+    private final EntityManager em = Persistence.createEntityManagerFactory("L2LPU",
+            br.cefetmg.lsi.l2l.creature.bd.JpaPersister.jdbcUrlOverride()).createEntityManager();
 
     public MemoryConsolidator(long creatureKey) {
         this.creatureKey = creatureKey;
@@ -190,7 +191,7 @@ public class MemoryConsolidator extends UntypedActor {
         long onsetCycle = msg.onsetCycle();
         List<Engram> engrams = memory.getRecentEngrams(Constants.CONSOLIDATION_WINDOW);
         if (engrams.isEmpty()) {
-            logger.info("MemoryConsolidator[" + creatureKey + "]: sleep started but no engrams, skipping");
+            logger.fine("MemoryConsolidator[" + creatureKey + "]: sleep started but no engrams, skipping");
             // Persist a zero-batch skipped episode so analysis can detect skip events.
             ConsolidationEpisodeStat skipped = new ConsolidationEpisodeStat(
                     creatureKey, onsetCycle, 0, 0.0, 0.0, 0, true);
@@ -205,7 +206,7 @@ public class MemoryConsolidator extends UntypedActor {
         abortFlag.set(false);
         ActorRef me = self();
 
-        logger.info(String.format(
+        logger.fine(String.format(
                 "MemoryConsolidator[%d]: consolidating %d engrams (mean_elig=%.3f std_elig=%.3f)",
                 creatureKey, engrams.size(), meanElig, stdElig));
 
@@ -217,7 +218,7 @@ public class MemoryConsolidator extends UntypedActor {
                         logger.log(Level.WARNING,
                                 "MemoryConsolidator[" + creatureKey + "]: consolidation failed", ex);
                     } else {
-                        logger.info(String.format(
+                        logger.fine(String.format(
                                 "MemoryConsolidator[%d]: consolidation %s, batches=%d",
                                 creatureKey,
                                 result.episode().isAborted() ? "aborted" : "complete",
@@ -229,7 +230,7 @@ public class MemoryConsolidator extends UntypedActor {
 
     private void handleWakeUp() {
         abortFlag.set(true);
-        logger.info("MemoryConsolidator[" + creatureKey + "]: wake-up signalled, aborting after current batch");
+        logger.fine("MemoryConsolidator[" + creatureKey + "]: wake-up signalled, aborting after current batch");
     }
 
     private void persistResult(ConsolidationResult result) {

@@ -1,0 +1,65 @@
+---
+# Directories must exist BEFORE rsync runs — confirmed live: rsync doesn't
+# create a destination file's parent dir on its own (it only auto-creates
+# the leaf directory of a directory-to-directory sync, and only once its
+# own parent already exists), so syncing straight into a fresh
+# remote_work_dir failed with "No such file or directory" until this task
+# was moved ahead of it.
+- name: "Ensure {{ remote_work_dir }}/{config,jobs,logs,scripts,data/<experiment>} exist"
+  ansible.builtin.file:
+    path: "{{ remote_work_dir }}/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - config
+    - jobs
+    - logs
+    - scripts
+    - "data/{{ experiment_cfg.name }}"
+
+- name: Sync config and scripts to the login node
+  ansible.posix.synchronize:
+    src: "{{ item.src }}"
+    dest: "{{ remote_work_dir }}/{{ item.dest }}"
+  loop:
+    - { src: "{{ repo_root }}/config/init-db.sql", dest: "config/init-db.sql" }
+    - { src: "{{ repo_root }}/config/ccad-config.conf", dest: "config/ccad-config.conf" }
+    - { src: "{{ repo_root }}/scripts/dl2l_data/", dest: "scripts/dl2l_data/" }
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: Submit one array job per condition
+  ansible.builtin.include_tasks: submit_condition.yml
+  loop: "{{ experiment_cfg.conditions }}"
+  loop_control:
+    loop_var: cond
+    label: "{{ cond.key }}"
+
+- name: Ensure the local .run scratch dir exists
+  delegate_to: localhost
+  ansible.builtin.file:
+    path: "{{ repo_root }}/ansible/.run"
+    state: directory
+    mode: "0755"
+
+- name: Persist the job id mapping locally (for the later rescue run)
+  delegate_to: localhost
+  ansible.builtin.copy:
+    content: "{{ _ccad_job_ids | to_nice_yaml }}"
+    dest: "{{ repo_root }}/ansible/.run/experiment_{{ experiment_cfg.name }}.ccad.jobs"
+    mode: "0644"
+
+- name: Report submission
+  ansible.builtin.debug:
+    msg: >-
+      Submitted {{ _ccad_job_ids | length }} array job(s) on CCAD:
+      {{ _ccad_job_ids }}. This does NOT wait for completion — each array
+      task runs autonomously and writes its own DONE sentinel. Once done (or
+      whenever you're back on the VPN), collect results with:
+        cd ansible && ansible-playbook -i inventories/ccad run-experiment.yml -e experiment={{ experiment_cfg.name }} -e rescue=true
+
+- name: Mark experiment as not finished in this invocation
+  delegate_to: localhost
+  delegate_facts: true
+  ansible.builtin.set_fact:
+    experiment_finished: false

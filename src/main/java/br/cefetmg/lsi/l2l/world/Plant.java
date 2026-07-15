@@ -26,13 +26,13 @@ public class Plant extends WorldObject {
     public void onReceive(Object message) {
         if (message instanceof DestructiveStimulus) {
             if (type.activePain > 0) {
-                logger.info("Plant " + id + " (" + type.name() + ") caused pain on eat");
+                logger.fine("Plant " + id + " (" + type.name() + ") caused pain on eat");
                 sender().tell(
                     new NociceptiveStimulus(id, nextStimulusId(), type.activePain, ActionType.EAT, type),
                     self());
                 // Painful plants (cactus) are permanent — do not self-destruct.
             } else if (type.healAmount > 0) {
-                logger.info("Plant " + id + " (" + type.name() + ") was eaten for healing");
+                logger.fine("Plant " + id + " (" + type.name() + ") was eaten for healing");
                 sender().tell(
                     new AnalgesicStimulus(id, nextStimulusId(), type.healAmount, ActionType.EAT, type),
                     self());

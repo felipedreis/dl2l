@@ -36,18 +36,11 @@ The container must be the name of the running PostgreSQL Docker container.
 
 import argparse
 import csv
-import io
 import os
-import subprocess
 import sys
 
-DB_USER = "postgres"
-DB_NAME = "l2l"
-
-KNOWN_TYPES = [
-    "RED_APPLE", "GREEN_APPLE", "GRAY_APPLE", "ROTTEN_APPLE",
-    "CACTUS", "ALOE", "Self",
-]
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from dl2l_data.db import decode_type_hex, psql_copy  # noqa: E402
 
 # Time bucketing constants matching the Java extractors.
 AROUSAL_TIME_CONST  = 1.0 / 60000.0   # ms → minutes
@@ -59,47 +52,6 @@ NUTRIENTS_TIME_PREC  = 1
 
 ACTION_SELECTION_TYPES = ["AFFORDANCE", "MEMORY", "RANDOM"]
 FRUIT_TYPES = ["RED_APPLE", "GREEN_APPLE", "GRAY_APPLE", "ROTTEN_APPLE"]
-
-
-def psql_copy(container: str, sql: str) -> list:
-    """Run COPY (<sql>) TO STDOUT WITH CSV HEADER via docker exec stdin.
-    Returns a list of rows (first row = header strings), empty list on error.
-    """
-    copy = f"COPY ({sql}) TO STDOUT WITH CSV HEADER;\n"
-    result = subprocess.run(
-        ["docker", "exec", "-i", container,
-         "psql", "-U", DB_USER, "-d", DB_NAME],
-        input=copy, capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        print(f"psql error: {result.stderr.strip()}", file=sys.stderr)
-        return []
-    return list(csv.reader(io.StringIO(result.stdout)))
-
-
-def psql_query(container: str, sql: str) -> list:
-    """Run a plain SELECT (not COPY) and return rows as list-of-lists."""
-    result = subprocess.run(
-        ["docker", "exec", "-i", container,
-         "psql", "-U", DB_USER, "-d", DB_NAME, "-t", "-A", "-F", ","],
-        input=sql + ";\n", capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        print(f"psql error: {result.stderr.strip()}", file=sys.stderr)
-        return []
-    return [line.split(",") for line in result.stdout.strip().splitlines() if line]
-
-
-def decode_type_hex(hex_str: str) -> str:
-    """Decode a Java-serialized WorldObjectType from psql hex output."""
-    try:
-        data = bytes.fromhex(hex_str).decode("latin-1")
-    except Exception:
-        return "UNKNOWN"
-    for name in KNOWN_TYPES:
-        if name in data:
-            return name
-    return "UNKNOWN"
 
 
 def write_csv(path: str, rows: list):

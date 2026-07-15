@@ -1,0 +1,25 @@
+---
+dl2l_env: pi
+
+# Repo root, resolved relative to this playbook's location on the control
+# machine (the macbook running ansible-playbook) — NOT a path on the pi nodes.
+repo_root: "{{ playbook_dir | dirname }}"
+
+# Raspberry Pi SLURM+Docker cluster. The controller (192.168.1.200) doubles
+# as the private docker registry host, the SLURM login/submit node, and the
+# ansible "runner" group; all four nodes mount the same shared filesystem at
+# {{ shared_fs }} (this replaces the old scripts/submit_exp.sh's inconsistent
+# mix of /mnt/dl2l-shared and ~/dl2l-shared — one path, everywhere).
+registry: "192.168.1.200:5000"
+shared_fs: /mnt/dl2l-shared
+
+dl2l_image: "{{ registry }}/dl2l:latest"
+dl2l_config_dir: "{{ shared_fs }}/config"
+
+# Headless cluster nodes — no UI port to publish (unlike inventories/local).
+publish_ui: false
+
+# Placeholder — set to whatever SSH user has passwordless sudo docker access
+# on these nodes (matches the target user scripts/run_exp_p7_pi.sh already
+# assumed via its bare `ssh $NODE` / /home/felipeduarte/... paths).
+ansible_user: felipeduarte

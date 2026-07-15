@@ -1,0 +1,26 @@
+---
+- name: "Check DONE sentinels for {{ cond.key }} ({{ experiment_cfg.trials }} trials)"
+  ansible.builtin.stat:
+    path: "{{ remote_work_dir }}/data/{{ experiment_cfg.name }}/{{ cond.key }}/trial_{{ item }}/DONE"
+  register: _trial_done_stats
+  loop: "{{ range(1, experiment_cfg.trials + 1) | list }}"
+  loop_control:
+    label: "trial_{{ item }}"
+
+- name: "Sync back whatever {{ cond.key }} data exists so far"
+  ansible.posix.synchronize:
+    mode: pull
+    src: "{{ remote_work_dir }}/data/{{ experiment_cfg.name }}/{{ cond.key }}/"
+    dest: "{{ experiment_data_dir }}/{{ cond.key }}/"
+
+- name: "Report status for {{ cond.key }}"
+  ansible.builtin.debug:
+    msg: >-
+      {{ cond.key }}: {{ _trial_done_stats.results | selectattr('stat.exists') | list | length }}/{{ experiment_cfg.trials }}
+      trials done (job {{ _ccad_job_ids[cond.key] | default('?') }}).
+
+- name: "Mark {{ cond.key }} finished if all trials are done"
+  delegate_to: localhost
+  ansible.builtin.set_fact:
+    _finished_conditions: "{{ (_finished_conditions | default([])) + [cond.key] }}"
+  when: (_trial_done_stats.results | selectattr('stat.exists') | list | length) == experiment_cfg.trials

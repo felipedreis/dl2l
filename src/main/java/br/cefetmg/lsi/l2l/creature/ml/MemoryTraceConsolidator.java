@@ -42,7 +42,8 @@ public class MemoryTraceConsolidator extends UntypedActor {
 
     private final long creatureKey;
     private MemorySystem memory;
-    private final EntityManager em = Persistence.createEntityManagerFactory("L2LPU").createEntityManager();
+    private final EntityManager em = Persistence.createEntityManagerFactory("L2LPU",
+            br.cefetmg.lsi.l2l.creature.bd.JpaPersister.jdbcUrlOverride()).createEntityManager();
 
     public MemoryTraceConsolidator(long creatureKey) {
         this.creatureKey = creatureKey;
@@ -78,7 +79,7 @@ public class MemoryTraceConsolidator extends UntypedActor {
     private void handleSleepStarted(SleepStarted msg) {
         List<Engram> engrams = memory.getRecentEngrams(Constants.CONSOLIDATION_WINDOW);
         if (engrams.isEmpty()) {
-            logger.info("MemoryTraceConsolidator[" + creatureKey + "]: no engrams, skipping");
+            logger.fine("MemoryTraceConsolidator[" + creatureKey + "]: no engrams, skipping");
             return;
         }
 
@@ -88,7 +89,7 @@ public class MemoryTraceConsolidator extends UntypedActor {
             memory.addEngram(e);
         }
 
-        logger.info(String.format(
+        logger.fine(String.format(
                 "MemoryTraceConsolidator[%d]: examined %d engrams, consolidated %d groups",
                 creatureKey, engrams.size(), consolidated.size()));
 

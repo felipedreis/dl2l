@@ -1,0 +1,77 @@
+---
+- name: Check for a persisted job id from a prior submission
+  delegate_to: localhost
+  ansible.builtin.stat:
+    path: "{{ repo_root }}/ansible/.run/training_{{ training_cfg.name }}.ccad.job"
+  register: _job_id_stat
+
+- name: Fail clearly if nothing was ever submitted
+  ansible.builtin.fail:
+    msg: >-
+      No job id found at
+      {{ repo_root }}/ansible/.run/training_{{ training_cfg.name }}.ccad.job —
+      -e rescue=true only checks on a job already submitted via
+      `ansible-playbook -i inventories/ccad train-model.yml -e training={{ training_cfg.name }}`
+      (without -e rescue=true). Submit it first.
+  when: not _job_id_stat.stat.exists
+
+- name: Read the persisted job id
+  delegate_to: localhost
+  ansible.builtin.set_fact:
+    ccad_job_id: "{{ lookup('ansible.builtin.file', repo_root + '/ansible/.run/training_' + training_cfg.name + '.ccad.job') }}"
+
+- name: Check for the completion sentinel
+  ansible.builtin.stat:
+    path: "{{ remote_train_dir }}/DONE"
+  register: _done_stat
+
+- name: "Report: still running"
+  ansible.builtin.debug:
+    msg: >-
+      Job {{ ccad_job_id }} has not finished yet (no
+      {{ remote_train_dir }}/DONE sentinel). Check `squeue -u <you>` on the
+      login node, or the log at {{ remote_train_dir }}/slurm-{{ ccad_job_id }}.out.
+      Try -e rescue=true again later.
+  when: not _done_stat.stat.exists
+
+- name: Mark training as still not finished
+  delegate_to: localhost
+  ansible.builtin.set_fact:
+    training_finished: false
+  when: not _done_stat.stat.exists
+
+- name: Read the completion exit code
+  ansible.builtin.slurp:
+    src: "{{ remote_train_dir }}/DONE"
+  register: _done_content
+  when: _done_stat.stat.exists
+
+- name: "Report: finished"
+  ansible.builtin.debug:
+    msg: >-
+      Job {{ ccad_job_id }} finished with exit code
+      {{ (_done_content.content | b64decode).strip() }}
+      ({{ 'success' if (_done_content.content | b64decode).strip() == '0'
+          else 'FAILURE — check slurm-' + ccad_job_id + '.out for what happened' }}).
+      Syncing whatever variants exported successfully back to this Mac.
+  when: _done_stat.stat.exists
+
+- name: Sync exported models back to this Mac (whatever variants completed before finishing/failing)
+  # mode: pull -> src interpreted on the play's target host (the login node,
+  # remote from the mac's point of view), dest on the control machine — no
+  # delegate_to needed (synchronize always executes rsync from the control
+  # node regardless of which host the enclosing task nominally targets).
+  ansible.posix.synchronize:
+    mode: pull
+    src: "{{ remote_train_dir }}/models/{{ variant }}/"
+    dest: "{{ repo_root }}/src/main/resources/models/{{ variant }}/"
+  loop: "{{ training_cfg.variants }}"
+  loop_control:
+    loop_var: variant
+  when: _done_stat.stat.exists
+
+- name: Mark training as finished
+  delegate_to: localhost
+  ansible.builtin.set_fact:
+    training_finished: true
+  when: _done_stat.stat.exists

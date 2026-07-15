@@ -80,8 +80,13 @@ public class PartialAppraisal extends CreatureComponent {
      * record the final action before the creature is removed from the simulation.
      */
     private void checkDeath() {
-        if (emotionalSystem.getMaxDriveArousal().getLevel() >= Constants.MAX_AROUSAL_LEVEL)
+        Emotion dominant = emotionalSystem.getMaxDriveArousal();
+        if (dominant.getLevel() >= Constants.MAX_AROUSAL_LEVEL) {
+            if (metricsExt != null) {
+                metricsExt.incrementCounter("dl2l_creature_deaths_total", "cause", dominant.getName());
+            }
             creature.kill();
+        }
     }
 
     /**
@@ -190,7 +195,7 @@ public class PartialAppraisal extends CreatureComponent {
             metricsExt.setGauge("dl2l_creature_arousal", id.toString(), maxEmotion.getLevel());
         }
 
-        logger.info(String.format("PartialAppraisal[%s]: arousal=%.3f perceptions=%d behaviouralEfficiency=%.3f",
+        logger.fine(String.format("PartialAppraisal[%s]: arousal=%.3f perceptions=%d behaviouralEfficiency=%.3f",
                 id, maxEmotion.getLevel(), perceptions.size(), behaviouralEfficiency));
         perceptions.forEach(p -> logger.fine(String.format("PartialAppraisal[%s]:   perception type=%s angle=%.3f dist=%.1f",
                 id, p.objectType, p.angle, p.distance)));

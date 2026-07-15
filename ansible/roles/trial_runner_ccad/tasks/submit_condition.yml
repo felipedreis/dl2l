@@ -1,0 +1,22 @@
+---
+- name: "Render run_trial.sh for {{ cond.key }}"
+  ansible.builtin.template:
+    src: run_trial.sh.j2
+    dest: "{{ remote_work_dir }}/jobs/run_trial_{{ experiment_cfg.name }}_{{ cond.key }}.sh"
+    mode: "0755"
+
+- name: "Submit the array job for {{ cond.key }} (no --wait — the VPN drops on idle)"
+  # --exclusive was dropped after a live AssocGrpCpuLimit rejection (whole-node
+  # requests exceed this account's CPU grant) — see the KNOWN FOLLOW-UP note
+  # in run_trial.sh.j2 about the resulting same-node port-collision risk.
+  ansible.builtin.command:
+    argv:
+      - sbatch
+      - "--array=1-{{ experiment_cfg.trials }}"
+      - "{{ remote_work_dir }}/jobs/run_trial_{{ experiment_cfg.name }}_{{ cond.key }}.sh"
+  register: _submit
+  changed_when: true
+
+- name: "Parse the submitted job id for {{ cond.key }}"
+  ansible.builtin.set_fact:
+    _ccad_job_ids: "{{ _ccad_job_ids | default({}) | combine({cond.key: (_submit.stdout | regex_search('[0-9]+$'))}) }}"

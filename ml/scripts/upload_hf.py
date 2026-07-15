@@ -1,8 +1,9 @@
 """
 Upload trained models and dataset to Hugging Face Hub.
 
-Uploads all four model variants (single / dual / internal_critic / internal_predictor)
-to the model repo, and the training/validation parquet files to a separate dataset repo.
+Uploads all five model variants (single / dual / internal_critic / internal_predictor /
+unified_critic) to the model repo, and the training/validation parquet files to a
+separate dataset repo.
 
 Usage:
     cd ml
@@ -23,7 +24,7 @@ from pathlib import Path
 from huggingface_hub import HfApi, login
 
 
-VARIANTS = ["single", "dual", "internal_critic", "internal_predictor"]
+VARIANTS = ["single", "dual", "internal_critic", "internal_predictor", "unified_critic"]
 
 
 def parse_args():

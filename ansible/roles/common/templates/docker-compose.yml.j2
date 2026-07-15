@@ -1,0 +1,115 @@
+# {{ ansible_managed | default("Rendered by ansible/roles/common — do not edit by hand.") }}
+# Experiment: {{ experiment_cfg.name }}   Env: {{ dl2l_env }}
+#
+# SIMULATION is deliberately left as a compose-level ${SIMULATION} env-var
+# substitution (not Jinja) so ONE rendered file is reused across every
+# condition/trial in the matrix — the trial runner exports a different
+# SIMULATION value per `docker compose` invocation instead of re-rendering.
+version: "3.1"
+
+services:
+  dl2l-db:
+    image: postgres
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: l2l
+      POSTGRES_INITDB_ARGS: "--auth-host=md5"
+    networks:
+      - dl2l-network
+    volumes:
+      - type: bind
+        source: "{{ dl2l_config_dir }}/init-db.sql"
+        target: /docker-entrypoint-initdb.d/init-db.sql
+        read_only: true
+
+  dl2l-manager:
+    image: "{{ dl2l_image }}"
+    depends_on:
+      - dl2l-db
+    environment:
+      ROLE: "manager,idProvider"
+      SIMULATION: "${SIMULATION:?SIMULATION must be exported before running docker compose}"
+      HOST: "dl2l-manager"
+      PORT: 2551
+    networks:
+      - dl2l-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "dl2l-manager", "2551"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - type: bind
+        source: "{{ dl2l_config_dir }}/docker-config.conf"
+        target: /config/docker-config.conf
+        read_only: true
+
+{% if holder_combines_detector | default(false) %}
+  dl2l-holder:
+    image: "{{ dl2l_image }}"
+    depends_on:
+      dl2l-manager:
+        condition: service_healthy
+    environment:
+      ROLE: "collisionDetector,holder"
+      SIMULATION: "${SIMULATION:?SIMULATION must be exported before running docker compose}"
+      HOST: "dl2l-holder"
+      PORT: "2551"
+    networks:
+      - dl2l-network
+{% if publish_ui | default(false) %}
+    ports:
+      - "8080:8080"
+{% endif %}
+    volumes:
+      - type: bind
+        source: "{{ dl2l_config_dir }}/docker-config.conf"
+        target: /config/docker-config.conf
+        read_only: true
+{% else %}
+  dl2l-detector:
+    image: "{{ dl2l_image }}"
+    depends_on:
+      dl2l-manager:
+        condition: service_healthy
+    environment:
+      ROLE: "collisionDetector"
+      SIMULATION: "${SIMULATION:?SIMULATION must be exported before running docker compose}"
+      HOST: "dl2l-detector"
+      PORT: 2551
+    networks:
+      - dl2l-network
+    volumes:
+      - type: bind
+        source: "{{ dl2l_config_dir }}/docker-config.conf"
+        target: /config/docker-config.conf
+        read_only: true
+
+  dl2l-holder:
+    image: "{{ dl2l_image }}"
+    depends_on:
+      dl2l-manager:
+        condition: service_healthy
+      dl2l-detector:
+        condition: service_started
+    environment:
+      ROLE: "holder"
+      SIMULATION: "${SIMULATION:?SIMULATION must be exported before running docker compose}"
+      HOST: "dl2l-holder"
+      PORT: "2551"
+    networks:
+      - dl2l-network
+{% if publish_ui | default(false) %}
+    ports:
+      - "8080:8080"
+{% endif %}
+    volumes:
+      - type: bind
+        source: "{{ dl2l_config_dir }}/docker-config.conf"
+        target: /config/docker-config.conf
+        read_only: true
+{% endif %}
+
+networks:
+  dl2l-network:
+    driver: bridge

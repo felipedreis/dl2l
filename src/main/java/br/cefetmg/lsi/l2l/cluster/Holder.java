@@ -13,6 +13,7 @@ import akka.pattern.Patterns;
 import akka.util.Timeout;
 import br.cefetmg.lsi.l2l.analysis.DataAnalyser;
 import br.cefetmg.lsi.l2l.creature.ml.MLServiceExtension;
+import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.cluster.settings.Simulation;
 import br.cefetmg.lsi.l2l.common.Point;
@@ -68,6 +69,8 @@ public class Holder extends AbstractActor implements Registrable {
 
     private LearningSettings learningSettings;
 
+    private MetricsExtension.Impl metricsExt;
+
     public Holder(Simulation settings, String saveDir) {
         this.saveDir = saveDir;
 
@@ -86,6 +89,7 @@ public class Holder extends AbstractActor implements Registrable {
     @Override
     public void preStart() throws Exception {
         super.preStart();
+        metricsExt = MetricsExtension.of(context().system());
         cluster.subscribe(self(), MemberUp.class);
         logger.setLevel(Level.SEVERE);
         // Register learning settings before any creature is spawned so components can read them.
@@ -153,7 +157,7 @@ public class Holder extends AbstractActor implements Registrable {
 
             worldObjects.put(id, worldObject);
             worldObjecttypes.put(id, type);
-            logger.info("Created a new world object with id " + id);
+            logger.fine("Created a new world object with id " + id);
         } else if (type instanceof PlantType) {
             ActorRef worldObject = context().actorOf(
                     Plant.props(id, type, factory.nextPosition(), collisionDetector),
@@ -161,7 +165,7 @@ public class Holder extends AbstractActor implements Registrable {
 
             worldObjects.put(id, worldObject);
             worldObjecttypes.put(id, type);
-            logger.info("Created a new plant world object with id " + id);
+            logger.fine("Created a new plant world object with id " + id);
         }
     }
 
@@ -173,6 +177,7 @@ public class Holder extends AbstractActor implements Registrable {
                 "creature-" + order.id());
         creature.init();
         creatures.put(order.id(), creature);
+        metricsExt.setGauge("dl2l_creatures_alive", creatures.size());
         logger.info("Created a new creature");
     }
 
@@ -187,18 +192,18 @@ public class Holder extends AbstractActor implements Registrable {
             } else if (worldObjects.containsKey(stimulus.target)) {
                 targetComp = worldObjects.get(stimulus.target);
                 targetComp.tell(stimulus, sender());
-                logger.info("Stimulus routed to a component in current holder " + targetComp);
+                logger.fine("Stimulus routed to a component in current holder " + targetComp);
             }
 
         } else  if(holders.containsKey(holderId)){
             ActorRef targetHolder = holders.get(holderId);
             targetHolder.tell(stimulus, sender());
-            logger.info("Stimulus routed to a known holder " + targetHolder);
+            logger.fine("Stimulus routed to a known holder " + targetHolder);
         } else {
             ActorRef holder = lookupHolder(holderId);
             holder.tell(stimulus, sender());
             holders.put(holderId, holder);
-            logger.info("Unknown holder. Holder lookup executed with success and stimulus routed");
+            logger.fine("Unknown holder. Holder lookup executed with success and stimulus routed");
         }
     }
 
@@ -208,9 +213,11 @@ public class Holder extends AbstractActor implements Registrable {
         if(creatures.containsKey(id)) {
             componentActor = TypedActor.get(context()).getActorRefFor(creatures.get(id));
             creatures.remove(id);
+            metricsExt.setGauge("dl2l_creatures_alive", creatures.size());
 
             if(creatures.isEmpty()) {
-                EntityManager em = Persistence.createEntityManagerFactory("L2LPU")
+                EntityManager em = Persistence.createEntityManagerFactory("L2LPU",
+                        br.cefetmg.lsi.l2l.creature.bd.JpaPersister.jdbcUrlOverride())
                         .createEntityManager();
 
                 DataAnalyser analyser = new DataAnalyser(em,  saveDir);
@@ -232,14 +239,14 @@ public class Holder extends AbstractActor implements Registrable {
                 manager.tell(new Repose(type), self());
             }
         } else {
-            logger.info("There is no simulation component with identified as " + id);
+            logger.fine("There is no simulation component with identified as " + id);
         }
         if(componentActor != null)
             context().stop(componentActor);
 
         collisionDetector.tell(id, self());
 
-        logger.info("Removed simulation component " + id);
+        logger.fine("Removed simulation component " + id);
     }
 
     @Override

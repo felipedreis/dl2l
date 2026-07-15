@@ -1,0 +1,39 @@
+---
+- name: Ensure run dir and data dir exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ run_dir }}"
+    - "{{ experiment_data_dir }}"
+
+- name: Render docker-compose.yml (shared by every condition/trial in this run)
+  ansible.builtin.template:
+    src: "{{ role_path }}/../common/templates/docker-compose.yml.j2"
+    dest: "{{ run_dir }}/docker-compose.{{ experiment_cfg.name }}.yml"
+    mode: "0644"
+  vars:
+    holder_combines_detector: "{{ experiment_cfg.holder_combines_detector | default(false) }}"
+
+- name: Set compose file fact
+  ansible.builtin.set_fact:
+    compose_file: "{{ run_dir }}/docker-compose.{{ experiment_cfg.name }}.yml"
+
+- name: Build condition x trial matrix
+  ansible.builtin.set_fact:
+    trial_matrix: "{{ trial_matrix | default([]) + [{'condition': item.0, 'trial': item.1}] }}"
+  loop: "{{ experiment_cfg.conditions | product(range(1, experiment_cfg.trials + 1) | list) | list }}"
+  loop_control:
+    label: "{{ item.0.key }} trial {{ item.1 }}"
+
+- name: Run each trial sequentially
+  ansible.builtin.include_tasks: one_trial.yml
+  loop: "{{ trial_matrix }}"
+  loop_control:
+    loop_var: trial_item
+    label: "{{ trial_item.condition.key }} trial {{ trial_item.trial }}/{{ experiment_cfg.trials }}"
+
+- name: Mark experiment as finished (local runs always complete within one invocation)
+  ansible.builtin.set_fact:
+    experiment_finished: true

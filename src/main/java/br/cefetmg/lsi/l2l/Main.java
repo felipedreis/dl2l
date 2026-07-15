@@ -118,6 +118,10 @@ public class Main {
 
         Map<String, String> properties = new HashMap<>();
         properties.put("eclipselink.ddl-generation", "none");
+        String dbUrl = System.getenv("DL2L_DB_URL");
+        if (dbUrl != null && !dbUrl.isEmpty()) {
+            properties.put("javax.persistence.jdbc.url", dbUrl);
+        }
         EntityManager em = Persistence.createEntityManagerFactory("L2LPU", properties).createEntityManager();
         DataAnalyser analyser = new DataAnalyser(em, saveDir);
         CompletableFuture future = analyser.run();

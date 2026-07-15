@@ -1,0 +1,57 @@
+---
+- name: Sync the prepared dataset and ml/ scripts+package to the login node
+  ansible.posix.synchronize:
+    src: "{{ item.src }}"
+    dest: "{{ remote_train_dir }}/{{ item.dest }}"
+  loop:
+    - { src: "{{ training_prepared_dir }}/", dest: "data_prepared/" }
+    - { src: "{{ repo_root }}/ml/scripts/", dest: "ml/scripts/" }
+    - { src: "{{ repo_root }}/ml/jepa/", dest: "ml/jepa/" }
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: Render the training job script onto the login node
+  ansible.builtin.template:
+    src: train_variants.sh.j2
+    dest: "{{ remote_train_dir }}/train_variants.sh"
+    mode: "0755"
+
+- name: Submit the training job (no --wait — the VPN drops on idle, we cannot hold the connection open for a multi-hour job)
+  ansible.builtin.command:
+    argv: [sbatch, "{{ remote_train_dir }}/train_variants.sh"]
+    chdir: "{{ remote_train_dir }}"
+  register: _submit
+  changed_when: true
+
+- name: Parse the submitted job id
+  ansible.builtin.set_fact:
+    ccad_job_id: "{{ _submit.stdout | regex_search('[0-9]+$') }}"
+
+- name: Ensure the local .run scratch dir exists
+  delegate_to: localhost
+  ansible.builtin.file:
+    path: "{{ repo_root }}/ansible/.run"
+    state: directory
+    mode: "0755"
+
+- name: Persist the job id locally (for the later rescue run)
+  delegate_to: localhost
+  ansible.builtin.copy:
+    content: "{{ ccad_job_id }}"
+    dest: "{{ repo_root }}/ansible/.run/training_{{ training_cfg.name }}.ccad.job"
+    mode: "0644"
+
+- name: Report submission
+  ansible.builtin.debug:
+    msg: >-
+      Submitted job {{ ccad_job_id }} on CCAD ({{ remote_train_dir }}). This
+      does NOT wait for completion — the sbatch script trains, checks, and
+      exports every variant autonomously, entirely under $HOME (shared
+      NFS), with no live connection needed. Once it's done (or whenever
+      you're back on the VPN), collect the results with:
+        cd ansible && ansible-playbook -i inventories/ccad train-model.yml -e training={{ training_cfg.name }} -e rescue=true
+
+- name: Mark training as not finished in this invocation
+  delegate_to: localhost
+  ansible.builtin.set_fact:
+    training_finished: false

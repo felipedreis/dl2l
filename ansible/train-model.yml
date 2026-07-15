@@ -1,0 +1,59 @@
+---
+# Entry point for training JEPA world-model variants from an already-
+# collected experiment's data, on any environment.
+#
+# Usage:
+#   ansible-playbook -i ansible/inventories/local ansible/train-model.yml -e training=smoke
+#   ansible-playbook -i ansible/inventories/ccad  ansible/train-model.yml -e training=p9_variants
+#
+# The target environment is selected by which inventory you pass with -i
+# (local or ccad — training is not supported on the pi cluster, and not on
+# cluster.decom.cefetmg.br either, see training/README.md); each inventory's
+# group_vars/all.yml sets dl2l_env, which in turn selects the per-env role
+# (train_{{ dl2l_env }}).
+#
+# Extra-vars:
+#   training=<name>   required, matches training/<name>.yml
+#   rescue=true         CCAD only. The CEFET VPN drops the connection when
+#                       idle, so a plain run on -i inventories/ccad submits
+#                       the job and returns immediately WITHOUT waiting for
+#                       it to finish (see roles/train_ccad). Pass
+#                       -e rescue=true in a later invocation, whenever
+#                       you're back on the VPN, to check whether that job
+#                       has finished and (if so) collect + upload its
+#                       results. No-op for local training, which always
+#                       completes within one invocation.
+
+- name: Load training spec, prepare the dataset
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - ansible.builtin.include_role:
+        name: training_spec
+    - ansible.builtin.include_role:
+        name: prepare_dataset
+      when: not (rescue | default(false) | bool)
+
+- name: Train
+  hosts: runner
+  gather_facts: false
+  tasks:
+    - ansible.builtin.include_role:
+        name: training_spec
+    - ansible.builtin.include_role:
+        name: "train_{{ dl2l_env }}"
+
+- name: Save exported models and upload
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - ansible.builtin.include_role:
+        name: training_spec
+    - ansible.builtin.include_role:
+        name: upload_models
+      when: training_finished | default(true) | bool
+    - ansible.builtin.debug:
+        msg: "Training job not finished yet — skipping upload. Re-run with -e rescue=true later."
+      when: not (training_finished | default(true) | bool)

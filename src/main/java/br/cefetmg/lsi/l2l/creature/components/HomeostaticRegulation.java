@@ -152,7 +152,7 @@ public class HomeostaticRegulation extends CreatureComponent {
                 ActionType.SLEEP, regulated, realizedDelta(ctx, regulated), ctx);
         creature.valuation().tell(emitted);
         if (regulated.getLevel() <= 0) {
-            logger.info(String.format("HomeostaticRegulation[%s]: sleep drive exhausted, sending WakeUp", id));
+            logger.fine(String.format("HomeostaticRegulation[%s]: sleep drive exhausted, sending WakeUp", id));
             creature.memoryConsolidator().tell(new WakeUp());
         }
         return emitted;
