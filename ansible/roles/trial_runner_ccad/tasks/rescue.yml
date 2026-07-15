@@ -27,6 +27,19 @@
     loop_var: cond
     label: "{{ cond.key }}"
 
+# CONFIRMED LIVE GAP: manifest.json lives at the experiment root
+# ({{ remote_work_dir }}/data/{{ experiment_cfg.name }}/manifest.json,
+# updated incrementally by dl2l_data.extract after each trial), but
+# rescue_condition.yml only syncs per-condition subdirectories — the
+# manifest was never pulled back at all, and dl2l_data.upload silently
+# skips it if missing locally rather than failing loudly.
+- name: Sync back the experiment-level manifest.json
+  ansible.posix.synchronize:
+    mode: pull
+    src: "{{ remote_work_dir }}/data/{{ experiment_cfg.name }}/manifest.json"
+    dest: "{{ experiment_data_dir }}/manifest.json"
+  failed_when: false
+
 - name: Report overall status
   ansible.builtin.debug:
     msg: >-

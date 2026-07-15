@@ -41,6 +41,18 @@ mkdir -p "$TRIAL_DIR"
 
 trap 'echo "$?" > "'"$TRIAL_DIR"'/DONE"; singularity instance stop --all >/dev/null 2>&1 || true; rm -f "'"$TRIAL_DIR"'/pg_overlay.img"' EXIT
 
+# CONFIRMED LIVE (25-trial real run): 6/25 trials failed fast (~35s vs 3-4min
+# for a real run) with "No creatures found" despite every instance reporting
+# "started successfully" — SLURM's own timing showed every trial on a node
+# starting at the EXACT instant the previous one's job exited, with no gap.
+# --exclusive was already dropped (see the port-collision note below on
+# $WRITABLE), so this smells like the previous trial's EXIT trap
+# (`instance stop --all`) not having fully released the fixed ports
+# (5432/2551-2553) by the time SLURM starts the next array task on the same
+# node — a brief grace period gives that teardown room to actually finish
+# before this trial starts binding the same ports again.
+sleep 5
+
 CONFIG_BIND="{{ remote_work_dir }}/config/ccad-config.conf:/config/docker-config.conf:ro"
 INITDB_BIND="{{ remote_work_dir }}/config/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro"
 
