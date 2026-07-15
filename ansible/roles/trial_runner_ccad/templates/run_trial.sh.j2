@@ -292,11 +292,14 @@ fi
 # confirm the two signals agree on timing.
 echo "Waiting for the simulation to finish..."
 sim_done=0
-# ~65 min ceiling: generous margin beyond the in-sim maxRuntimeMinutes cap.
+# ~90 min ceiling: generous margin beyond the in-sim maxRuntimeMinutes cap
+# (bumped from 40 to 60 minutes across simulations/20260714_memory_vs_wm_dense_reposition_*.conf).
 # CONFIRMED LIVE a tighter 50-min ceiling raced against a simulation that
 # legitimately ran its full 40-minute in-sim deadline plus real-world JVM/
-# processing overhead — SBATCH --time is the ultimate backstop regardless.
-for _ in $(seq 1 780); do
+# processing overhead (jobs completed at 41-47 min wall-clock for a 40-min
+# cap) — keep a similar ~25-30 min margin over whatever the cap is. SBATCH
+# --time is the ultimate backstop regardless.
+for _ in $(seq 1 1080); do
   if curl -s -m 3 http://localhost:9091/metrics 2>/dev/null | grep -qE '^dl2l_simulation_running\{[^}]*\} 0(\.0)?$'; then
     echo "Completion detected via /metrics (dl2l_simulation_running=0)"
     sim_done=1

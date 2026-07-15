@@ -38,3 +38,6 @@ upload:
   enabled: true
   repo: felipedreis/dl2l-experiments
   prefix: 20260714_memory_vs_wm_dense_reposition
+
+analysis:
+  module: 20260714_memory_vs_wm_dense_reposition

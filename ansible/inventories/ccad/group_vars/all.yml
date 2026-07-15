@@ -26,9 +26,12 @@ ccad_sim_qos: short_qos
 # every trial requests a modest fixed CPU count instead of a whole node.
 # --time is a wall-clock cap on top of the simulation's own in-conf
 # maxRuntimeMinutes — generous margin for JVM/postgres startup + extraction,
-# well under the `short` partition's own 24h MaxTime.
+# well under the `short` partition's own 24h MaxTime. Bumped from 2h to 3h
+# alongside maxRuntimeMinutes going 40->60 in
+# simulations/20260714_memory_vs_wm_dense_reposition_*.conf, to keep the
+# same proportional margin over run_trial.sh.j2's ~90 min wait-loop ceiling.
 ccad_sim_cpus: 6
-ccad_sim_time: "02:00:00"
+ccad_sim_time: "03:00:00"
 
 remote_work_dir: "l2l"   # relative to the login user's $HOME (shared NFS)
 
