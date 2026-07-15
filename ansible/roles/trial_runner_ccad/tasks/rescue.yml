@@ -38,5 +38,6 @@
 
 - name: Mark experiment_finished
   delegate_to: localhost
+  delegate_facts: true
   ansible.builtin.set_fact:
     experiment_finished: "{{ (_finished_conditions | default([]) | length) == (experiment_cfg.conditions | length) }}"

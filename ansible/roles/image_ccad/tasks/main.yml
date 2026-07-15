@@ -35,10 +35,73 @@
     state: directory
     mode: "0755"
 
-- name: "Pull {{ dl2l_image }} as a Singularity image on the login node"
+# Pull + sandbox-build together take a few minutes — long enough to span a
+# VPN drop on this connection (openfortivpn --persistent auto-reconnects,
+# but doesn't save a command already in flight on the dropped connection).
+# CONFIRMED LIVE this killed a plain synchronous task outright, and TWO
+# different attempts at ansible's async+poll mechanism (with and without
+# `loop`) hung indefinitely reporting stale "still running" status even
+# after the remote job had actually finished (verified via its
+# ~/.ansible_async/<jid> result file showing rc=0 within ~2 minutes each
+# time) — a bug in async_status polling over this VPN, not something this
+# repo's ansible code controls.
+#
+# Fixed properly instead of working around it by hand: build_image.sh.j2
+# does the pull + sandbox build + startscript fixes in one shot, launched
+# *detached* on the remote (setsid nohup, survives the SSH session that
+# launched it dying) and polled via a plain `until`/`retries` loop — each
+# retry opens a brand new SSH connection, so a drop just delays the next
+# check by `delay` seconds instead of failing the whole run. This is the
+# exact manual pattern that proved reliable throughout live debugging,
+# folded into the role itself so the whole pipeline replays with a single
+# `ansible-playbook` invocation and no manual intervention.
+- name: "Render the build script for {{ item.name }}"
+  delegate_to: "{{ groups['runner'][0] }}"
+  vars:
+    ansible_connection: ssh
+  ansible.builtin.template:
+    src: build_image.sh.j2
+    dest: "{{ remote_work_dir }}/jobs/build_{{ item.name }}_image.sh"
+    mode: "0755"
+  loop:
+    - { name: dl2l, sif: dl2l.sif, ref: "{{ dl2l_image }}" }
+    - { name: postgres, sif: postgres.sif, ref: "postgres:16" }
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: "Launch the {{ item.name }} image build detached on the login node"
+  delegate_to: "{{ groups['runner'][0] }}"
+  vars:
+    ansible_connection: ssh
+  ansible.builtin.shell: >
+    setsid nohup bash {{ remote_work_dir }}/jobs/build_{{ item.name }}_image.sh
+    </dev/null >/dev/null 2>&1 & disown; echo launched
+  args:
+    executable: /bin/bash
+  loop:
+    - { name: dl2l }
+    - { name: postgres }
+  loop_control:
+    label: "{{ item.name }}"
+  register: _launch
+  until: _launch is succeeded
+  retries: 5
+  delay: 10
+  changed_when: true
+
+- name: "Wait for the {{ item.name }} image build to finish"
   delegate_to: "{{ groups['runner'][0] }}"
   vars:
     ansible_connection: ssh
   ansible.builtin.command:
-    argv: [singularity, pull, --force, "{{ remote_work_dir }}/dl2l.sif", "docker://{{ dl2l_image }}"]
-  changed_when: true
+    argv: [cat, "{{ remote_work_dir }}/.{{ item.name }}_image_build.done"]
+  loop:
+    - { name: dl2l }
+    - { name: postgres }
+  loop_control:
+    label: "{{ item.name }}"
+  register: _build_done
+  until: _build_done is succeeded
+  retries: 60
+  delay: 10
+  changed_when: false

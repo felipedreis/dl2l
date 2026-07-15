@@ -22,12 +22,27 @@ ccad_gres: "gpu:1"
 ccad_sim_partition: short
 ccad_sim_qos: short_qos
 
+# --exclusive was dropped (see run_trial.sh.j2's KNOWN FOLLOW-UP note), so
+# every trial requests a modest fixed CPU count instead of a whole node.
+# --time is a wall-clock cap on top of the simulation's own in-conf
+# maxRuntimeMinutes — generous margin for JVM/postgres startup + extraction,
+# well under the `short` partition's own 24h MaxTime.
+ccad_sim_cpus: 6
+ccad_sim_time: "02:00:00"
+
 remote_work_dir: "l2l"   # relative to the login user's $HOME (shared NFS)
 
 # No local docker daemon on CCAD — images come from GHCR (CI pushes here on
 # every push to main, see .github/workflows/cd.yml), pulled as a Singularity
 # SIF by roles/image_ccad.
-dl2l_image: "ghcr.io/felipedreis/dl2l:latest"
+#
+# STOPGAP (revert to :latest once the pom.xml DJL-classifier fix — see
+# docs/plans/ccad-singularity-experiments.md's 2026-07-14/15 update — lands
+# on main via the normal CI path): :latest was built with the wrong DJL
+# PyTorch native-library classifier, which crashes every Holder on CCAD
+# specifically (no internet to fall back to a runtime download). This tag
+# was built+pushed manually with the fix and isn't tracked by CI.
+dl2l_image: "ghcr.io/felipedreis/dl2l:ccad-djl-fix"
 
 # The conda env created once by provision-ccad.yml (module load miniforge3;
 # $HOME/.conda/envs/ is on shared NFS, so this is visible on compute nodes

@@ -30,7 +30,8 @@
 #SBATCH --job-name=dl2l_{{ experiment_cfg.name }}_{{ cond.key }}
 #SBATCH --partition={{ ccad_sim_partition }}
 {% if ccad_sim_qos %}#SBATCH --qos={{ ccad_sim_qos }}
-{% endif %}#SBATCH --nodes=1 --ntasks=1 --cpus-per-task=4
+{% endif %}#SBATCH --nodes=1 --ntasks=1 --cpus-per-task={{ ccad_sim_cpus }}
+#SBATCH --time={{ ccad_sim_time }}
 #SBATCH --output={{ remote_work_dir }}/logs/{{ experiment_cfg.name }}_{{ cond.key }}_%A_%a.out
 set -euo pipefail
 
@@ -38,36 +39,53 @@ TRIAL="${SLURM_ARRAY_TASK_ID:?must be run as a SLURM array task}"
 TRIAL_DIR="{{ remote_work_dir }}/data/{{ experiment_cfg.name }}/{{ cond.key }}/trial_${TRIAL}"
 mkdir -p "$TRIAL_DIR"
 
-trap 'echo "$?" > "'"$TRIAL_DIR"'/DONE"; singularity instance stop --all >/dev/null 2>&1 || true' EXIT
+trap 'echo "$?" > "'"$TRIAL_DIR"'/DONE"; singularity instance stop --all >/dev/null 2>&1 || true; rm -f "'"$TRIAL_DIR"'/pg_overlay.img"' EXIT
 
 CONFIG_BIND="{{ remote_work_dir }}/config/ccad-config.conf:/config/docker-config.conf:ro"
 INITDB_BIND="{{ remote_work_dir }}/config/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro"
 
 # A Singularity SIF is read-only by default — --writable-tmpfs gives every
-# instance an ephemeral, in-memory writable overlay (discarded when the
-# instance stops). Needed for postgres (initdb/WAL — it can't start at all
-# on a fully read-only rootfs) and harmless insurance for the app containers
-# (logs/tmp writes). Ephemeral is intentional, not a shortcut: this exactly
-# mirrors how the local/Pi docker-compose postgres has no named volume
-# either — extraction below copies everything needed out to the shared NFS
-# before the EXIT trap tears the instances (and this overlay) down.
+# instance an ephemeral, in-memory (tmpfs) writable overlay (discarded when
+# the instance stops). Fine for the app containers (logs/tmp writes only)
+# but CONFIRMED LIVE this is NOT enough for postgres: even a short trial's
+# DDL bootstrap + WAL churn hit "PANIC: could not write to file
+# pg_wal/xlogtemp.NN: No space left on device" — --writable-tmpfs has no
+# size flag, and its default is evidently just a few tens of MB. postgres
+# instead gets its own disk-backed (not RAM-backed) ext3 overlay image,
+# sized generously — confirmed live this survives a 200MB write with room
+# to spare. Ephemeral is still intentional (deleted in the trap below, not
+# a shortcut): mirrors how the local/Pi docker-compose postgres has no
+# named volume either — extraction below copies everything needed out to
+# the shared NFS before teardown.
 WRITABLE="--writable-tmpfs"
+PG_OVERLAY="$TRIAL_DIR/pg_overlay.img"
+singularity overlay create --size 1024 "$PG_OVERLAY"
 
 # --- postgres --------------------------------------------------------------
-# NOTE (untested against the live cluster): the official postgres image's
-# entrypoint expects to run as its own uid inside the container; --fakeroot
-# maps that via a user namespace. If this fails, the likely fix is a
-# rootless-friendly postgres image (e.g. a Bitnami variant) instead.
-singularity instance start --fakeroot $WRITABLE \
+# Runs from a pre-built sandbox directory (roles/image_ccad), not `docker://`
+# — confirmed live that compute nodes have no internet access, so any
+# `docker://` reference would fail here. No --fakeroot: CCAD support mapped
+# this account's uid on compute nodes (see docs/plans/ccad-singularity-experiments.md),
+# so the official postgres image's entrypoint runs fine as our real,
+# resolvable uid — no user-namespace trickery needed.
+singularity instance start --overlay "$PG_OVERLAY" \
   --bind "$INITDB_BIND" \
   --env POSTGRES_PASSWORD=postgres --env POSTGRES_DB=l2l \
-  docker://postgres:16 dl2l-db
+  {{ remote_work_dir }}/postgres_sandbox dl2l-db
 
 echo "Waiting for postgres..."
+pg_ready=0
 for _ in $(seq 1 60); do
-  singularity exec instance://dl2l-db pg_isready -U postgres >/dev/null 2>&1 && break
+  singularity exec instance://dl2l-db pg_isready -U postgres >/dev/null 2>&1 && { pg_ready=1; break; }
   sleep 2
 done
+# CONFIRMED LIVE GAP (found via a smoke-test failure where the dl2l app's own
+# entrypoint was silently broken): the original loops here had no failure
+# check, so a service that never comes up is indistinguishable from one that
+# started instantly — the script just sails on to extraction, which then
+# fails opaquely ("No creatures found") instead of pointing at the real
+# problem. Every wait loop below now fails fast with the instance's own log.
+[ "$pg_ready" = 1 ] || { echo "FATAL: postgres never became ready"; singularity instance list; exit 1; }
 
 # --- manager (+ idProvider) --------------------------------------------------
 singularity instance start $WRITABLE \
@@ -75,20 +93,22 @@ singularity instance start $WRITABLE \
   --env ROLE=manager,idProvider --env SIMULATION={{ cond.simulation }} \
   --env HOST=localhost --env PORT=2551 \
   --env DL2L_DB_URL=jdbc:postgresql://localhost:5432/l2l \
-  docker://{{ dl2l_image }} dl2l-manager
+  {{ remote_work_dir }}/dl2l_sandbox dl2l-manager
 
 echo "Waiting for manager..."
+mgr_ready=0
 for _ in $(seq 1 60); do
-  (exec 3<>/dev/tcp/localhost/2551) 2>/dev/null && exec 3<&- 3>&- && break
+  (exec 3<>/dev/tcp/localhost/2551) 2>/dev/null && { exec 3<&- 3>&-; mgr_ready=1; break; }
   sleep 2
 done
+[ "$mgr_ready" = 1 ] || { echo "FATAL: manager never came up on :2551"; singularity instance list; exit 1; }
 
 # --- collisionDetector -------------------------------------------------------
 singularity instance start $WRITABLE \
   --bind "$CONFIG_BIND" \
   --env ROLE=collisionDetector --env SIMULATION={{ cond.simulation }} \
   --env HOST=localhost --env PORT=2552 \
-  docker://{{ dl2l_image }} dl2l-detector
+  {{ remote_work_dir }}/dl2l_sandbox dl2l-detector
 
 # --- holder -------------------------------------------------------------------
 singularity instance start $WRITABLE \
@@ -96,7 +116,14 @@ singularity instance start $WRITABLE \
   --env ROLE=holder --env SIMULATION={{ cond.simulation }} \
   --env HOST=localhost --env PORT=2553 \
   --env DL2L_DB_URL=jdbc:postgresql://localhost:5432/l2l \
-  docker://{{ dl2l_image }} dl2l-holder
+  {{ remote_work_dir }}/dl2l_sandbox dl2l-holder
+
+# A holder that crashes on startup disappears from `instance list` almost
+# immediately — indistinguishable from "already finished" to the loop below
+# unless we first confirm it actually came up.
+sleep 3
+singularity instance list 2>/dev/null | grep -q '^dl2l-holder ' \
+  || { echo "FATAL: holder never came up"; singularity instance list; exit 1; }
 
 # Wait for the holder's own process to exit (the simulation's "Finish" ->
 # no `docker wait` equivalent under Singularity). NOTE (untested against
@@ -109,6 +136,19 @@ while singularity instance list 2>/dev/null | grep -q '^dl2l-holder '; do
 done
 
 # --- extract (before teardown; dl2l_data.extract does its own pg_dump backup) -
+# The system python3 has no pandas/pyarrow (needed for --format parquet) —
+# CONFIRMED LIVE this crashed extraction outright even after a trial
+# actually completed successfully. TRIED `module load miniforge3 && conda
+# activate` here (a dedicated dl2l-extract env, provisioned once by
+# provision-ccad.yml) — CONFIRMED LIVE this breaks the singularity exec
+# subprocess dl2l_data.db shells out to for psql (almost certainly
+# LD_LIBRARY_PATH contamination from the conda module, inherited by that
+# subprocess): postgres was demonstrably still running (a trial had already
+# succeeded moments earlier without this activation) but psql suddenly
+# couldn't find its own unix socket. Fixed by installing pandas/pyarrow into
+# the system python3's --user site-packages instead (provision-ccad.yml) —
+# no environment activation, so nothing here can leak into the singularity
+# subprocess call.
 PYTHONPATH="{{ remote_work_dir }}/scripts" python3 -m dl2l_data.extract \
   --experiment "{{ experiment_cfg.name }}" \
   --condition "{{ cond.key }}" \

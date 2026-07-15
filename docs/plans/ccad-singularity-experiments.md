@@ -251,6 +251,131 @@ Docker path never needs a host-side `psql` either.
 6. Confirm `ansible/inventories/cefet`/`trial_runner_cefet`/`image_cefet` are fully gone and
    nothing else references them (`grep -r cluster.decom.cefetmg.br`).
 
+## Update (2026-07-14/15): account propagation fixed, three more real bugs found and fixed
+
+**The compute-node account gap above is resolved** — CCAD support mapped this account's uid to
+a username on compute nodes directly (not the login node's NSS/LDAP source), confirmed live:
+plain `singularity exec` against a pre-built sandbox now resolves the uid cleanly (previously
+`Couldn't determine user account information: user: unknown userid 2533`, tried and ruled out
+along the way: `nss_wrapper`/`LD_PRELOAD`, an `unshare --map-root-user --mount` bind-mounted
+fake `/etc/passwd` trick, `--fakeroot` (blocked separately — `newuidmap` isn't setuid-root on
+this install), and a Bitnami rootless postgres image — all now moot, the account fix was the
+actual answer). No workaround code from that investigation was kept.
+
+With account resolution working, three more real, previously-unreachable bugs surfaced running
+an actual trial end-to-end:
+
+1. **`singularity instance start` runs `.singularity.d/startscript`, not `runscript`.** SIFs
+   built from a `docker://` image only ever get a populated `runscript` (translates
+   ENTRYPOINT/CMD; used by `run`/bare `exec`) — `startscript` is an empty no-op. `instance
+   start` reported "started successfully" and `pg_isready` looped forever with nothing ever
+   listening; both the instance's own `.out`/`.err` logs were empty. Fixed in `image_ccad`:
+   build a writable sandbox from each pulled `.sif` (needed anyway — compute nodes have no
+   internet, so `instance start`/`exec` against a bare `.sif` can't extract on first use either)
+   and copy `runscript` over `startscript` there.
+2. **`instance start` doesn't apply the image's Docker `WORKDIR`, and has no `--pwd` flag to set
+   it per-invocation either** (confirmed: `unknown flag: --pwd` — that flag only exists on
+   `exec`/`run`). dl2l's `ENTRYPOINT ./run-dl2l.sh ...` (see `docker/Dockerfile`'s `WORKDIR
+   /dl2l/run`) failed with `./run-dl2l.sh: not found` under `instance start` specifically. Fixed
+   at the source: `image_ccad` now inserts `cd /dl2l/run` as the first line of the dl2l
+   sandbox's `startscript`, so every code path the generated script can take runs through it.
+3. **The real blocker: DJL's PyTorch native library was declared for the wrong platform.**
+   `pom.xml` hardcoded the `pytorch-native-cpu` classifier to `osx-aarch64` (Mac dev) instead of
+   `linux-x86_64` (what `docker/Dockerfile` actually builds/runs) — every environment this ran
+   in before had internet, so DJL's runtime fallback (`LibUtils.downloadPyTorch()`, pulling from
+   `publish.djl.ai`) silently papered over the mismatch every time and nobody noticed. On CCAD's
+   no-internet compute nodes this download fails with `UnknownHostException: publish.djl.ai`,
+   which throws out of `Holder.preStart()` (via `MLServiceExtension`) — the holder's Akka system
+   comes up and even joins the cluster, but the actor itself never properly starts, so no
+   creature is ever spawned and extraction correctly reports "No creatures found". This one
+   applies everywhere, not just CCAD — Pi/local runs have just been silently eating a redundant
+   network download on every single run. Fixed by swapping the classifier to `linux-x86_64` (Mac
+   dev now relies on the same runtime auto-download it was already silently depending on).
+
+**Image publishing:** GHCR only auto-publishes via `.github/workflows/cd.yml`, which triggers
+*only* on push to `main` (no `workflow_dispatch`). A manual `docker buildx build --push` to a
+distinct tag (`ghcr.io/felipedreis/dl2l:ccad-djl-fix`, `dl2l_image` in
+`ansible/inventories/ccad/group_vars/all.yml`) was used instead to avoid touching `main`/
+`:latest` — the local `gh` CLI token initially lacked `write:packages` scope; the user granted
+it via the interactive browser device-code flow (`gh auth refresh -s write:packages`) since that
+step can't be done non-interactively. **Follow-up, deliberately deferred past this PR** (user
+request): the pipeline currently only ever builds one platform/classifier combination
+(`linux-x86_64`, now correct for CCAD/Pi/Docker) — Mac dev and any other target should get their
+own correctly-matched jar/image variant so this exact bug class (see finding 3 above) can't
+recur elsewhere.
+
+Also fixed along the way (robustness, not correctness): the wait-loops in `run_trial.sh.j2` for
+postgres/manager readiness and the holder actually coming up had no failure path — a service
+that never starts was indistinguishable from one that started instantly, so the script silently
+sailed on to a doomed extraction instead of failing with a clear error. Every wait loop now
+exits non-zero with the instance list attached if what it's waiting for never shows up.
+
+### Further findings from the first real (non-smoke) trial run
+
+Getting an actual trial to fully complete (not just start) surfaced four more real bugs,
+each confirmed live and fixed:
+
+4. **`persistence.xml`'s hardcoded `dl2l-db` hostname was bypassed by `DL2L_DB_URL` in only
+   2 of 6 `createEntityManagerFactory("L2LPU")` call sites.** `JpaPersister`/`Main.java` had the
+   override; `Holder.java`, `CreatureActor.java`, `MemoryConsolidator.java`, and
+   `MemoryTraceConsolidator.java` didn't — confirmed live via `UnknownHostException: dl2l-db`
+   even though `DL2L_DB_URL` demonstrably reached the process environment correctly (verified by
+   dumping it from inside a live instance). `BDActor.java` was worse: its field initializer
+   *unconditionally* called the unoverridden `createEntityManagerFactory("L2LPU")` even though
+   its only constructor immediately discards that value and uses an injected `EntityManager`
+   instead — pure dead code that also crashed BDActor construction outright. Fixed by widening
+   `JpaPersister.jdbcUrlOverride()` to `public static` and reusing it at every call site;
+   deleted BDActor's dead field initializer entirely.
+5. **`--writable-tmpfs`'s default overlay size is too small for postgres.** Even a short trial's
+   DDL bootstrap + WAL churn hit `PANIC: could not write to file pg_wal/xlogtemp.NN: No space
+   left on device` — the flag has no size option. A plain writable *directory* overlay
+   (`--overlay <dir>`) needs root ("only root user can use sandbox as overlay in setuid mode").
+   Fixed with a disk-backed **ext3 overlay image** instead (`singularity overlay create --size
+   1024 <path>` then `--overlay <path>.img`) — confirmed live this survives a 200MB write with
+   room to spare, unprivileged. Only postgres needs this; the app containers keep
+   `--writable-tmpfs` (logs/tmp only).
+6. **The extraction step's `python3` has no pandas/pyarrow.** `--format parquet` crashed with
+   `ModuleNotFoundError: No module named 'pandas'` even after a trial fully succeeded. Tried
+   `module load miniforge3 && conda activate <env>` first — **confirmed live this breaks the
+   *unrelated* `singularity exec instance://dl2l-db psql` subprocess call `dl2l_data.db` shells
+   out to** (almost certainly `LD_LIBRARY_PATH` contamination from the conda module, inherited
+   by that Python subprocess): postgres was demonstrably still running, but psql suddenly
+   couldn't find its own unix socket right after the conda activation was added, and the error
+   disappeared again the moment it was removed. Fixed with `pip install --user pandas pyarrow`
+   against the system python3 instead (`provision-ccad.yml`) — no environment activation at all,
+   so nothing can leak into that subprocess call.
+7. **Ansible `set_fact` + `delegate_to: localhost` without `delegate_facts: true` sets the fact
+   on the *original* play's host, not on `localhost`.** `experiment_finished` (set this way in
+   `submit.yml`/`rescue.yml`/`trial_runner_pi/main.yml`) was invisible to the third play
+   (`Collect, upload, and (optionally) analyze`, `hosts: localhost`) — confirmed live: the
+   upload task ran immediately after a plain submit (should have been gated off), crashing with
+   `FileNotFoundError` on a data dir that didn't exist yet since no trial had run. Fixed by
+   adding `delegate_facts: true` to all three set_fact tasks.
+
+### Making the pipeline actually replicable (no manual intervention)
+
+Live debugging repeatedly fell back to rendering `run_trial.sh`/`build_image.sh` by hand and
+`sbatch`-ing them directly, bypassing the playbook entirely — fast for debugging, but means
+those runs' job ids never land in `ansible/.run/experiment_<name>.ccad.jobs`, so
+`-e rescue=true` has no way to find them. Per explicit user direction, every fix that made a
+manual step necessary was folded back into the roles themselves instead of staying a one-off:
+
+- `image_ccad`'s pull/sandbox-build tasks were rewritten around the exact manual pattern that
+  proved reliable: `roles/image_ccad/templates/build_image.sh.j2` (pull + sandbox build +
+  startscript fixes, all in one script) is rendered, launched **detached** on the login node
+  (`setsid nohup ... & disown`, survives the SSH session that launched it dying), and polled for
+  a completion marker via plain `until`/`retries` (each retry opens a fresh SSH connection, so a
+  drop just delays the next check). This replaces two failed earlier attempts at Ansible's
+  `async`+`poll`:
+  - **With `loop`**: fires and polls each item sequentially — the second item's async job never
+    even launched (stuck 15+ min, only one job file ever appeared under `~/.ansible_async`).
+  - **Without `loop`** (two separate named tasks): still hung — the remote job provably finished
+    (its own `~/.ansible_async/<jid>` result file showed `rc=0` within ~2 minutes) but Ansible's
+    poll loop kept reporting stale `started=1 finished=0` indefinitely. Whatever's causing this
+    is specific to `async_status` polling over this VPN, not something in this repo's control.
+- `run_trial.sh.j2`'s wait-loop and postgres-overlay fixes (findings above) are template
+  changes, so every future submit already gets them automatically — no separate fix-up step.
+
 ## Housekeeping
 
 Continues on `feat/experiment-infra-ansible-refactor` (PR #69, still open) unless told otherwise.

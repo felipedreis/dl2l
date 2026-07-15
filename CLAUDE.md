@@ -147,10 +147,10 @@ each array task writes on exit) and, once all are done, syncs the data back and
 proceeds to upload/analyze/train. CCAD images come from GHCR only (no local docker
 daemon there — `image: {source: registry}` is required for `experiments/*.yml` specs
 targeting CCAD). See `training/README.md` for the shared submit/rescue pattern and
-`docs/plans/ccad-singularity-experiments.md` for the full design, including two
-untested-against-the-live-cluster risks flagged there: running the official postgres
-image under unprivileged Singularity, and detecting simulation completion without a
-`docker wait` equivalent.
+`docs/plans/ccad-singularity-experiments.md` for the full design and a running log of
+live-cluster findings (uid resolution, `instance start` vs `run`/`exec` behavior
+differences, `DL2L_DB_URL` propagation, postgres's writable-overlay sizing, and more) —
+confirmed working end-to-end through a real (non-smoke) trial as of 2026-07-15.
 
 ### Extraction and upload internals
 

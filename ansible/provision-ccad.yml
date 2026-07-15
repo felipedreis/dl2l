@@ -59,3 +59,25 @@
         path: "{{ remote_work_dir }}"
         state: directory
         mode: "0755"
+
+    # run_trial.sh.j2's extraction step needs pandas/pyarrow (--format
+    # parquet) — CONFIRMED LIVE the system python3 lacks them, which
+    # crashed extraction even after a trial ran to completion successfully.
+    # TRIED a dedicated conda env (module load miniforge3 && conda
+    # activate) here first — CONFIRMED LIVE that broke the singularity exec
+    # subprocess dl2l_data.db shells out to for psql (almost certainly
+    # LD_LIBRARY_PATH contamination from the conda module leaking into that
+    # subprocess): a trial had already succeeded moments earlier without
+    # this activation, then postgres's own psql suddenly couldn't find its
+    # unix socket right after adding it. `pip install --user` avoids any
+    # environment activation entirely, so nothing here can affect the
+    # extraction script's own singularity subprocess calls — installed to
+    # $HOME/.local (shared NFS), visible on compute nodes at trial runtime
+    # without needing network access there.
+    - name: "Install pandas/pyarrow into the system python3's --user site-packages"
+      ansible.builtin.pip:
+        name:
+          - pandas
+          - pyarrow
+        extra_args: --user
+        executable: pip3
