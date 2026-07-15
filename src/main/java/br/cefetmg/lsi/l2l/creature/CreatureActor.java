@@ -24,6 +24,7 @@ import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
 import br.cefetmg.lsi.l2l.creature.ml.MLServiceExtension;
 import br.cefetmg.lsi.l2l.creature.ml.MemoryConsolidator;
 import br.cefetmg.lsi.l2l.creature.ml.MemoryTraceConsolidator;
+import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
 import br.cefetmg.lsi.l2l.physics.CreaturePositioningAttr;
 import scala.concurrent.duration.Duration;
 
@@ -121,6 +122,8 @@ public class CreatureActor implements Creature {
         visionFieldOpening = Constants.MIN_VISION_FIELD_OPENING;
         olfactoryFieldRadius = Constants.MIN_OLFACTORY_FIELD_RADIUS;
 
+        final MetricsExtension.Impl metricsExt = MetricsExtension.of(context.system());
+
         emotionalSystem = TypedActor.get(TypedActor.context())
                 .typedActorOf(new TypedProps<>(EmotionalSystem.class, EmotionalSystemActor::new), "emotionalSystem");
 
@@ -129,7 +132,8 @@ public class CreatureActor implements Creature {
                         "operantConditioning");
 
         memory = TypedActor.get(TypedActor.context())
-                .typedActorOf(new TypedProps<>(MemorySystem.class, MemorySystemActor::new), "memorySystem");
+                .typedActorOf(new TypedProps<>(MemorySystem.class,
+                        (Creator<MemorySystemActor>) () -> new MemorySystemActor(id, metricsExt)), "memorySystem");
 
         // Resolve effective settings: per-creature override if provided, else global.
         SimulationSettingsExtension.Impl ext = SimulationSettingsExtension.of(context.system());

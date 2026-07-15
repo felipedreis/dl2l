@@ -186,6 +186,10 @@ public class PartialAppraisal extends CreatureComponent {
         Emotion maxEmotion = emotionalSystem.getMaxArousal();
         double behaviouralEfficiency = normalizedBehaviouralEfficiency(maxEmotion.getLevel(), perceptions.size());
 
+        if (metricsExt != null) {
+            metricsExt.setGauge("dl2l_creature_arousal", id.toString(), maxEmotion.getLevel());
+        }
+
         logger.info(String.format("PartialAppraisal[%s]: arousal=%.3f perceptions=%d behaviouralEfficiency=%.3f",
                 id, maxEmotion.getLevel(), perceptions.size(), behaviouralEfficiency));
         perceptions.forEach(p -> logger.fine(String.format("PartialAppraisal[%s]:   perception type=%s angle=%.3f dist=%.1f",

@@ -26,6 +26,9 @@ services:
       SIMULATION: "simulations/baseline_1node_1creature.conf"
       HOST: "dl2l-manager"
       PORT: 2551
+      TRIAL_ID: ${TRIAL_ID:-local}
+    ports:
+      - "9091:9091"
     networks:
       - dl2l-network
     healthcheck:
@@ -49,8 +52,10 @@ services:
       SIMULATION: "simulations/baseline_1node_1creature.conf"
       HOST: "dl2l-detector"
       PORT: 2551
+      TRIAL_ID: ${TRIAL_ID:-local}
     ports:
       - "8090:8080"
+      - "9092:9091"
     networks:
       - dl2l-network
     volumes:
@@ -71,6 +76,9 @@ services:
       SIMULATION: "simulations/baseline_1node_1creature.conf"
       HOST: "dl2l-holder"
       PORT: "2551"
+      TRIAL_ID: ${TRIAL_ID:-local}
+    ports:
+      - "9093:9091"
     networks:
       - dl2l-network
     volumes:

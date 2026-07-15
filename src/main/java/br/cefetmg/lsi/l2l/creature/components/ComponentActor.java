@@ -8,6 +8,7 @@ import br.cefetmg.lsi.l2l.creature.Creature;
 import br.cefetmg.lsi.l2l.creature.CreatureActor;
 import br.cefetmg.lsi.l2l.creature.bd.JpaPersister;
 import br.cefetmg.lsi.l2l.creature.bd.Persister;
+import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
 
 /**
  * Akka adapter that owns a {@link CreatureComponent} and forwards mailbox messages
@@ -39,7 +40,8 @@ public class ComponentActor extends UntypedActor {
         persister = persisterFactory.get();
         Creature creature = TypedActor.get(context().system())
                 .typedActorOf(new TypedProps<>(Creature.class, CreatureActor.class), context().parent());
-        component.init(creature, persister, new AkkaComponentRef(self()));
+        MetricsExtension.Impl metricsExt = MetricsExtension.of(context().system());
+        component.init(creature, persister, new AkkaComponentRef(self()), metricsExt);
     }
 
     @Override
