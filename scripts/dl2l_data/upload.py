@@ -48,6 +48,29 @@ def upload_file(api: HfApi, local: Path, repo: str, repo_path: str, msg: str):
     print(f"  ✓ {repo_path}")
 
 
+def upload_condition(api: HfApi, cond_dir: Path, repo: str, repo_path: str, msg: str) -> int:
+    """Upload an entire condition directory (all trials) as ONE commit.
+
+    CONFIRMED LIVE: uploading file-by-file (api.upload_file per file) hit
+    HuggingFace's 128-commits/hour rate limit partway through a 25-trial
+    experiment (~275 files, one commit each) — the whole upload aborted with
+    a 429 even though every trial had completed successfully. upload_folder
+    batches an entire directory tree into a single commit, so one full
+    experiment (however many trials) costs one commit per condition instead
+    of one per file.
+    """
+    n = sum(1 for f in cond_dir.rglob("*") if f.is_file())
+    api.upload_folder(
+        folder_path=str(cond_dir),
+        path_in_repo=repo_path,
+        repo_id=repo,
+        repo_type=REPO_TYPE,
+        commit_message=msg,
+    )
+    print(f"  ✓ {repo_path} ({n} files, 1 commit)")
+    return n
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--experiment", required=True,
@@ -90,12 +113,9 @@ def main():
         if not cond_dir.is_dir():
             print(f"  skipping {cond} (not found)")
             continue
-        files = sorted(f for f in cond_dir.rglob("*") if f.is_file())
-        print(f"\n{cond}  ({len(files)} files)")
-        for f in files:
-            rel = f.relative_to(cond_dir)
-            upload_file(api, f, args.repo, f"{prefix}/{cond}/{rel.as_posix()}",
-                        f"upload {exp}/{cond}/{rel.as_posix()}")
+        print(f"\n{cond}", end="  ")
+        upload_condition(api, cond_dir, args.repo, f"{prefix}/{cond}",
+                          f"upload {exp}/{cond}")
 
     print(f"\nDone — https://huggingface.co/datasets/{args.repo}/tree/main/{prefix}")
 
