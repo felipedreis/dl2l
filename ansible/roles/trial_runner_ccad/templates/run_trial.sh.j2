@@ -139,7 +139,17 @@ cleanup() {
   # actually at risk; only the reported status was wrong. Never let this
   # best-effort safety net take down an otherwise-successful trial's exit
   # code again.
-  if [ -f "${PG_OVERLAY:-}" ]; then
+  #
+  # CONFIRMED LIVE, same day, second bug: keeping the overlay UNCONDITIONALLY
+  # (including for trials that succeeded) blew through this account's NFS
+  # quota within one batch — 18 successful trials' redundant ~1-3GB overlays
+  # added up to 32GB and blocked even `mkdir` on $HOME (a *quota* limit, not
+  # raw disk space — `df` still showed 900+GB free). The whole point of this
+  # safety net is recovering a FAILED extraction; a successful one already
+  # has everything it needs in $TRIAL_DIR's parquet + pg_dump, so only keep
+  # the overlay when $rc (captured above, before extraction had a chance to
+  # run) is non-zero.
+  if [ "$rc" != 0 ] && [ -f "${PG_OVERLAY:-}" ]; then
     cp --sparse=always "$PG_OVERLAY" "$TRIAL_DIR/pg_overlay.img" || echo "WARNING: overlay preservation copy failed (trial data itself is unaffected)"
   fi
   rm -rf "/scratch/dl2l_${SLURM_JOB_ID:-unknown}"
