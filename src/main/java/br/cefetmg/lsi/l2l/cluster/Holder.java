@@ -90,7 +90,26 @@ public class Holder extends AbstractActor implements Registrable {
     public void preStart() throws Exception {
         super.preStart();
         metricsExt = MetricsExtension.of(context().system());
-        cluster.subscribe(self(), MemberUp.class);
+        // CONFIRMED LIVE (2026-07-16): the plain 2-arg subscribe(self(),
+        // MemberUp.class) defaults to InitialStateAsSnapshot, not
+        // InitialStateAsEvents (verified by decompiling the actual
+        // akka-cluster_2.11-2.5.32.jar this project bundles) — if manager
+        // is ALREADY Up by the time this line runs, this actor gets a
+        // CurrentClusterState snapshot instead of a MemberUp event for it,
+        // which handleNewMember() below never sees (onReceive only matches
+        // MemberUp.class), so the Register message to manager never gets
+        // sent. Manager is always started first and its TCP port is
+        // confirmed open before this JVM even starts, so it's frequently
+        // already Up by now — under light load this actor's own startup is
+        // fast enough to usually still land inside the pre-Up window, but
+        // under heavy concurrent CPU contention (many trials sharing a
+        // node) startup is slow and variable enough that manager is Up far
+        // more often than not, which is exactly why this failure mode went
+        // from "occasional" to "most trials" as concurrency increased in
+        // testing. initialStateAsEvents() makes Akka synthesize a MemberUp
+        // event for every already-Up member at subscribe time, closing the
+        // race regardless of relative startup timing.
+        cluster.subscribe(self(), initialStateAsEvents(), MemberUp.class);
         logger.setLevel(Level.SEVERE);
         // Register learning settings before any creature is spawned so components can read them.
         SimulationSettingsExtension.of(context().system()).configure(learningSettings);

@@ -4,6 +4,7 @@ import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.cluster.Cluster;
 import akka.cluster.ClusterEvent.*;
+import static akka.cluster.ClusterEvent.initialStateAsEvents;
 import akka.cluster.Member;
 import akka.japi.pf.ReceiveBuilder;
 import br.cefetmg.lsi.l2l.common.SequentialId;
@@ -29,7 +30,11 @@ public class SequentialIdProvider extends AbstractActor implements Registrable {
     @Override
     public void preStart() throws Exception {
         super.preStart();
-        cluster.subscribe(self(), MemberUp.class);
+        // See Holder.preStart()'s comment on the same call shape — the plain
+        // 2-arg subscribe() defaults to InitialStateAsSnapshot, silently
+        // missing an already-Up manager instead of delivering the MemberUp
+        // event this actor's registration logic depends on.
+        cluster.subscribe(self(), initialStateAsEvents(), MemberUp.class);
     }
 
     @Override
