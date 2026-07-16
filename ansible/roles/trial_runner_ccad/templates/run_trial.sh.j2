@@ -112,6 +112,23 @@ cleanup() {
     singularity instance list 2>/dev/null | grep -qE "^(${DB_NAME}|${MANAGER_NAME}|${DETECTOR_NAME}|${HOLDER_NAME}) " || break
     sleep 2
   done
+  # CONFIRMED LIVE, expensively (2026-07-16): a Python 3.9-incompatibility
+  # bug in dl2l_data/db.py crashed extraction on EVERY trial of a 25-trial
+  # batch, right after each one had already run its full 60-minute
+  # simulation successfully — and this trap's old unconditional `rm -rf`
+  # below deleted every trial's postgres overlay (the only copy of that
+  # hour of work) before the fix could be deployed. 24/25 trials'
+  # data was unrecoverably lost. Postgres has just been cleanly stopped
+  # above (consistent on-disk state, not a live snapshot), so copy its
+  # overlay out to the NFS-backed $TRIAL_DIR before wiping node-local
+  # /scratch — a one-time end-of-trial copy, not the live read/write
+  # traffic during the run itself (which stays on node-local /scratch,
+  # unchanged, per the earlier fix for that specific problem). If
+  # extraction ever fails again, a fresh postgres instance can be started
+  # against this saved overlay (`singularity instance start --overlay
+  # <path> ... postgres_sandbox <name>`) and re-extracted by hand instead
+  # of losing the trial outright.
+  [ -f "${PG_OVERLAY:-}" ] && cp --sparse=always "$PG_OVERLAY" "$TRIAL_DIR/pg_overlay.img" 2>/dev/null
   rm -rf "/scratch/dl2l_${SLURM_JOB_ID:-unknown}"
 }
 trap cleanup EXIT
@@ -127,10 +144,12 @@ INITDB_BIND="{{ remote_work_dir }}/config/init-db.sql:/docker-entrypoint-initdb.
 # pg_wal/xlogtemp.NN: No space left on device" — --writable-tmpfs has no
 # size flag, and its default is evidently just a few tens of MB. postgres
 # instead gets its own disk-backed (not RAM-backed) ext3 overlay image.
-# Ephemeral is still intentional (deleted in the trap above, not a
-# shortcut): mirrors how the local/Pi docker-compose postgres has no named
-# volume either — extraction below copies everything needed out to the
-# shared NFS before teardown.
+# The node-local copy is still ephemeral by design (mirrors how the
+# local/Pi docker-compose postgres has no named volume either — extraction
+# below copies everything needed out to the shared NFS before teardown),
+# but the overlay ITSELF now survives the trial: cleanup()'s trap above
+# copies it to $TRIAL_DIR (NFS) before deleting the node-local original,
+# a recovery safety net (see that trap's own comment for why).
 #
 # CONFIRMED LIVE, twice:
 # 1) A 1024 (1GB) overlay, sized only against a quick smoke write, filled up
