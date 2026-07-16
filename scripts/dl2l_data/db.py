@@ -48,13 +48,22 @@ def _exec_argv(container: str, command: list, runtime: str = "docker",
     return argv + [container] + command
 
 
+def _port_flag(port: int | None) -> list:
+    """-p <port> for psql/pg_dump, or nothing to use the client's default
+    (5432) — needed on CCAD, where concurrent trials sharing a node each
+    run postgres on a distinct $PGPORT (see run_trial.sh.j2); local/Pi's
+    docker-compose postgres always listens on the default, so every
+    existing call site (port=None) is unaffected."""
+    return ["-p", str(port)] if port is not None else []
+
+
 def psql_copy(container: str, sql: str, docker_cmd: str = "docker",
-              runtime: str = "docker") -> list:
+              runtime: str = "docker", port: int | None = None) -> list:
     """Run COPY (<sql>) TO STDOUT WITH CSV HEADER via docker exec stdin.
     Returns a list of rows (first row = header strings), empty list on error.
     """
     copy = f"COPY ({sql}) TO STDOUT WITH CSV HEADER;\n"
-    argv = _exec_argv(container, ["psql", "-U", DB_USER, "-d", DB_NAME],
+    argv = _exec_argv(container, ["psql", "-U", DB_USER, "-d", DB_NAME] + _port_flag(port),
                        runtime=runtime, docker_cmd=docker_cmd, interactive=True)
     result = subprocess.run(argv, input=copy, capture_output=True, text=True)
     if result.returncode != 0:
@@ -64,10 +73,10 @@ def psql_copy(container: str, sql: str, docker_cmd: str = "docker",
 
 
 def psql_query(container: str, sql: str, docker_cmd: str = "docker",
-               runtime: str = "docker") -> list:
+               runtime: str = "docker", port: int | None = None) -> list:
     """Run a plain SELECT (not COPY) and return rows as list-of-lists."""
     argv = _exec_argv(container, ["psql", "-U", DB_USER, "-d", DB_NAME,
-                                  "-t", "-A", "-F", ","],
+                                  "-t", "-A", "-F", ","] + _port_flag(port),
                        runtime=runtime, docker_cmd=docker_cmd, interactive=True)
     result = subprocess.run(argv, input=sql + ";\n", capture_output=True, text=True)
     if result.returncode != 0:
@@ -97,11 +106,11 @@ def decode_type_hex(hex_str: str) -> str:
 
 
 def pg_dump(container: str, out_path: Path, docker_cmd: str = "docker",
-            runtime: str = "docker") -> None:
+            runtime: str = "docker", port: int | None = None) -> None:
     """pg_dump the `data` schema and gzip it to out_path."""
     print(f"  pg_dump → {out_path.name} …", file=sys.stderr)
     argv = _exec_argv(container, ["pg_dump", "-U", DB_USER, "-d", DB_NAME,
-                                  "--schema=data", "--no-owner", "--no-acl"],
+                                  "--schema=data", "--no-owner", "--no-acl"] + _port_flag(port),
                        runtime=runtime, docker_cmd=docker_cmd, interactive=False)
     result = subprocess.run(argv, capture_output=True)
     if result.returncode != 0:

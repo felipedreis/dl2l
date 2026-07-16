@@ -6,27 +6,34 @@
 # Replaces docker-compose (no equivalent under Singularity: no bridge
 # networking/service-DNS, no depends_on/healthchecks) with 4 `singularity
 # instance start` calls sharing this node's network namespace — hence
-# HOST=localhost everywhere and a DISTINCT PORT per role (manager=2551,
-# detector=2552, holder=2553) instead of docker's per-container hostnames.
+# HOST=localhost everywhere.
 #
-# KNOWN FOLLOW-UP (not yet solved): originally used `--exclusive` (whole
-# node per trial) specifically so fixed ports never collide across
-# concurrently-running trials — confirmed live that this trips
-# AssocGrpCpuLimit (the account's CPU grant is smaller than a full node, and
-# GrpTRES/MaxTRES weren't visible via `sacctmgr show associations` to size
-# it precisely), so this now requests a modest fixed CPU count instead. That
-# means two trials CAN land on the same node at once, and their fixed ports
-# (2551-2553, 5432) and singularity instance names (dl2l-db, dl2l-manager,
-# ...) WOULD collide. Fine for now (this repo currently only runs one
-# condition's array job at a time in practice) — the real fix is deriving
-# each port/instance name from ${SLURM_ARRAY_TASK_ID} instead of hardcoding
-# them, which also touches ccad-config.conf's seed-nodes port.
+# CONFIRMED LIVE (2026-07-16): `--exclusive` (whole node per trial) was
+# dropped early on after tripping AssocGrpCpuLimit with a modest account
+# grant — but a later, much bigger 25-trial submission showed the account
+# can in fact support many concurrent 6-CPU trials at once (short_qos's
+# MaxTRESPU cpu=144 ÷ 6 = 24, matching exactly what was observed: 24
+# trials RUNNING simultaneously, a 25th PENDING). With fixed ports
+# (2551-2553, 5432) and fixed instance names (dl2l-manager, dl2l-db, ...),
+# that many concurrent trials landing on the SAME node (confirmed live: up
+# to 9 on one 56-CPU node) means real collisions, not just the sequential
+# same-node-handoff race this file used to only guard against — different
+# trials' JVMs could end up binding each other's ports or even
+# cross-joining the same Akka cluster. Fixed at the root instead of
+# fighting SLURM's scheduling: every port and every instance name below is
+# derived from $SLURM_JOB_ID (globally unique per array task, unlike
+# $SLURM_ARRAY_TASK_ID which repeats across different conditions' arrays),
+# so concurrent trials on the same node simply don't share anything
+# anymore. This also touches config/ccad-config.conf's seed-nodes entry,
+# now parameterized via ${SEED_PORT} instead of hardcoded :2551.
 #
 # The trap below always writes a DONE sentinel (this task's exit code) and
-# tears down every instance, success or failure — mirrors
-# roles/train_ccad/templates/train_variants.sh.j2's pattern exactly. No live
-# ansible/SSH connection is needed once submitted (the CEFET VPN drops on
-# idle) — a separate `-e rescue=true` run checks for this sentinel later.
+# tears down only THIS trial's own instances (not --all — with concurrent
+# trials sharing a node, --all would kill neighbors too), success or
+# failure — mirrors roles/train_ccad/templates/train_variants.sh.j2's
+# pattern. No live ansible/SSH connection is needed once submitted (the
+# CEFET VPN drops on idle) — a separate `-e rescue=true` run checks for
+# the DONE sentinel later.
 #SBATCH --job-name=dl2l_{{ experiment_cfg.name }}_{{ cond.key }}
 #SBATCH --partition={{ ccad_sim_partition }}
 {% if ccad_sim_qos %}#SBATCH --qos={{ ccad_sim_qos }}
@@ -38,6 +45,26 @@ set -euo pipefail
 TRIAL="${SLURM_ARRAY_TASK_ID:?must be run as a SLURM array task}"
 TRIAL_DIR="{{ remote_work_dir }}/data/{{ experiment_cfg.name }}/{{ cond.key }}/trial_${TRIAL}"
 mkdir -p "$TRIAL_DIR"
+
+# Per-trial unique ports, derived from $SLURM_JOB_ID (see top-of-file note).
+# 20000 + (job id mod 10000) keeps everything in a safe, unprivileged range;
+# collisions between two concurrently-running trials would need job ids
+# differing by an exact multiple of 10000, not realistic at this project's
+# scale. +0..+6 spread across postgres/manager/detector/holder app ports
+# plus their three metrics ports.
+PORT_BASE=$((20000 + (SLURM_JOB_ID % 10000)))
+PG_PORT=$((PORT_BASE))
+MANAGER_PORT=$((PORT_BASE + 1))
+DETECTOR_PORT=$((PORT_BASE + 2))
+HOLDER_PORT=$((PORT_BASE + 3))
+METRICS_MANAGER_PORT=$((PORT_BASE + 4))
+METRICS_DETECTOR_PORT=$((PORT_BASE + 5))
+METRICS_HOLDER_PORT=$((PORT_BASE + 6))
+
+DB_NAME="dl2l-db-${SLURM_JOB_ID}"
+MANAGER_NAME="dl2l-manager-${SLURM_JOB_ID}"
+DETECTOR_NAME="dl2l-detector-${SLURM_JOB_ID}"
+HOLDER_NAME="dl2l-holder-${SLURM_JOB_ID}"
 
 # Singularity writes per-instance logs (postgres/manager/detector/holder) to
 # $HOME/.singularity/... — CCAD's NFS-mounted home, so every line written is
@@ -54,21 +81,30 @@ mkdir -p "$TRIAL_DIR"
 # config/ccad-config.conf's akka loglevel was DEBUG (copied verbatim from
 # docker-config.conf, fine for local disk, not for NFS) — the gossip/
 # heartbeat/serialization-warning spam that made these logs so large was
-# happening at DEBUG specifically. Turned down to INFO there; this trap
-# needs no scratch-copying dance now that the volume itself is the fix.
-trap 'echo "$?" > "'"$TRIAL_DIR"'/DONE"; singularity instance stop --all >/dev/null 2>&1 || true; rm -rf "/scratch/dl2l_${SLURM_JOB_ID:-unknown}"' EXIT
-
-# CONFIRMED LIVE (25-trial real run): 6/25 trials failed fast (~35s vs 3-4min
-# for a real run) with "No creatures found" despite every instance reporting
-# "started successfully" — SLURM's own timing showed every trial on a node
-# starting at the EXACT instant the previous one's job exited, with no gap.
-# --exclusive was already dropped (see the port-collision note below on
-# $WRITABLE), so this smells like the previous trial's EXIT trap
-# (`instance stop --all`) not having fully released the fixed ports
-# (5432/2551-2553) by the time SLURM starts the next array task on the same
-# node — a brief grace period gives that teardown room to actually finish
-# before this trial starts binding the same ports again.
-sleep 5
+# happening at DEBUG specifically. Turned down to INFO there.
+#
+# CONFIRMED LIVE (full 25-trial run, 2026-07-15/16): a blind `instance stop
+# --all` here is NOT sufficient proof this trial's ports are actually free
+# by the time this function returns and the script exits — 19/25 trials
+# failed that run, every single one starting with ZERO gap after the prior
+# trial ended on the same node (SLURM schedules the next array task the
+# instant a slot frees up). Now that every instance name is unique per
+# trial (see top-of-file note), `--all` is also actively wrong under
+# concurrency — it would tear down OTHER trials sharing this node. Stop
+# only this trial's 4 named instances, and verify they're actually gone
+# from `instance list` before letting the trap complete, instead of
+# guessing at a fixed sleep.
+cleanup() {
+  local rc=$?
+  echo "$rc" > "$TRIAL_DIR/DONE"
+  singularity instance stop "$DB_NAME" "$MANAGER_NAME" "$DETECTOR_NAME" "$HOLDER_NAME" >/dev/null 2>&1 || true
+  for _ in $(seq 1 20); do
+    singularity instance list 2>/dev/null | grep -qE "^(${DB_NAME}|${MANAGER_NAME}|${DETECTOR_NAME}|${HOLDER_NAME}) " || break
+    sleep 2
+  done
+  rm -rf "/scratch/dl2l_${SLURM_JOB_ID:-unknown}"
+}
+trap cleanup EXIT
 
 CONFIG_BIND="{{ remote_work_dir }}/config/ccad-config.conf:/config/docker-config.conf:ro"
 INITDB_BIND="{{ remote_work_dir }}/config/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro"
@@ -81,7 +117,7 @@ INITDB_BIND="{{ remote_work_dir }}/config/init-db.sql:/docker-entrypoint-initdb.
 # pg_wal/xlogtemp.NN: No space left on device" — --writable-tmpfs has no
 # size flag, and its default is evidently just a few tens of MB. postgres
 # instead gets its own disk-backed (not RAM-backed) ext3 overlay image.
-# Ephemeral is still intentional (deleted in the trap below, not a
+# Ephemeral is still intentional (deleted in the trap above, not a
 # shortcut): mirrors how the local/Pi docker-compose postgres has no named
 # volume either — extraction below copies everything needed out to the
 # shared NFS before teardown.
@@ -116,16 +152,18 @@ singularity overlay create --size 8192 "$PG_OVERLAY"
 # `docker://` reference would fail here. No --fakeroot: CCAD support mapped
 # this account's uid on compute nodes (see docs/plans/ccad-singularity-experiments.md),
 # so the official postgres image's entrypoint runs fine as our real,
-# resolvable uid — no user-namespace trickery needed.
+# resolvable uid — no user-namespace trickery needed. PGPORT: the official
+# postgres image's entrypoint reads this to listen on a non-default port,
+# needed so concurrent trials on the same node don't all fight over :5432.
 singularity instance start --overlay "$PG_OVERLAY" \
   --bind "$INITDB_BIND" \
-  --env POSTGRES_PASSWORD=postgres --env POSTGRES_DB=l2l \
-  {{ remote_work_dir }}/postgres_sandbox dl2l-db
+  --env POSTGRES_PASSWORD=postgres --env POSTGRES_DB=l2l --env PGPORT="$PG_PORT" \
+  {{ remote_work_dir }}/postgres_sandbox "$DB_NAME"
 
 echo "Waiting for postgres..."
 pg_ready=0
 for _ in $(seq 1 60); do
-  singularity exec instance://dl2l-db pg_isready -U postgres >/dev/null 2>&1 && { pg_ready=1; break; }
+  singularity exec "instance://${DB_NAME}" pg_isready -U postgres -p "$PG_PORT" >/dev/null 2>&1 && { pg_ready=1; break; }
   sleep 2
 done
 # CONFIRMED LIVE GAP (found via a smoke-test failure where the dl2l app's own
@@ -136,65 +174,61 @@ done
 # problem. Every wait loop below now fails fast with the instance's own log.
 [ "$pg_ready" = 1 ] || { echo "FATAL: postgres never became ready"; singularity instance list; exit 1; }
 
-# Completion detection below watches THIS log (see rationale further down),
-# not the holder's — same APPEND-across-invocations behavior as any other
-# instance log here, so record the pre-start size to only look at bytes
-# THIS trial's manager writes.
-#
-# CONFIRMED LIVE BUG: no `|| true` here killed the whole script instantly
-# the first time this ran against a freshly-cleaned instances/logs/ dir (no
-# dl2l-manager.err existed anywhere yet) — under `set -e`+`pipefail`, `ls`
-# matching nothing fails, that failure propagates through the pipe to
-# `head -1`, and the plain `VAR=$(...)` assignment is NOT a context `set -e`
-# exempts, so the script exited right here — before ever reaching the
-# `[ -n "$MANAGER_LOG" ]` check below that was supposed to handle exactly
-# this "doesn't exist yet" case gracefully.
-MANAGER_LOG=$(ls $HOME/.singularity/instances/logs/*/*/dl2l-manager.err 2>/dev/null | head -1) || true
-MANAGER_LOG_OFFSET=0
-[ -n "$MANAGER_LOG" ] && MANAGER_LOG_OFFSET=$(wc -c < "$MANAGER_LOG")
+# Each trial's manager log is now uniquely named (dl2l-manager-<jobid>.err —
+# see MANAGER_NAME above), so unlike before there's no shared/appended file
+# across trials to worry about skipping past — every match here is
+# guaranteed to belong to THIS trial alone. (ls under `if` is not subject to
+# `set -e` — if-conditions are one of the contexts it exempts — so no `|| true`
+# dance is needed here the way earlier bare `VAR=$(...)` assignments needed one.)
+find_manager_log() {
+  ls $HOME/.singularity/instances/logs/*/*/"${MANAGER_NAME}.err" 2>/dev/null | head -1
+}
 
 # --- manager (+ idProvider) --------------------------------------------------
+# SEED_PORT: config/ccad-config.conf's akka.cluster.seed-nodes now reads
+# ${SEED_PORT} instead of a hardcoded :2551, so detector/holder can find
+# this trial's own manager regardless of which port it landed on.
 # METRICS_PORT: every role's JVM starts a MetricsExtension /metrics endpoint
-# unconditionally (see Main.java) — on CCAD all 4 roles share the node's
-# network namespace (no per-container ports like docker-compose gets for
-# free), so each needs its own fixed port or they'd all fight over the
-# default :9091. Only manager's is actually polled below; detector/holder
-# just need a non-colliding port so their own binds don't fail.
+# unconditionally (see Main.java) — needs its own per-trial port for the
+# same reason as the app ports.
 singularity instance start $WRITABLE \
   --bind "$CONFIG_BIND" \
   --env ROLE=manager,idProvider --env SIMULATION={{ cond.simulation }} \
-  --env HOST=localhost --env PORT=2551 --env METRICS_PORT=9091 \
-  --env DL2L_DB_URL=jdbc:postgresql://localhost:5432/l2l \
-  {{ remote_work_dir }}/dl2l_sandbox dl2l-manager
+  --env HOST=localhost --env PORT="$MANAGER_PORT" --env SEED_PORT="$MANAGER_PORT" \
+  --env METRICS_PORT="$METRICS_MANAGER_PORT" \
+  --env DL2L_DB_URL="jdbc:postgresql://localhost:${PG_PORT}/l2l" \
+  {{ remote_work_dir }}/dl2l_sandbox "$MANAGER_NAME"
 
 echo "Waiting for manager..."
 mgr_ready=0
 for _ in $(seq 1 60); do
-  (exec 3<>/dev/tcp/localhost/2551) 2>/dev/null && { exec 3<&- 3>&-; mgr_ready=1; break; }
+  (exec 3<>/dev/tcp/localhost/$MANAGER_PORT) 2>/dev/null && { exec 3<&- 3>&-; mgr_ready=1; break; }
   sleep 2
 done
-[ "$mgr_ready" = 1 ] || { echo "FATAL: manager never came up on :2551"; singularity instance list; exit 1; }
+[ "$mgr_ready" = 1 ] || { echo "FATAL: manager never came up on :$MANAGER_PORT"; singularity instance list; exit 1; }
 
 # --- collisionDetector -------------------------------------------------------
 singularity instance start $WRITABLE \
   --bind "$CONFIG_BIND" \
   --env ROLE=collisionDetector --env SIMULATION={{ cond.simulation }} \
-  --env HOST=localhost --env PORT=2552 --env METRICS_PORT=9093 \
-  {{ remote_work_dir }}/dl2l_sandbox dl2l-detector
+  --env HOST=localhost --env PORT="$DETECTOR_PORT" --env SEED_PORT="$MANAGER_PORT" \
+  --env METRICS_PORT="$METRICS_DETECTOR_PORT" \
+  {{ remote_work_dir }}/dl2l_sandbox "$DETECTOR_NAME"
 
 # --- holder -------------------------------------------------------------------
 singularity instance start $WRITABLE \
   --bind "$CONFIG_BIND" \
   --env ROLE=holder --env SIMULATION={{ cond.simulation }} \
-  --env HOST=localhost --env PORT=2553 --env METRICS_PORT=9092 \
-  --env DL2L_DB_URL=jdbc:postgresql://localhost:5432/l2l \
-  {{ remote_work_dir }}/dl2l_sandbox dl2l-holder
+  --env HOST=localhost --env PORT="$HOLDER_PORT" --env SEED_PORT="$MANAGER_PORT" \
+  --env METRICS_PORT="$METRICS_HOLDER_PORT" \
+  --env DL2L_DB_URL="jdbc:postgresql://localhost:${PG_PORT}/l2l" \
+  {{ remote_work_dir }}/dl2l_sandbox "$HOLDER_NAME"
 
 # A holder that crashes on startup disappears from `instance list` almost
 # immediately — indistinguishable from "already finished" to the loop below
 # unless we first confirm it actually came up.
 sleep 3
-singularity instance list 2>/dev/null | grep -q '^dl2l-holder ' \
+singularity instance list 2>/dev/null | grep -q "^${HOLDER_NAME} " \
   || { echo "FATAL: holder never came up"; singularity instance list; exit 1; }
 
 # CONFIRMED LIVE BUG: the instance being up is not the same as the simulation
@@ -204,18 +238,17 @@ singularity instance list 2>/dev/null | grep -q '^dl2l-holder ' \
 # manager — manager's log shows zero "Registering a new holder"/"Starting all
 # creatures" for the entire run. Since completion detection below only checks
 # for manager's COMPLETION messages, not that the run ever started, the
-# forced-timeout path still fires 40 minutes later regardless — the trial
-# "succeeds" from run_trial.sh's point of view while extraction finds zero
-# creatures. Fail fast instead of burning 40+ minutes on a silently-empty
+# forced-timeout path still fires regardless — the trial "succeeds" from
+# run_trial.sh's point of view while extraction finds zero creatures. Fail
+# fast instead of burning the full in-sim deadline on a silently-empty
 # trial: give the registration handshake a couple of minutes, watching
 # manager's log for the same "Starting all creatures" signal
 # startSimulation() logs once every holder has ack'd ready.
 echo "Waiting for the simulation to actually start (holder registration)..."
 sim_started=0
 for _ in $(seq 1 24); do
-  MANAGER_LOG=$(ls $HOME/.singularity/instances/logs/*/*/dl2l-manager.err 2>/dev/null | head -1) || true
-  if [ -n "$MANAGER_LOG" ] && tail -c "+$((MANAGER_LOG_OFFSET + 1))" "$MANAGER_LOG" 2>/dev/null \
-      | grep -q "Starting all creatures"; then
+  if MANAGER_LOG=$(find_manager_log) && [ -n "$MANAGER_LOG" ] \
+      && grep -q "Starting all creatures" "$MANAGER_LOG" 2>/dev/null; then
     sim_started=1
     break
   fi
@@ -223,35 +256,35 @@ for _ in $(seq 1 24); do
 done
 if [ "$sim_started" != 1 ]; then
   echo "FATAL: simulation never started — holder came up but never registered with manager within 2 minutes"
-  [ -n "$MANAGER_LOG" ] && tail -c "+$((MANAGER_LOG_OFFSET + 1))" "$MANAGER_LOG" | tail -80
+  MANAGER_LOG=$(find_manager_log) || true
+  [ -n "${MANAGER_LOG:-}" ] && tail -80 "$MANAGER_LOG"
   exit 1
 fi
 
-# CONFIRMED LIVE BUG: polling `singularity instance list` for dl2l-holder to
+# CONFIRMED LIVE BUG: polling `singularity instance list` for the holder to
 # disappear is NOT reliable completion detection — under a real (non-smoke)
 # 25-trial run, 6 trials were cut short after ~35-175s instead of running
-# toward the 40-minute in-sim deadline, with ZERO natural creature deaths
-# logged (no "Sending remove order to holder" messages) and the holder's own
-# log showing "Starting coordinated shutdown from JVM shutdown hook" — proof
+# toward the in-sim deadline, with ZERO natural creature deaths logged (no
+# "Sending remove order to holder" messages) and the holder's own log
+# showing "Starting coordinated shutdown from JVM shutdown hook" — proof
 # the JVM was killed by an EXTERNAL signal, not a natural game-over. The
 # likely culprit: `instance list` has some transient hiccup under load from
 # 4 concurrently-running instances, `grep` finds no match on that one poll,
-# the loop breaks, and this script's own EXIT trap (`instance stop --all`)
-# then kills the STILL-RUNNING simulation itself.
+# the loop breaks, and this script's own EXIT trap then kills the
+# STILL-RUNNING simulation itself.
 #
 # TRIED watching the holder's own log for Holder.java's handleFinish()
 # message ("Received stop order from manager. Stopping") next — CONFIRMED
 # LIVE this message (and its natural-death sibling, "This holder has
-# finished his work.") never appears in EITHER dl2l-holder.out or
-# dl2l-holder.err, even on a validation run that demonstrably reached
-# "Maximum runtime reached" on the manager side. Holder.java's logger field
-# uses plain java.util.logging (`Logger.getLogger(...)`), unlike the
-# akka/SLF4J-based logging everything else here goes through — it appears
-# to have no configured handler in this JVM and its output goes nowhere
-# capturable.
+# finished his work.") never appears in EITHER the holder's .out or .err,
+# even on a validation run that demonstrably reached "Maximum runtime
+# reached" on the manager side. Holder.java's logger field uses plain
+# java.util.logging (`Logger.getLogger(...)`), unlike the akka/SLF4J-based
+# logging everything else here goes through — it appears to have no
+# configured handler in this JVM and its output goes nowhere capturable.
 #
 # manager's own logger DOES work reliably (confirmed live: "Simulation
-# runtime limited to 40 minutes" and "Maximum runtime reached — stopping
+# runtime limited to N minutes" and "Maximum runtime reached — stopping
 # simulation" both showed up exactly as expected) — SimulationManager logs
 # "All creatures dead in holder <id>" for the natural-death path and
 # "Maximum runtime reached — stopping simulation" for the forced-timeout
@@ -261,53 +294,48 @@ fi
 # actually-visible completion signal.
 #
 # TRIED adding a `singularity instance list` short-circuit on top (3
-# consecutive missing-dl2l-holder polls, ~15s of confirmed absence, treated
-# as a real crash) so a genuinely-dead holder wouldn't have to wait out the
-# full ceiling below — CONFIRMED LIVE this is STILL a false positive even
-# with that debounce: a run using this exact 3-strikes logic was killed by
-# its own EXIT trap at ~90s in (`instance list` reporting dl2l-holder gone
-# for 3 straight 5s-apart polls) while the holder's own log shows it was
-# actively processing right up to the same second the trap's `instance stop
-# --all` tore everything down (last app activity 2-3s before the kill, no
-# exception, no OOM, no "shutting down" of its own). No other job was
-# sharing this node at the time (checked via `sacct`), so this isn't the
-# known same-node port-collision risk either — `instance list` itself is
-# apparently unreliable enough, even 3-for-3, to fail a perfectly healthy
-# trial. Given that a false-positive kill silently produces truncated,
-# scientifically-invalid data (exactly what caused the original 25-trial
-# experiment to need rerunning) while a false-negative (a genuinely-dead
-# holder just sitting until the ceiling below) only costs wall-clock time
-# on an async submit-and-rescue job, dropped the `instance list` check
-# entirely — completion detection now rests solely on manager's log,
-# backstopped by the ceiling below and, ultimately, SBATCH --time.
-# NEW: SimulationManager now also exposes a `dl2l_simulation_running` gauge
-# (0/1) over its own /metrics endpoint (docs/plans/ccad-metrics-completion-detection.md)
-# — a direct, synchronous query against live process state, with none of the
-# log-grep path's dependency on Singularity flushing the instance log to NFS
-# in a timely way. Checked FIRST every poll; the log-grep above is kept as a
-# fallback for this validation cycle (not yet proven live on CCAD — in
-# particular, whether Akka HTTP responds promptly inside a Singularity
-# instance the same way it does under docker-compose) rather than an
-# outright replacement. Drop the fallback once a couple of real trials
-# confirm the two signals agree on timing.
+# consecutive missing-holder polls, ~15s of confirmed absence, treated as a
+# real crash) so a genuinely-dead holder wouldn't have to wait out the full
+# ceiling below — CONFIRMED LIVE this is STILL a false positive even with
+# that debounce: a run using this exact 3-strikes logic was killed by its
+# own EXIT trap at ~90s in while the holder's own log shows it was actively
+# processing right up to the same second the trap tore everything down (no
+# exception, no OOM, no "shutting down" of its own). Given that a
+# false-positive kill silently produces truncated, scientifically-invalid
+# data while a false-negative (a genuinely-dead holder just sitting until
+# the ceiling below) only costs wall-clock time on an async
+# submit-and-rescue job, dropped the `instance list` check entirely —
+# completion detection now rests solely on manager's log, backstopped by
+# the ceiling below and, ultimately, SBATCH --time.
+#
+# SimulationManager also exposes a `dl2l_simulation_running` gauge (0/1)
+# over its own /metrics endpoint (docs/plans/ccad-metrics-completion-detection.md)
+# — a direct, synchronous query against live process state, with none of
+# the log-grep path's dependency on Singularity flushing the instance log
+# to NFS in a timely way. Checked FIRST every poll; the log-grep is kept as
+# a fallback (CONFIRMED LIVE the manager's HTTP server tears down within
+# about a second of stopSimulation(), so an external 5s-interval poller
+# essentially never observes the 0 reading in practice — the log-grep
+# fallback is what actually fires almost every time, and that's fine, this
+# is deliberately opportunistic not load-bearing).
 echo "Waiting for the simulation to finish..."
 sim_done=0
 # ~90 min ceiling: generous margin beyond the in-sim maxRuntimeMinutes cap
-# (bumped from 40 to 60 minutes across simulations/20260714_memory_vs_wm_dense_reposition_*.conf).
+# (currently 60 minutes across simulations/20260714_memory_vs_wm_dense_reposition_*.conf).
 # CONFIRMED LIVE a tighter 50-min ceiling raced against a simulation that
 # legitimately ran its full 40-minute in-sim deadline plus real-world JVM/
 # processing overhead (jobs completed at 41-47 min wall-clock for a 40-min
 # cap) — keep a similar ~25-30 min margin over whatever the cap is. SBATCH
 # --time is the ultimate backstop regardless.
 for _ in $(seq 1 1080); do
-  if curl -s -m 3 http://localhost:9091/metrics 2>/dev/null | grep -qE '^dl2l_simulation_running\{[^}]*\} 0(\.0)?$'; then
+  if curl -s -m 3 "http://localhost:${METRICS_MANAGER_PORT}/metrics" 2>/dev/null \
+      | grep -qE '^dl2l_simulation_running\{[^}]*\} 0(\.0)?$'; then
     echo "Completion detected via /metrics (dl2l_simulation_running=0)"
     sim_done=1
     break
   fi
-  MANAGER_LOG=$(ls $HOME/.singularity/instances/logs/*/*/dl2l-manager.err 2>/dev/null | head -1) || true
-  if [ -n "$MANAGER_LOG" ] && tail -c "+$((MANAGER_LOG_OFFSET + 1))" "$MANAGER_LOG" 2>/dev/null \
-      | grep -qE "All creatures dead in holder|Maximum runtime reached"; then
+  if MANAGER_LOG=$(find_manager_log) && [ -n "$MANAGER_LOG" ] \
+      && grep -qE "All creatures dead in holder|Maximum runtime reached" "$MANAGER_LOG" 2>/dev/null; then
     echo "Completion detected via manager log fallback"
     sim_done=1
     break
@@ -316,7 +344,8 @@ for _ in $(seq 1 1080); do
 done
 if [ "$sim_done" != 1 ]; then
   echo "FATAL: simulation did not finish within the wait timeout"
-  [ -n "$MANAGER_LOG" ] && tail -c "+$((MANAGER_LOG_OFFSET + 1))" "$MANAGER_LOG" | tail -80
+  MANAGER_LOG=$(find_manager_log) || true
+  [ -n "${MANAGER_LOG:-}" ] && tail -80 "$MANAGER_LOG"
   exit 1
 fi
 
@@ -345,6 +374,6 @@ PYTHONPATH="{{ remote_work_dir }}/scripts" python3 -m dl2l_data.extract \
   --condition "{{ cond.key }}" \
   --trial "$TRIAL" \
   --out "{{ remote_work_dir }}/data/{{ experiment_cfg.name }}" \
-  --container dl2l-db --runtime singularity \
+  --container "$DB_NAME" --runtime singularity --db-port "$PG_PORT" \
   --format {{ experiment_cfg.extract.format }}{% if not experiment_cfg.extract.backup %} \
   --skip-backup{% endif %}
