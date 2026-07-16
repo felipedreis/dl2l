@@ -128,7 +128,20 @@ cleanup() {
   # against this saved overlay (`singularity instance start --overlay
   # <path> ... postgres_sandbox <name>`) and re-extracted by hand instead
   # of losing the trial outright.
-  [ -f "${PG_OVERLAY:-}" ] && cp --sparse=always "$PG_OVERLAY" "$TRIAL_DIR/pg_overlay.img" 2>/dev/null
+  # CONFIRMED LIVE (2026-07-16), the same day this safety net was added: no
+  # `|| true` here meant a failed/slow copy (NFS contention from ~20
+  # trials all finishing and copying large overlays around the same time
+  # is the likely cause) aborted this trap early via `set -e` — and
+  # because an EXIT trap's own abnormal termination overrides the script's
+  # already-determined exit status, trials that had ALREADY succeeded
+  # (DONE correctly recorded "0", every parquet file + backup present and
+  # complete) were misreported to SLURM as FAILED. The data was never
+  # actually at risk; only the reported status was wrong. Never let this
+  # best-effort safety net take down an otherwise-successful trial's exit
+  # code again.
+  if [ -f "${PG_OVERLAY:-}" ]; then
+    cp --sparse=always "$PG_OVERLAY" "$TRIAL_DIR/pg_overlay.img" || echo "WARNING: overlay preservation copy failed (trial data itself is unaffected)"
+  fi
   rm -rf "/scratch/dl2l_${SLURM_JOB_ID:-unknown}"
 }
 trap cleanup EXIT
