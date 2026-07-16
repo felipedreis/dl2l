@@ -190,9 +190,31 @@ singularity instance start --overlay "$PG_OVERLAY" \
   {{ remote_work_dir }}/postgres_sandbox "$DB_NAME"
 
 echo "Waiting for postgres..."
+# CONFIRMED LIVE (2026-07-16): a single pg_isready success is NOT proof the
+# REAL postgres instance is ready — the official postgres image's own
+# entrypoint runs a brief TEMPORARY server first (to apply
+# docker-entrypoint-initdb.d/init-db.sql), shuts it down, then starts the
+# real, long-lived server a moment later. Under heavy node load this
+# bootstrap-to-real handoff apparently takes long enough that a single
+# pg_isready poll can catch the temporary server's brief listening window,
+# report ready, and let this script move straight on to starting
+# manager/holder — which then hit `Connection refused` connecting to a
+# postgres that had already shut down again, silently skipped all DDL/data
+# writes for the ENTIRE run (no retry, no crash), and only surfaced as
+# "relation does not exist" at extraction, an hour later, with the
+# simulation's own hour of work otherwise having run to completion
+# normally. Require 3 CONSECUTIVE successful checks (not just one) before
+# trusting readiness — cheap insurance against catching that transient
+# window, at the cost of a few extra seconds in the common case.
 pg_ready=0
+consecutive=0
 for _ in $(seq 1 60); do
-  singularity exec "instance://${DB_NAME}" pg_isready -U postgres -p "$PG_PORT" >/dev/null 2>&1 && { pg_ready=1; break; }
+  if singularity exec "instance://${DB_NAME}" pg_isready -U postgres -p "$PG_PORT" >/dev/null 2>&1; then
+    consecutive=$((consecutive + 1))
+    [ "$consecutive" -ge 3 ] && { pg_ready=1; break; }
+  else
+    consecutive=0
+  fi
   sleep 2
 done
 # CONFIRMED LIVE GAP (found via a smoke-test failure where the dl2l app's own
