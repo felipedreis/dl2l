@@ -17,6 +17,16 @@ exec syntax differs enough from docker's (an `instance://` prefix, no `-i`
 flag) that it isn't expressed as just another `docker_cmd` string prefix.
 """
 
+# CONFIRMED LIVE (2026-07-16): `int | None` (PEP 604) type hints are
+# evaluated at import time without this, and CCAD's system python3 is 3.9
+# (PEP 604 needs 3.10+) — crashed EVERY trial's extraction step with
+# `TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'`
+# right at the finish line, after the simulation itself had already run
+# successfully for the full hour. `from __future__ import annotations`
+# makes annotations lazy strings (PEP 563), never evaluated at runtime,
+# which is compatible all the way back to Python 3.7.
+from __future__ import annotations
+
 import csv
 import gzip
 import io
