@@ -47,12 +47,22 @@ TRIAL_DIR="{{ remote_work_dir }}/data/{{ experiment_cfg.name }}/{{ cond.key }}/t
 mkdir -p "$TRIAL_DIR"
 
 # Per-trial unique ports, derived from $SLURM_JOB_ID (see top-of-file note).
-# 20000 + (job id mod 10000) keeps everything in a safe, unprivileged range;
-# collisions between two concurrently-running trials would need job ids
-# differing by an exact multiple of 10000, not realistic at this project's
-# scale. +0..+6 spread across postgres/manager/detector/holder app ports
-# plus their three metrics ports.
-PORT_BASE=$((20000 + (SLURM_JOB_ID % 10000)))
+#
+# CONFIRMED LIVE BUG (2026-07-16, first attempt at this fix): a stride of 1
+# port per job id (`20000 + (SLURM_JOB_ID % 10000)`) is NOT enough — each
+# trial needs a 7-port RANGE (postgres/manager/detector/holder + their 3
+# metrics ports), but SLURM hands out numeric job ids to array tasks
+# submitted together sequentially, so two ADJACENT trials' 7-port ranges
+# overlapped massively (job N's port+1 == job N+1's port+0, etc.) — caught
+# live as a holder crashing outright with `BindException: Address already
+# in use` on a port that belonged to a DIFFERENT trial's manager. Fixed by
+# spacing each trial's slot 20 ports apart (`* 20` below) instead of 1, so
+# adjacent job ids can no longer overlap; modulus 2000 keeps the whole
+# range (20000..60000) safely inside the valid unprivileged port space.
+# Collisions between two *concurrently-running* trials now require job ids
+# differing by an exact multiple of 2000 — not realistic at the ~24
+# concurrent trials this account's CPU grant actually allows.
+PORT_BASE=$((20000 + (SLURM_JOB_ID % 2000) * 20))
 PG_PORT=$((PORT_BASE))
 MANAGER_PORT=$((PORT_BASE + 1))
 DETECTOR_PORT=$((PORT_BASE + 2))
@@ -227,8 +237,20 @@ singularity instance start $WRITABLE \
 # A holder that crashes on startup disappears from `instance list` almost
 # immediately — indistinguishable from "already finished" to the loop below
 # unless we first confirm it actually came up.
-sleep 3
-singularity instance list 2>/dev/null | grep -q "^${HOLDER_NAME} " \
+#
+# CONFIRMED LIVE (2026-07-16): a single fixed `sleep 3` here false-positived
+# under heavy concurrency (9 trials x 4 instances = 36 concurrent
+# `singularity instance start` calls contending for one node) — the
+# diagnostic `instance list` dump this FATAL prints on failure showed the
+# holder instance WAS actually there, just not yet visible 3s in. Retrying
+# for up to 15s total fixes this without meaningfully slowing down the
+# common case (holder usually shows up within the first second or two).
+holder_up=0
+for _ in $(seq 1 15); do
+  singularity instance list 2>/dev/null | grep -q "^${HOLDER_NAME} " && { holder_up=1; break; }
+  sleep 1
+done
+[ "$holder_up" = 1 ] \
   || { echo "FATAL: holder never came up"; singularity instance list; exit 1; }
 
 # CONFIRMED LIVE BUG: the instance being up is not the same as the simulation
