@@ -38,7 +38,8 @@
 #SBATCH --partition={{ ccad_sim_partition }}
 {% if ccad_sim_qos %}#SBATCH --qos={{ ccad_sim_qos }}
 {% endif %}#SBATCH --nodes=1 --ntasks=1 --cpus-per-task={{ ccad_sim_cpus }}
-#SBATCH --time={{ ccad_sim_time }}
+{% if ccad_sim_exclude_nodes %}#SBATCH --exclude={{ ccad_sim_exclude_nodes }}
+{% endif %}#SBATCH --time={{ ccad_sim_time }}
 #SBATCH --output={{ remote_work_dir }}/logs/{{ experiment_cfg.name }}_{{ cond.key }}_%A_%a.out
 set -euo pipefail
 

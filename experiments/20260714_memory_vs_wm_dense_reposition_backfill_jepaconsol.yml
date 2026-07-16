@@ -1,0 +1,40 @@
+# Backfill spec, not a new experiment: 5_jepa_rpe_consolidation's trials 4
+# and 5 in the main 20260714_memory_vs_wm_dense_reposition batch both
+# failed with "Failed to enter in mount namespace: Stale file handle" —
+# traced to node c8 specifically (7 trials hit this in a row, every one on
+# c8; a same-window trial on c5 was unaffected) rather than the account-
+# wide NFS quota exhaustion happening around the same time (that was a
+# real, separate bug — fixed in run_trial.sh.j2 to stop over-preserving
+# overlays — but not the cause of this specific error). Submit with
+# `-e ccad_sim_exclude_nodes=c8` to avoid it. Trials 1-3 of this condition
+# already succeeded, so only 4-5 are actually missing — but the ansible
+# framework's --array always starts at 1 with no way to target individual
+# trial numbers, so this redoes all 5, overwriting the 3 already-good ones
+# with equally-good fresh data. `name` is deliberately IDENTICAL to the
+# main spec (see backfill_baseline.yml's comment for why — CONFIRMED LIVE
+# a mismatched name here sends every trial's remote data to the wrong
+# directory) so these land in exactly the paths the main spec's rescue
+# check expects; rescue only checks file existence, not which job produced
+# them. upload/analysis disabled on purpose — this spec's only job is to
+# fill the gap.
+name: 20260714_memory_vs_wm_dense_reposition
+trials: 5
+
+conditions:
+  - key: 5_jepa_rpe_consolidation
+    simulation: simulations/20260714_memory_vs_wm_dense_reposition_6_jepa_rpe_consolidation.conf
+    label: JEPA+Consol
+    color: "#7b2d8b"
+
+image:
+  source: registry
+
+data_dir: ml/data_20260714_memory_vs_wm_dense_reposition
+
+extract:
+  format: parquet
+  backup: true
+  tables: all
+
+upload:
+  enabled: false

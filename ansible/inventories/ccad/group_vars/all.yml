@@ -33,6 +33,17 @@ ccad_sim_qos: short_qos
 ccad_sim_cpus: 6
 ccad_sim_time: "03:00:00"
 
+# CONFIRMED LIVE (2026-07-16): node c8 started returning "Failed to enter
+# in mount namespace: Stale file handle" from `singularity exec` at
+# extraction time — hit 7 trials in a row (all on c8; a same-window trial
+# on c5 was unaffected), most likely a degraded local disk or stale NFS
+# client mount on that specific node rather than anything in our own
+# pipeline. Empty by default (no exclusion); override per-invocation with
+# -e ccad_sim_exclude_nodes=c8 (comma-separated for more than one) to
+# route future submissions away from a node once it's shown this pattern.
+# Revisit / drop this once CCAD support confirms the node's been fixed.
+ccad_sim_exclude_nodes: ""
+
 remote_work_dir: "l2l"   # relative to the login user's $HOME (shared NFS)
 
 # No local docker daemon on CCAD — images come from GHCR (CI pushes here on
