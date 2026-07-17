@@ -490,22 +490,35 @@ def run(cfg: ExperimentAnalysis | None = None) -> None:
     # ══════════════════════════════════════════════════════════════════════
     print("\n=== 7. NEUROMODULATORS ===")
 
+    # `seq` is a per-creature, per-component monotonic write-order counter
+    # (NeuromodulatorSystem.publishSeq — one increment per onReceive batch,
+    # driven by PartialAppraisal's event-driven perception cycle, empirically
+    # ~134 Hz under baseline load, NOT a fixed real-time clock — see
+    # Constants.java). neuromodulators.parquet carries no wall-clock
+    # timestamp column, so there is no way to align this axis to actual
+    # elapsed seconds/minutes. Binning and plotting against raw seq (labeled
+    # as a cycle count, not time) is the honest representation; a condition
+    # whose cognitive cycle runs slower or faster per wall-clock second
+    # (e.g. JEPA, which pays WORLD_MODEL inference latency elsewhere in the
+    # pipeline) will simply reach a different final seq count over the same
+    # 60-minute wall-clock cap — that is NOT evidence of a longer or shorter
+    # simulation.
     BIN_N = 300
-    neuro["time_bin"] = (neuro["seq"] // BIN_N).astype(int)
+    neuro["seq_bin"] = (neuro["seq"] // BIN_N).astype(int)
 
     fig, axes = plt.subplots(1, 3, figsize=(16, 5))
     for ax, nm, nm_name in zip(axes, ["dopamine", "serotonin", "orexin"],
                                 ["Dopamine", "Serotonin", "Orexin"]):
         for ck, cl in CONDITIONS:
             sub = neuro[neuro["condition"] == ck]
-            gb = sub.groupby("time_bin")[nm].mean()
-            ax.plot(gb.index * BIN_N / 60, gb, color=PALETTE[ck], lw=2, label=cl)
+            gb = sub.groupby("seq_bin")[nm].mean()
+            ax.plot(gb.index * BIN_N, gb, color=PALETTE[ck], lw=2, label=cl)
         ax.set_title(nm_name)
-        ax.set_xlabel("Time (min)")
+        ax.set_xlabel("Neuromodulator update cycle (seq)")
         ax.set_ylabel("Tonic level")
         ax.legend(fontsize=7)
         ax.grid(alpha=0.3)
-    fig.suptitle("Neuromodulator Tonic Levels Over Time", fontsize=13)
+    fig.suptitle("Neuromodulator Tonic Levels Over Update Cycles (not wall-clock time)", fontsize=13)
     plt.tight_layout()
     save(fig, "08_neuromodulators.png", cfg)
 

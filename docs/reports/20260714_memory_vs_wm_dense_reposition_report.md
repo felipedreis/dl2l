@@ -203,8 +203,19 @@ Green Apple vs. 40% baseline there). Hunger at time of eating is also similar ac
 
 ![Neuromodulators](figures/20260714_memory_vs_wm_dense_reposition/08_neuromodulators.png)
 
-Tonic neuromodulator levels are visually similar across all four conditions, as in the scarce
-world.
+The x-axis is the neuromodulator-update cycle count (`seq`), **not wall-clock time** — an earlier
+version of this figure mislabeled it as minutes, which made JEPA's line appear to run to ~150
+"minutes" against a 60-minute cap. `seq` is a per-creature write-order counter driven by
+`PartialAppraisal`'s event-driven perception cycle (~134 Hz under baseline load), not a fixed
+clock, and `neuromodulators.parquet` carries no wall-clock timestamp to align against — so the
+raw cycle count is the only honest thing to plot here. JEPA reaches roughly 2× the final `seq`
+of the other three conditions over the same 60-minute wall-clock window, meaning its
+perception/appraisal loop runs *more* cycles in that time, not fewer — the opposite of the
+WORLD_MODEL inference slowdown seen in the *decision*-tick count (Section 2), since that overhead
+sits in the action-selection stage, a separate loop from the one `seq` counts here.
+
+Tonic neuromodulator levels themselves are visually similar across all four conditions, as in the
+scarce world.
 
 ### 9. Expectancy / RPE
 
