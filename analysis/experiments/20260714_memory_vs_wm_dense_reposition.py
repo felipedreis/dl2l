@@ -141,7 +141,7 @@ def run(cfg: ExperimentAnalysis | None = None) -> None:
     ticks_by_cond = {ck: creatures[creatures["condition"] == ck]["tick_count"].values
                       for ck, _ in CONDITIONS}
     corrected_by_cond = {ck: creatures[creatures["condition"] == ck].get(
-        "lifetime_corrected_s", pd.Series(dtype=float)).values for ck, _ in CONDITIONS}
+        "lifetime_corrected_s", pd.Series(dtype=float)).dropna().values for ck, _ in CONDITIONS}
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
     for ax, data, ylabel, title in zip(

@@ -239,6 +239,17 @@ faster-changing world raises prediction error for the tabular baseline too, narr
 Same pattern as RPE: JEPA's engram update magnitude is elevated (4.3× baseline) but far below
 the 14× seen in the scarce world.
 
+**Why does baseline form the most engrams, with no `MEMORY` filter enabled?** Engram formation
+is entirely independent of `enabledFilters`. `FullAppraisal.updateMemory()` pushes a short-term
+memory trace into `MemorySystem` on *every* cognitive cycle, unconditionally; `Valuation` then
+mints and persists an `Engram` per still-eligible trace on every evaluation event — neither step
+checks which action-selection filters are active. `enabledFilters`/`MEMORY` only controls whether
+`MemoryFilter` *reads* those engrams back to bias action choice — it is a consumer, not a
+producer. So every condition writes engrams at essentially the same rate regardless of whether
+MEMORY is enabled; baseline's slightly higher count here simply reflects it completing more
+decision ticks in the same wall-clock window (Section 2), giving more evaluation events for
+`Valuation` to fire on — not any memory-related setting.
+
 ### 11. Sleep Episodes
 
 ![Sleep](figures/20260714_memory_vs_wm_dense_reposition/11_sleep_episodes.png)
