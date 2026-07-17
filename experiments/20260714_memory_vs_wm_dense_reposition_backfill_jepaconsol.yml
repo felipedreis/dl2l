@@ -1,16 +1,24 @@
-# Backfill spec, not a new experiment: 5_jepa_rpe_consolidation's trials 4
-# and 5 in the main 20260714_memory_vs_wm_dense_reposition batch both
-# failed with "Failed to enter in mount namespace: Stale file handle" —
-# traced to node c8 specifically (7 trials hit this in a row, every one on
-# c8; a same-window trial on c5 was unaffected) rather than the account-
-# wide NFS quota exhaustion happening around the same time (that was a
-# real, separate bug — fixed in run_trial.sh.j2 to stop over-preserving
-# overlays — but not the cause of this specific error). Submit with
-# `-e ccad_sim_exclude_nodes=c8` to avoid it. Trials 1-3 of this condition
-# already succeeded, so only 4-5 are actually missing — but the ansible
-# framework's --array always starts at 1 with no way to target individual
-# trial numbers, so this redoes all 5, overwriting the 3 already-good ones
-# with equally-good fresh data. `name` is deliberately IDENTICAL to the
+# Backfill spec, not a new experiment: 5_jepa_rpe_consolidation's trials
+# have repeatedly failed with "Failed to enter in mount namespace: Stale
+# file handle". First attempt blamed node c8 specifically (7 trials hit
+# this in a row, every one on c8); a second backfill attempt (with
+# `-e ccad_sim_exclude_nodes=c8` set) failed the SAME way on node c5
+# instead, disproving that theory. The real root cause: this backfill's
+# own `ansible-playbook` invocation was submitted while an earlier
+# invocation's trials were still running, and roles/image_ccad
+# unconditionally rebuilt the shared postgres_sandbox/dl2l_sandbox out
+# from under those still-live instances — fixed at the source in
+# build_image.sh.j2 (skip rebuild when the SIF digest is unchanged), so
+# this should no longer recur even when submissions overlap. This is
+# unrelated to the account-wide NFS quota exhaustion that happened around
+# the same time (that was a real, separate bug — fixed in run_trial.sh.j2
+# to stop over-preserving overlays). The 5 trials that failed this way
+# were NOT lost, though: run_trial.sh.j2's overlay-preservation safety net
+# kept each trial's postgres data directory intact even though extraction
+# never ran, so a one-off recovery script (not part of the regular
+# pipeline) re-started postgres from each preserved overlay and
+# re-extracted directly, without re-running the hour-long simulations.
+# `name` is deliberately IDENTICAL to the
 # main spec (see backfill_baseline.yml's comment for why — CONFIRMED LIVE
 # a mismatched name here sends every trial's remote data to the wrong
 # directory) so these land in exactly the paths the main spec's rescue

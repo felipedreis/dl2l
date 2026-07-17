@@ -113,6 +113,26 @@ cleanup() {
     singularity instance list 2>/dev/null | grep -qE "^(${DB_NAME}|${MANAGER_NAME}|${DETECTOR_NAME}|${HOLDER_NAME}) " || break
     sleep 2
   done
+
+  # CONFIRMED LIVE (2026-07-16/17): condition 5_jepa_rpe_consolidation's
+  # trials produced complete, successfully-extracted data with zero
+  # sleep_episodes/memory_traces/consolidation rows in all 5 trials — a
+  # behavioral anomaly (or app-level bug) worth debugging, but the
+  # manager/holder/detector instance logs that would show WHY (exceptions,
+  # sleep-onset gating, consolidation actor state) were never preserved
+  # anywhere — each instance's .out/.err lives only under
+  # ~/.singularity/instances/logs/, keyed by this trial's unique instance
+  # names, with nothing copying them into $TRIAL_DIR before the next trial
+  # on this node reuses the same node-local paths. Small text files (a few
+  # MB even under heavy retry-loop spam, see the overlay-sizing note below)
+  # — unlike the postgres overlay, no reason to gate this on failure only.
+  for log in "$MANAGER_NAME" "$DETECTOR_NAME" "$HOLDER_NAME"; do
+    for ext in out err; do
+      f=$(ls $HOME/.singularity/instances/logs/*/*/"${log}.${ext}" 2>/dev/null | head -1)
+      [ -n "$f" ] && cp "$f" "$TRIAL_DIR/${log}.${ext}" 2>/dev/null
+    done
+  done
+
   # CONFIRMED LIVE, expensively (2026-07-16): a Python 3.9-incompatibility
   # bug in dl2l_data/db.py crashed extraction on EVERY trial of a 25-trial
   # batch, right after each one had already run its full 60-minute
