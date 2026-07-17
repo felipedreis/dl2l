@@ -38,7 +38,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from analysis.dl2l_analysis.config import ExperimentAnalysis
+from analysis.dl2l_analysis.config import ExperimentAnalysis, from_spec
 from analysis.dl2l_analysis.figures import DECILE_LABELS, plt, save
 from analysis.dl2l_analysis.loading import (
     attach_born_time_and_ticks,
@@ -67,7 +67,7 @@ EXP_NAME = "20260714_memory_vs_wm_dense_reposition"
 
 
 def run(cfg: ExperimentAnalysis | None = None) -> None:
-    cfg = cfg or ExperimentAnalysis.from_spec(EXP_NAME)
+    cfg = cfg or from_spec(EXP_NAME)
     CONDITIONS = [(c.key, c.label) for c in cfg.conditions]
     COND_KEYS = cfg.cond_keys
     COND_LABELS = cfg.cond_labels
