@@ -5,12 +5,12 @@
 # trial (straight onto the shared filesystem), so this role does no per-trial
 # extraction itself — only submission and the final sync back to the mac.
 
-- name: "Ensure {{ shared_fs }}/{jobs,logs,data,config,scripts} exist"
+- name: "Ensure {{ shared_fs }}/{jobs,logs,data,config,scripts,simulations} exist"
   ansible.builtin.file:
     path: "{{ shared_fs }}/{{ item }}"
     state: directory
     mode: "0755"
-  loop: [jobs, logs, data, config, scripts]
+  loop: [jobs, logs, data, config, scripts, simulations]
 
 - name: Render docker-compose.yml onto the shared filesystem
   ansible.builtin.template:
@@ -42,6 +42,16 @@
   ansible.posix.synchronize:
     src: "{{ repo_root }}/scripts/dl2l_data/"
     dest: "{{ shared_fs }}/scripts/dl2l_data/"
+    recursive: true
+    delete: true
+
+- name: Sync simulations/ onto the shared filesystem
+  # simulations/ is no longer baked into the image (see issue #70) — it's
+  # bind-mounted from here instead, so a new/edited *.conf just needs this
+  # sync, not an image rebuild.
+  ansible.posix.synchronize:
+    src: "{{ repo_root }}/simulations/"
+    dest: "{{ shared_fs }}/simulations/"
     recursive: true
     delete: true
 

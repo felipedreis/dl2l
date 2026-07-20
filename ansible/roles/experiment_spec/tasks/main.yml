@@ -37,9 +37,15 @@
     _experiment_raw: "{{ lookup('ansible.builtin.file', experiment_spec_path) | from_yaml }}"
 
 - name: Apply experiment spec defaults
+  # image.source's default is env-aware: 'registry' on pi (the shared
+  # multi-arch GHCR manifest is now the default there — see issue #70;
+  # 'build' is still available as an explicit opt-in fallback to the
+  # private-registry cross-build), 'build' everywhere else (local; ccad's
+  # own image_ccad role independently requires — and enforces via a `fail`
+  # task — an explicit 'registry' regardless of this default).
   ansible.builtin.set_fact:
     experiment_cfg: "{{ _experiment_raw | combine({
-        'image': {'source': 'build'} | combine(_experiment_raw.image | default({})),
+        'image': {'source': (dl2l_env == 'pi') | ternary('registry', 'build')} | combine(_experiment_raw.image | default({})),
         'extract': {'format': 'parquet', 'backup': true, 'tables': 'all'} | combine(_experiment_raw.extract | default({})),
         'upload': {'enabled': true, 'repo': 'felipedreis/dl2l-experiments', 'prefix': _experiment_raw.name} | combine(_experiment_raw.upload | default({})),
         'training': _experiment_raw.training | default(None),

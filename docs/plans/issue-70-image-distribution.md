@@ -104,20 +104,130 @@ Instead:
 - Record this as an explicit open item (needs a live test from a Pi-connected machine) rather
   than silently declaring it done.
 
+### 5. Feature-branch images (added at user's request, beyond the original issue text)
+
+Today `cd.yml` only triggers on push to `main`, so testing an in-progress branch on Pi/CCAD means
+falling back to the exact per-environment local-build fragility this issue is about. Extend the
+same multi-platform CI build (item 1) to every branch push:
+
+- Trigger: `on: push: branches: ['**']` (any branch, not tags — no release-tag flow exists or is
+  being added here).
+- `:latest` stays reserved for `main` only — gate it with `enable=${{ github.ref ==
+  'refs/heads/main' }}` on the `type=raw,value=latest` tag entry.
+- Add a `type=ref,event=branch` tag (docker/metadata-action's branch-name slug) alongside the
+  existing `type=sha,prefix=sha-,format=short` — gives a convenient moving per-branch tag
+  (`ghcr.io/felipedreis/dl2l:<branch-slug>`) for iterative testing, on top of the immutable
+  per-commit `:sha-*` tag that already exists.
+- Multi-platform (`linux/amd64,linux/arm64`) applies to every push, not just main, since the
+  point is letting Pi (arm64) pull-test a branch directly. Tradeoff: QEMU-emulated arm64 builds
+  are slower than native, so every push now pays that cost, not just merges to main — acceptable
+  for this repo's commit volume, called out explicitly in case it isn't later.
+
+### 6. Decouple simulation config from the image
+
+Found while discussing this: `docker/Dockerfile` does `COPY simulations/ ./simulations/`, baking
+the whole `simulations/` directory into the image. Since `SIMULATION` is just a runtime
+`--simulation <path>` flag (relative to `/dl2l/run`, see `scripts/run-dl2l.sh`), a new or edited
+`.conf` file forces a full image rebuild today even though no Java code changed — image build and
+simulation authoring are coupled for no reason.
+
+Fix: stop baking `simulations/` into the image; bind-mount it at runtime instead, on every
+environment:
+
+- `docker/Dockerfile` — drop the `COPY simulations/ ./simulations/` line.
+- `ansible/roles/common/templates/docker-compose.yml.j2` (shared by local + Pi) — add a
+  read-only bind mount of `{{ dl2l_simulations_dir }}` → `/dl2l/run/simulations` on the manager,
+  detector, and holder services (not `db`).
+- `ansible/inventories/local/group_vars/all.yml` — `dl2l_simulations_dir: "{{ repo_root
+  }}/simulations"` (repo checkout is the same machine running docker, same pattern as
+  `dl2l_config_dir`).
+- `ansible/inventories/pi/group_vars/all.yml` — `dl2l_simulations_dir: "{{ shared_fs
+  }}/simulations"`; `ansible/roles/trial_runner_pi/tasks/main.yml` syncs
+  `{{ repo_root }}/simulations/` → `{{ shared_fs }}/simulations/`, mirroring the existing
+  config/scripts sync.
+- CCAD has no docker-compose (Singularity instances instead) — `ansible/roles/trial_runner_ccad/tasks/submit.yml`
+  syncs `simulations/` to `{{ remote_work_dir }}/simulations/` alongside the existing
+  config/scripts sync, and `run_trial.sh.j2` adds a `SIMULATIONS_BIND` bound into the
+  manager/detector/holder `singularity instance start` calls (not postgres), the same pattern
+  `CONFIG_BIND`/`INITDB_BIND` already use.
+
+One image now serves any simulation config; rebuilds are only needed for real code changes.
+
+## Item 4, finalized: also flip Pi's default to GHCR
+
+Per user decision, going further than the original "document as opt-in" plan: Pi's *default*
+(when an experiment spec doesn't declare `image.source`) now resolves to pulling the shared
+multi-arch GHCR manifest, not cross-building to the private registry. Design, chosen to keep the
+existing cross-build path fully intact as an explicit opt-out (not deleted — GHCR reachability
+from real Pi hardware is still unverified from this sandbox):
+
+- `ansible/roles/experiment_spec/tasks/main.yml` — the `image.source` default becomes env-aware:
+  `'registry'` when `dl2l_env == 'pi'`, `'build'` otherwise (local unchanged; CCAD's own
+  `image_ccad` role already independently requires — and enforces via a `fail` task — an
+  explicit `source: registry` regardless of any default, so it's untouched). All five existing
+  `experiments/*.yml` specs already declare `image.source` explicitly, so this changes no
+  existing spec's resolved behavior — it only changes what an *unset* `image.source` means on
+  Pi going forward.
+- `ansible/inventories/pi/group_vars/all.yml` — `dl2l_image` default becomes
+  `ghcr.io/felipedreis/dl2l:latest`. The private-registry host (`registry:
+  192.168.1.200:5000`) variable is untouched and stays the push target for the `build` fallback
+  path specifically (see next point) — it must never collide with GHCR's CI-owned `:latest`.
+- `ansible/roles/image_pi/tasks/main.yml` — branches on `experiment_cfg.image.source`:
+  - `build` (explicit opt-in): `set_fact dl2l_image: "{{ registry }}/dl2l:latest"` *before*
+    cross-building, so the rest of the pipeline (compose render, worker pre-pull) targets the
+    just-built private-registry image — byte-identical to today's behavior, fully isolated from
+    GHCR.
+  - `registry` (the new default): skip the cross-build/push steps entirely; still run the
+    existing "pre-pull on every worker node" task, now pulling whatever `dl2l_image` resolved to
+    (GHCR `:latest` by default, or an operator override).
+- `ansible/run-experiment.yml` — the image-build play's `when:` clause is broadened so
+  `image_{{ dl2l_env }}` always runs for `pi` too (mirrors the existing `dl2l_env == 'ccad'`
+  special-case), since the registry branch above still needs to execute the worker pre-pull step
+  even though it skips the build.
+
+**Caveat, same as before:** confirmed `ghcr.io/felipedreis/dl2l` is a public package (no auth
+needed to pull), but Pi hardware's actual outbound internet access to `ghcr.io` is still
+unverified from this sandbox. This change makes that the *default* path, so it needs a live test
+on real Pi hardware before being trusted — flagged, not silently assumed.
+
 ## Files touched
 
-- `.github/workflows/cd.yml` — QEMU/buildx setup, `platforms:` line
+- `.github/workflows/cd.yml` — QEMU/buildx setup, `platforms:` line, all-branch trigger, gated
+  `:latest`, branch-slug tag
 - `pom.xml` — comment only, on the `pytorch-native-cpu` dependency
+- `docker/Dockerfile` — drop `COPY simulations/`
+- `ansible/roles/common/templates/docker-compose.yml.j2` — bind-mount `simulations/`
+- `ansible/inventories/local/group_vars/all.yml` — `dl2l_simulations_dir`
+- `ansible/inventories/pi/group_vars/all.yml` — `dl2l_simulations_dir`, `dl2l_image` → GHCR
+  default
+- `ansible/roles/trial_runner_pi/tasks/main.yml` — sync `simulations/` onto `shared_fs`
+- `ansible/roles/image_pi/tasks/main.yml` — build-vs-registry branch
+- `ansible/roles/experiment_spec/tasks/main.yml` — env-aware `image.source` default
+- `ansible/run-experiment.yml` — broadened `when:` for the image-build play
+- `ansible/roles/trial_runner_ccad/tasks/submit.yml` — sync `simulations/`
+- `ansible/roles/trial_runner_ccad/templates/run_trial.sh.j2` — `SIMULATIONS_BIND`
 - `ansible/inventories/ccad/group_vars/all.yml` — `dl2l_image` back to `:latest`, comment update
-- `ansible/inventories/pi/group_vars/all.yml` — comment documenting the untested GHCR option
+- `experiments/README.md` — updated `image.source` schema doc
 - This plan doc
 
-## Verification available in this sandbox
+## Verification actually done in this sandbox
 
-- `mvn package` (jar still builds; no dependency changes)
-- YAML syntax sanity-check on `cd.yml`
-- No Docker daemon available here → cannot actually run `docker buildx build --platform
-  linux/amd64,linux/arm64 ...` locally. The real test is the next push to `main` triggering CI,
-  which the user can watch.
-- Cannot reach live CCAD or Pi hardware from here — items 3 and 4's real-world correctness needs
-  a live follow-up run, called out above rather than assumed.
+- `mvn validate` — passes; confirms `pom.xml` is well-formed (XML comments can't contain `--`,
+  caught and fixed one instance of that here) and its dependency graph is otherwise unchanged.
+  `mvn package` itself can't run end-to-end here — this sandbox only has JDK 21, the project
+  requires JDK 23 — a pre-existing sandbox limitation, not something introduced by this change.
+- Every touched non-Jinja YAML file (`cd.yml` and all touched `group_vars`/`tasks/*.yml`)
+  parses cleanly via `yaml.safe_load`.
+- `docker-compose.yml.j2` rendered directly (both `holder_combines_detector` branches) and the
+  output re-parsed as YAML: confirms the `simulations/` bind mount lands on `dl2l-manager`,
+  `dl2l-detector`, and `dl2l-holder` and *not* `dl2l-db`, in both branches.
+- `run_trial.sh.j2` rendered directly: confirms `SIMULATIONS_BIND` is defined and `--bind
+  "$SIMULATIONS_BIND"` appears exactly 3 times (manager/detector/holder, not postgres).
+- No `ansible-playbook`/`ansible-lint` available in this sandbox, so the roles' task graphs
+  (e.g. `experiment_spec`'s new `ternary()` default, `run-experiment.yml`'s broadened `when:`)
+  are reviewed by hand, not executed.
+- No Docker daemon here → cannot actually run `docker buildx build --platform
+  linux/amd64,linux/arm64 ...` locally. The real test is the next push to `main` (or any branch)
+  triggering CI, which the user can watch.
+- Cannot reach live CCAD or Pi hardware from here — items 3, 4, and the pi default-source flip's
+  real-world correctness need a live follow-up run, called out above rather than assumed.

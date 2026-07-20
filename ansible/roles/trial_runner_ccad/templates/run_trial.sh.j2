@@ -72,6 +72,9 @@ sleep 5
 
 CONFIG_BIND="{{ remote_work_dir }}/config/ccad-config.conf:/config/docker-config.conf:ro"
 INITDB_BIND="{{ remote_work_dir }}/config/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro"
+# simulations/ is no longer baked into the image (see issue #70) — bind it
+# in here instead, same as CONFIG_BIND/INITDB_BIND.
+SIMULATIONS_BIND="{{ remote_work_dir }}/simulations:/dl2l/run/simulations:ro"
 
 # A Singularity SIF is read-only by default — --writable-tmpfs gives every
 # instance an ephemeral, in-memory (tmpfs) writable overlay (discarded when
@@ -161,7 +164,7 @@ MANAGER_LOG_OFFSET=0
 # default :9091. Only manager's is actually polled below; detector/holder
 # just need a non-colliding port so their own binds don't fail.
 singularity instance start $WRITABLE \
-  --bind "$CONFIG_BIND" \
+  --bind "$CONFIG_BIND" --bind "$SIMULATIONS_BIND" \
   --env ROLE=manager,idProvider --env SIMULATION={{ cond.simulation }} \
   --env HOST=localhost --env PORT=2551 --env METRICS_PORT=9091 \
   --env DL2L_DB_URL=jdbc:postgresql://localhost:5432/l2l \
@@ -177,14 +180,14 @@ done
 
 # --- collisionDetector -------------------------------------------------------
 singularity instance start $WRITABLE \
-  --bind "$CONFIG_BIND" \
+  --bind "$CONFIG_BIND" --bind "$SIMULATIONS_BIND" \
   --env ROLE=collisionDetector --env SIMULATION={{ cond.simulation }} \
   --env HOST=localhost --env PORT=2552 --env METRICS_PORT=9093 \
   {{ remote_work_dir }}/dl2l_sandbox dl2l-detector
 
 # --- holder -------------------------------------------------------------------
 singularity instance start $WRITABLE \
-  --bind "$CONFIG_BIND" \
+  --bind "$CONFIG_BIND" --bind "$SIMULATIONS_BIND" \
   --env ROLE=holder --env SIMULATION={{ cond.simulation }} \
   --env HOST=localhost --env PORT=2553 --env METRICS_PORT=9092 \
   --env DL2L_DB_URL=jdbc:postgresql://localhost:5432/l2l \

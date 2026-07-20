@@ -163,18 +163,26 @@
             <version>0.26.0</version>
         </dependency>
         <!--
-          Platform-specific PyTorch native library, bundled so the fat jar
-          never needs to reach publish.djl.ai at runtime to auto-download it
-          — CONFIRMED LIVE this download is unreachable from CCAD compute
-          nodes (no internet access there), which silently crashed every
-          Holder's preStart() (MLServiceExtension -> DJL PtEngine init) on
-          CCAD specifically. Every other environment this ran in (local Mac,
-          Pi cluster) has internet, so a classifier mismatch here was masked
-          by DJL's runtime fallback download and never surfaced before.
-          linux-x86_64 matches what docker/Dockerfile actually builds/runs
-          (the image used everywhere except local Mac dev) — for local dev
-          on macOS ARM64, DJL auto-downloads the correct osx-aarch64 native
-          lib on first run instead (Mac dev always has internet).
+          Platform-specific PyTorch native library. linux-x86_64 matches
+          CI's runner and CCAD's linux/amd64 Singularity images directly (no
+          download needed there at all). It's the WRONG classifier for
+          linux/arm64 (Pi) and macOS (local dev) builds — that's fine and
+          doesn't need a per-arch Maven profile: docker/Dockerfile's
+          DjlCacheWarmup build step (`RUN java -cp dl2l.jar
+          ...DjlCacheWarmup`) forces DJL's engine init during the Docker
+          build itself, which has internet on every environment (GH Actions,
+          Mac dev, Pi controller — unlike the *running* container, which
+          CCAD's compute nodes don't). Under a buildx linux/arm64 build
+          this runs QEMU-emulated, so the JVM reports the
+          emulated arch and DJL's own classifier-mismatch fallback
+          auto-downloads the correct linux-aarch64 lib right there at build
+          time, baking it into $DJL_CACHE_DIR as an image layer — the
+          running container never touches the network for it, regardless of
+          this dependency's single hardcoded classifier. See DjlCacheWarmup's
+          javadoc and docs/plans/issue-70-image-distribution.md. Do not
+          re-introduce per-arch classifier profiles to "fix" this; the
+          original crash (CCAD, no build-time multi-arch CI, wrong bundled
+          classifier AND no cache-warm step) no longer applies.
         -->
         <dependency>
             <groupId>ai.djl.pytorch</groupId>

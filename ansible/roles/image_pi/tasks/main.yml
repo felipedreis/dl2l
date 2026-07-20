@@ -1,15 +1,31 @@
 ---
-# Cross-builds the ARM64 image on this Mac and pushes it to the Pi cluster's
-# private registry ({{ registry }}), then pre-pulls it on every worker node
-# so the SLURM array job (dl2l_trial.sh) doesn't pay a cold-pull tax per
-# trial. Included from the "Load and validate experiment spec, build image"
-# play (hosts: localhost), so the build/push tasks below need no
-# delegate_to; only the worker pre-pull needs to reach outside that host.
+# Two paths, selected by experiment_cfg.image.source (see
+# roles/experiment_spec's env-aware default — 'registry' is now the default
+# on pi, 'build' is an explicit opt-in fallback):
+#
+# - 'registry' (default): the multi-arch GHCR manifest (see issue #70) is
+#   pulled directly, no local build. Skips straight to the worker pre-pull.
+# - 'build' (explicit opt-in): cross-builds the ARM64 image on this Mac and
+#   pushes it to the Pi cluster's own private registry ({{ registry }}) —
+#   NOT dl2l_image's GHCR default, which is CI-owned and must never be
+#   clobbered by a local build. dl2l_image is overridden to point at the
+#   just-built private-registry image so the rest of the pipeline
+#   (docker-compose render, worker pre-pull) picks it up.
+#
+# Included from the "Load and validate experiment spec, build image" play
+# (hosts: localhost), so the build/push tasks below need no delegate_to;
+# only the worker pre-pull needs to reach outside that host.
+- name: "Retarget dl2l_image at the private registry for the build fallback"
+  ansible.builtin.set_fact:
+    dl2l_image: "{{ registry }}/dl2l:latest"
+  when: experiment_cfg.image.source == 'build'
+
 - name: Package the fat jar (mvn package -DskipTests)
   ansible.builtin.command:
     argv: [mvn, package, -q, -DskipTests]
     chdir: "{{ repo_root }}"
   changed_when: true
+  when: experiment_cfg.image.source == 'build'
 
 - name: "Cross-build the ARM64 image and push to {{ dl2l_image }}"
   ansible.builtin.command:
@@ -27,14 +43,20 @@
       - "{{ repo_root }}"
     chdir: "{{ repo_root }}"
   changed_when: true
+  when: experiment_cfg.image.source == 'build'
 
-- name: Pre-pull the image on every worker node
+- name: "Pre-pull {{ dl2l_image }} on every worker node"
   # ansible_connection: ssh is required here — a play's `connection: local`
   # (this role is included from a hosts: localhost play) silently overrides
   # delegate_to's target otherwise, running the task on the control machine
   # instead of the worker. Confirmed as a real, live bug via the equivalent
   # delegate_to task in roles/image_ccad (untested here against real Pi
   # hardware, but the same play-level connection: local applies).
+  #
+  # Always re-pulls rather than caching — whether dl2l_image is the
+  # private-registry tag above or GHCR's moving :latest default, both are
+  # tags that can point at a newer image than whatever's cached locally on
+  # a worker node.
   ansible.builtin.command:
     argv: [sudo, docker, pull, "{{ dl2l_image }}", -q]
   loop: "{{ groups['workers'] }}"

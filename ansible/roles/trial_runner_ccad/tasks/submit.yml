@@ -5,7 +5,7 @@
 # own parent already exists), so syncing straight into a fresh
 # remote_work_dir failed with "No such file or directory" until this task
 # was moved ahead of it.
-- name: "Ensure {{ remote_work_dir }}/{config,jobs,logs,scripts,data/<experiment>} exist"
+- name: "Ensure {{ remote_work_dir }}/{config,jobs,logs,scripts,simulations,data/<experiment>} exist"
   ansible.builtin.file:
     path: "{{ remote_work_dir }}/{{ item }}"
     state: directory
@@ -15,6 +15,7 @@
     - jobs
     - logs
     - scripts
+    - simulations
     - "data/{{ experiment_cfg.name }}"
 
 - name: Sync config and scripts to the login node
@@ -25,6 +26,10 @@
     - { src: "{{ repo_root }}/config/init-db.sql", dest: "config/init-db.sql" }
     - { src: "{{ repo_root }}/config/ccad-config.conf", dest: "config/ccad-config.conf" }
     - { src: "{{ repo_root }}/scripts/dl2l_data/", dest: "scripts/dl2l_data/" }
+    # simulations/ is no longer baked into the image (see issue #70) — it's
+    # bind-mounted from here instead, so a new/edited *.conf just needs this
+    # sync, not an image rebuild.
+    - { src: "{{ repo_root }}/simulations/", dest: "simulations/" }
   loop_control:
     label: "{{ item.dest }}"
 

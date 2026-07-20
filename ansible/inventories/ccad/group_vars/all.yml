@@ -39,13 +39,17 @@ remote_work_dir: "l2l"   # relative to the login user's $HOME (shared NFS)
 # every push to main, see .github/workflows/cd.yml), pulled as a Singularity
 # SIF by roles/image_ccad.
 #
-# STOPGAP (revert to :latest once the pom.xml DJL-classifier fix — see
-# docs/plans/ccad-singularity-experiments.md's 2026-07-14/15 update — lands
-# on main via the normal CI path): :latest was built with the wrong DJL
-# PyTorch native-library classifier, which crashes every Holder on CCAD
-# specifically (no internet to fall back to a runtime download). This tag
-# was built+pushed manually with the fix and isn't tracked by CI.
-dl2l_image: "ghcr.io/felipedreis/dl2l:ccad-djl-fix"
+# Tracks CI's :latest directly again (see issue #70) — the manual
+# ghcr.io/felipedreis/dl2l:ccad-djl-fix stopgap this pointed at is retired.
+# It existed because :latest was built with the wrong DJL PyTorch
+# native-library classifier for CCAD's linux/amd64 Singularity images (no
+# internet there to fall back to a runtime download); PR #69 fixed that
+# (DjlCacheWarmup bakes the correct native lib in at Docker build time — see
+# pom.xml's comment on the pytorch-native-cpu dependency), so every :latest
+# built after that fix is safe. Unverified from any sandbox against real
+# CCAD hardware (needs the CEFET VPN) — watch the first real run after this
+# change closely.
+dl2l_image: "ghcr.io/felipedreis/dl2l:latest"
 
 # The conda env created once by provision-ccad.yml (module load miniforge3;
 # $HOME/.conda/envs/ is on shared NFS, so this is visible on compute nodes

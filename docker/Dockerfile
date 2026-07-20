@@ -4,7 +4,10 @@ RUN apt-get update && apt-get install -y netcat-openbsd && rm -rf /var/lib/apt/l
 
 WORKDIR /dl2l/run
 
-COPY simulations/ ./simulations/
+# simulations/ is deliberately NOT baked in here — it's bind-mounted onto
+# ./simulations at container start (see ansible/roles/common/templates/
+# docker-compose.yml.j2 and trial_runner_ccad's run_trial.sh.j2) so a new or
+# edited *.conf never requires an image rebuild.
 COPY target/l2l-*-wd.jar ./dl2l.jar
 COPY scripts/run-dl2l.sh ./
 

@@ -24,11 +24,21 @@ conditions:                    # required, non-empty list.
                                 #   legends and report tables.
     color: <"#RRGGBB">          #  required. Hex color for plots.
 
-image:                          # optional. Defaults: {source: build}
+image:                          # optional. Default source is env-aware:
+                                 #   local -> build; pi -> registry (build is
+                                 #   still available as an explicit opt-in
+                                 #   fallback); ccad requires 'registry'
+                                 #   explicitly (image_ccad fails otherwise —
+                                 #   no local docker daemon there to build).
   source: build | registry      #   build: mvn package + docker build locally
-                                 #   (or buildx on pi). registry: pull a
-                                 #   pre-built tag from the per-env inventory
-                                 #   group_vars instead of building.
+                                 #   (or, on pi, buildx cross-build + push to
+                                 #   the cluster's private registry).
+                                 #   registry: pull a pre-built tag from the
+                                 #   per-env inventory group_vars'
+                                 #   dl2l_image instead of building — on pi
+                                 #   and (CI-pushed) main builds this is the
+                                 #   shared multi-arch GHCR manifest from
+                                 #   .github/workflows/cd.yml (see issue #70).
 
 data_dir: <path>                # required. Where extracted data is written,
                                  # relative to repo root, e.g. ml/data_<name>.

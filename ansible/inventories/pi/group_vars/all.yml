@@ -10,11 +10,21 @@ repo_root: "{{ playbook_dir | dirname }}"
 # ansible "runner" group; all four nodes mount the same shared filesystem at
 # {{ shared_fs }} (this replaces the old scripts/submit_exp.sh's inconsistent
 # mix of /mnt/dl2l-shared and ~/dl2l-shared — one path, everywhere).
+#
+# registry (private) is now only the push target for the explicit
+# `image: {source: build}` fallback (roles/image_pi cross-builds+pushes
+# there, see its tasks/main.yml) — kept fully isolated from GHCR's
+# CI-owned :latest so a local Pi build can never clobber it. The DEFAULT
+# path (image.source unset or 'registry') pulls dl2l_image below instead,
+# now a shared multi-arch GHCR manifest (see issue #70) — unverified from
+# any sandbox against real Pi hardware (outbound internet to ghcr.io), so
+# watch the first real run closely.
 registry: "192.168.1.200:5000"
 shared_fs: /mnt/dl2l-shared
 
-dl2l_image: "{{ registry }}/dl2l:latest"
+dl2l_image: "ghcr.io/felipedreis/dl2l:latest"
 dl2l_config_dir: "{{ shared_fs }}/config"
+dl2l_simulations_dir: "{{ shared_fs }}/simulations"
 
 # Headless cluster nodes — no UI port to publish (unlike inventories/local).
 publish_ui: false
