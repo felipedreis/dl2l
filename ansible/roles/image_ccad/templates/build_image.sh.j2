@@ -16,39 +16,68 @@ set -euo pipefail
 
 SIF="{{ remote_work_dir }}/{{ item.sif }}"
 SANDBOX="{{ remote_work_dir }}/{{ item.name }}_sandbox"
+DIGEST_MARKER="{{ remote_work_dir }}/.{{ item.name }}_sandbox.digest"
 MARKER="{{ remote_work_dir }}/.{{ item.name }}_image_build.done"
 LOG="{{ remote_work_dir }}/.{{ item.name }}_image_build.log"
 
 rm -f "$MARKER"
 {
   singularity pull --force "$SIF" "docker://{{ item.ref }}"
-  rm -rf "$SANDBOX"
-  singularity build --sandbox --force "$SANDBOX" "$SIF"
 
-  # CONFIRMED LIVE BUG: `singularity instance start` runs a sandbox's
-  # `.singularity.d/startscript`, not `.singularity.d/runscript` — but SIFs
-  # converted from a `docker://` image only ever get a populated
-  # `runscript` (translating the image's ENTRYPOINT/CMD; used by
-  # `singularity run`/bare `exec`). Their `startscript` is an empty no-op,
-  # so `instance start` on an unmodified sandbox launches an idle instance
-  # that never runs postgres (or the dl2l app) at all — confirmed live:
-  # `instance start` reported "started successfully" and `pg_isready`
-  # looped forever with no server ever up, and both the instance's own
-  # .out/.err logs were empty.
-  cp "$SANDBOX/.singularity.d/runscript" "$SANDBOX/.singularity.d/startscript"
+  # CONFIRMED LIVE BUG (2026-07-16): this used to `rm -rf "$SANDBOX"` +
+  # rebuild unconditionally on every single invocation, regardless of
+  # whether an already-running trial (submitted by an EARLIER, still-live
+  # invocation) had instances currently started against that same shared
+  # sandbox path (`singularity instance start --overlay ... $SANDBOX
+  # $NAME` keeps referencing that directory tree for the instance's whole
+  # lifetime, not just at start time). Two overlapping submit runs meant
+  # the second one's rebuild could rip the sandbox out from under the
+  # first's still-running postgres/manager/detector/holder instances,
+  # which then failed later, opaquely, at extraction time ("Failed to
+  # enter in mount namespace: Stale file handle") — misdiagnosed for a
+  # while as a bad node, until it recurred on a DIFFERENT node right after
+  # a second concurrent submission, disproving the single-bad-node theory.
+  # Fixed by skipping the rebuild entirely when the freshly-pulled SIF's
+  # digest matches the sandbox's last-built digest — the common case
+  # (image unchanged between runs on the same day) never touches the
+  # shared sandbox at all, so a second submission can't corrupt a first
+  # one's already-running instances. Only a genuine image change (new
+  # SIF digest) rebuilds, same as before.
+  NEW_DIGEST="$(sha256sum "$SIF" | cut -d' ' -f1)"
+  OLD_DIGEST="$(cat "$DIGEST_MARKER" 2>/dev/null || true)"
+  if [ -d "$SANDBOX" ] && [ "$NEW_DIGEST" = "$OLD_DIGEST" ]; then
+    echo "Sandbox already up to date with SIF digest $NEW_DIGEST, skipping rebuild"
+  else
+    rm -rf "$SANDBOX"
+    singularity build --sandbox --force "$SANDBOX" "$SIF"
+
+    # CONFIRMED LIVE BUG: `singularity instance start` runs a sandbox's
+    # `.singularity.d/startscript`, not `.singularity.d/runscript` — but
+    # SIFs converted from a `docker://` image only ever get a populated
+    # `runscript` (translating the image's ENTRYPOINT/CMD; used by
+    # `singularity run`/bare `exec`). Their `startscript` is an empty
+    # no-op, so `instance start` on an unmodified sandbox launches an idle
+    # instance that never runs postgres (or the dl2l app) at all —
+    # confirmed live: `instance start` reported "started successfully" and
+    # `pg_isready` looped forever with no server ever up, and both the
+    # instance's own .out/.err logs were empty.
+    cp "$SANDBOX/.singularity.d/runscript" "$SANDBOX/.singularity.d/startscript"
 
 {% if item.name == "dl2l" %}
-  # CONFIRMED LIVE BUG: dl2l's ENTRYPOINT is `./run-dl2l.sh ...` (a
-  # relative path — see docker/Dockerfile's WORKDIR /dl2l/run), which
-  # Docker resolves via WORKDIR automatically. `instance start` does not
-  # apply the image's WORKDIR the same way (confirmed live:
-  # "./run-dl2l.sh: not found"), and unlike `exec`/`run`, `instance start`
-  # has no `--pwd` flag to set it per-invocation either (confirmed live:
-  # "unknown flag: --pwd"). Fixed at the source instead: inject `cd
-  # /dl2l/run` as the first line of the startscript, which every code path
-  # in the generated script runs through.
-  sed -i '1a cd /dl2l/run' "$SANDBOX/.singularity.d/startscript"
+    # CONFIRMED LIVE BUG: dl2l's ENTRYPOINT is `./run-dl2l.sh ...` (a
+    # relative path — see docker/Dockerfile's WORKDIR /dl2l/run), which
+    # Docker resolves via WORKDIR automatically. `instance start` does not
+    # apply the image's WORKDIR the same way (confirmed live:
+    # "./run-dl2l.sh: not found"), and unlike `exec`/`run`, `instance
+    # start` has no `--pwd` flag to set it per-invocation either
+    # (confirmed live: "unknown flag: --pwd"). Fixed at the source
+    # instead: inject `cd /dl2l/run` as the first line of the startscript,
+    # which every code path in the generated script runs through.
+    sed -i '1a cd /dl2l/run' "$SANDBOX/.singularity.d/startscript"
 {% endif %}
+
+    echo "$NEW_DIGEST" > "$DIGEST_MARKER"
+  fi
 
   echo done > "$MARKER"
 } > "$LOG" 2>&1

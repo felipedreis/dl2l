@@ -1,0 +1,40 @@
+# Backfill spec, not a new experiment: 1_baseline's 5 trials in the main
+# 20260714_memory_vs_wm_dense_reposition batch all lost their data to a
+# postgres-readiness race (see run_trial.sh.j2's history, 2026-07-16 —
+# fixed there before this spec was created) while the other 4 conditions
+# succeeded. `name` is deliberately IDENTICAL to the main spec (not a
+# `_backfill_baseline`-suffixed variant, despite this file's own filename)
+# — CONFIRMED LIVE a first version of this file used a distinct name and
+# every trial's data silently landed under
+# l2l/data/<that other name>/1_baseline/trial_N/ on CCAD instead of the
+# shared l2l/data/20260714_memory_vs_wm_dense_reposition/ the main spec's
+# rescue check looks under, since run_trial.sh.j2's remote paths key off
+# `experiment_cfg.name`, not `data_dir` (data_dir only matters for the
+# LOCAL rescue sync target, which is set correctly here either way).
+# rescue only checks file existence, not which job produced them, so
+# running the MAIN spec's `-e rescue=true` afterward is what triggers the
+# real upload/analyze once this fills the gap. upload/analysis disabled
+# here on purpose — this spec's only job is to fill in the missing 5
+# trials, not to re-trigger those steps early against a still-incomplete
+# dataset.
+name: 20260714_memory_vs_wm_dense_reposition
+trials: 5
+
+conditions:
+  - key: 1_baseline
+    simulation: simulations/20260714_memory_vs_wm_dense_reposition_1_baseline.conf
+    label: Baseline
+    color: "#9e9e9e"
+
+image:
+  source: registry
+
+data_dir: ml/data_20260714_memory_vs_wm_dense_reposition
+
+extract:
+  format: parquet
+  backup: true
+  tables: all
+
+upload:
+  enabled: false
