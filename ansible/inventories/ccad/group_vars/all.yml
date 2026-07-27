@@ -58,13 +58,20 @@ remote_work_dir: "l2l"   # relative to the login user's $HOME (shared NFS)
 # every push to main, see .github/workflows/cd.yml), pulled as a Singularity
 # SIF by roles/image_ccad.
 #
-# STOPGAP (revert to :latest once the pom.xml DJL-classifier fix — see
-# docs/plans/ccad-singularity-experiments.md's 2026-07-14/15 update — lands
-# on main via the normal CI path): :latest was built with the wrong DJL
-# PyTorch native-library classifier, which crashes every Holder on CCAD
-# specifically (no internet to fall back to a runtime download). This tag
-# was built+pushed manually with the fix and isn't tracked by CI.
-dl2l_image: "ghcr.io/felipedreis/dl2l:ccad-djl-fix"
+# STOPGAP LIFTED (2026-07-27): the pom.xml DJL-classifier fix (7e375f5,
+# pytorch-native-cpu classifier=linux-x86_64 matching docker/Dockerfile's
+# build target) has been on main since before PR #69 even merged — the
+# manually-built `ccad-djl-fix` tag existed only because PR #71's fixes
+# (port-collision, sandbox-rebuild race, log preservation, etc.) had been
+# stranded on an unmerged branch, so CI never got a chance to rebuild
+# :latest from a main that included both the classifier fix and those
+# fixes together. PR #72 merged that branch into main and triggered a
+# fresh CI build (verified: contains all of PR #71/72's simulations/*.conf
+# and Java fixes; the build's own DjlCacheWarmup step, which loads the
+# native PyTorch lib, succeeded — the same failure mode described below
+# would have failed the build outright). Back to :latest, tracked by CI on
+# every push to main — no more manual image pushes needed for CCAD runs.
+dl2l_image: "ghcr.io/felipedreis/dl2l:latest"
 
 # The conda env created once by provision-ccad.yml (module load miniforge3;
 # $HOME/.conda/envs/ is on shared NFS, so this is visible on compute nodes
