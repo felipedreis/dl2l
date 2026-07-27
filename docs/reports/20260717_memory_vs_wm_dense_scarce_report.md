@@ -429,6 +429,4 @@ particular advantage — or disadvantage — once scarcity is removed entirely.
 ml/data_20260717_memory_vs_wm_dense_scarce/   — conditions 1-5 (5 trials × 10 creatures each)
 ```
 
-Pending upload to `felipedreis/dl2l-experiments` under prefix `20260717_memory_vs_wm_dense_scarce/`
-— blocked on HuggingFace re-authentication (the cached token is invalid; `hf auth login --force`
-needed before upload can proceed).
+Uploaded to `felipedreis/dl2l-experiments` under prefix `20260717_memory_vs_wm_dense_scarce/`.
