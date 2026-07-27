@@ -33,6 +33,25 @@ ccad_sim_qos: short_qos
 ccad_sim_cpus: 6
 ccad_sim_time: "03:00:00"
 
+# CONFIRMED LIVE (2026-07-16): a batch of trials started returning "Failed
+# to enter in mount namespace: Stale file handle" from `singularity exec`
+# at extraction time. First seen as 7 trials in a row on node c8 (a
+# same-window trial on c5 was unaffected), which looked like a degraded
+# node — but the SAME error recurred later on node c5 too, right after a
+# second `ansible-playbook` invocation was submitted while an earlier
+# one's trials were still running. Root cause was actually
+# roles/image_ccad unconditionally `rm -rf`-ing the shared
+# postgres_sandbox/dl2l_sandbox on every invocation, corrupting whichever
+# earlier invocation's instances were still live against that same
+# directory — not node hardware at all. Fixed at the source in
+# roles/image_ccad/templates/build_image.sh.j2 (skip rebuild when the
+# pulled SIF's digest hasn't changed). This exclude-list mechanism is left
+# in place as a general escape hatch (a node CAN still independently go
+# bad), just no longer believed to explain that day's failures. Empty by
+# default; override per-invocation with -e ccad_sim_exclude_nodes=c8
+# (comma-separated for more than one).
+ccad_sim_exclude_nodes: ""
+
 remote_work_dir: "l2l"   # relative to the login user's $HOME (shared NFS)
 
 # No local docker daemon on CCAD — images come from GHCR (CI pushes here on

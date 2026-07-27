@@ -1,6 +1,7 @@
 """
-Analysis: 20260714_memory_vs_wm_dense_reposition
-Memory-based learning vs. JEPA world model, dense world + reposition — 5 conditions × 5 trials × 10 creatures
+Analysis: 20260717_memory_vs_wm_dense_scarce
+Memory-based learning vs. JEPA world model, dense world + SCARCE (no reposition) —
+5 conditions × 5 trials × 10 creatures
 
 Conditions:
   1_baseline               — no extra learning
@@ -10,27 +11,23 @@ Conditions:
   5_jepa_rpe_consolidation — JEPA world-model filter + JEPA RPE baseline + consolidation
 
 World: 500 RED_APPLE, 500 GREEN_APPLE, 500 GRAY_APPLE, 50 CACTUS, 100 ALOE,
-1200x900 (2x the original 20260709_memory_vs_wm_v1's world), 10 creatures (2x),
-reposition=true (food regenerates, no scarcity depletion), maxRuntimeMinutes=60.
+1200x900 (same dense world as 20260714_memory_vs_wm_dense_reposition), 10 creatures,
+reposition=false (eaten food does NOT respawn — the world depletes over the run, same
+scarcity regime as the original 20260709_memory_vs_wm_v1 experiment), maxRuntimeMinutes=60.
 
-This is the dl2l_analysis-based port of analysis/exp_20260709_memory_vs_wm_v1.py
-(same conditions, same world-object types, same figures/stats) — adjusted for
-this variant's larger world/population and re-run through the shared
-loading/stats/figure scaffold in analysis/dl2l_analysis/ instead of duplicating
-it. The primary question carried over from that experiment: does memory/JEPA
-world-model filtering improve survival and world-interaction quality (food
-selection, cactus avoidance) relative to baseline, and does consolidation add
-anything on top of the filter alone? The dense/reposition variant additionally
-asks whether those effects hold up under higher creature density (this was
-also the setup used to validate this week's CCAD infra fixes — see
-docs/plans/ccad-metrics-completion-detection.md and
-docs/plans/ccad-singularity-experiments.md for that side of the story).
+This is the scarce-world counterpart to 20260714_memory_vs_wm_dense_reposition — same
+world density and creature count, only reposition flipped back to false, run on CCAD
+(negligible JEPA inference overhead vs. the original local run) to test whether the
+dramatic survival/foraging effects that vanished under resource abundance
+(20260714_memory_vs_wm_dense_reposition's central finding) return once food is scarce
+again, at this larger world/population scale. Re-run through the shared
+loading/stats/figure scaffold in analysis/dl2l_analysis/.
 
-Data: ml/data_20260714_memory_vs_wm_dense_reposition/
+Data: ml/data_20260717_memory_vs_wm_dense_scarce/
 
 Usage:
-  python3 -m dl2l_analysis --experiment 20260714_memory_vs_wm_dense_reposition
-  (or directly: python3 -m analysis.experiments.20260714_memory_vs_wm_dense_reposition)
+  python3 -m dl2l_analysis --experiment 20260717_memory_vs_wm_dense_scarce
+  (or directly: python3 -m analysis.experiments.20260717_memory_vs_wm_dense_scarce)
 """
 
 from __future__ import annotations
@@ -63,7 +60,7 @@ DRIVE_COLS = [
 DRIVE_PLOT_COLS = ["final_hunger", "final_sleep", "final_pain", "final_tedium"]
 DRIVE_PLOT_NAMES = ["Hunger", "Sleep", "Pain", "Tedium"]
 
-EXP_NAME = "20260714_memory_vs_wm_dense_reposition"
+EXP_NAME = "20260717_memory_vs_wm_dense_scarce"
 
 
 def run(cfg: ExperimentAnalysis | None = None) -> None:

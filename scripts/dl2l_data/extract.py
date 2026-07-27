@@ -14,6 +14,7 @@ Usage:
         [--format parquet|csv] \
         [--docker-cmd docker] \
         [--runtime docker|singularity] \
+        [--db-port 5432] \
         [--skip-backup]
 
 Each condition gets its own subdirectory (optionally under trial_N/) with one
@@ -91,6 +92,10 @@ def main():
                         'instead of a docker exec; --docker-cmd is ignored then.')
     p.add_argument("--skip-backup", action="store_true",
                    help="Skip pg_dump (faster, use when DB is still running long)")
+    p.add_argument("--db-port", type=int, default=None,
+                   help="postgres port, if not the client default (5432) — "
+                        "needed on CCAD, where concurrent trials sharing a "
+                        "node each run postgres on a distinct $PGPORT")
     args = p.parse_args()
 
     cond = args.condition
@@ -98,6 +103,7 @@ def main():
     trial = args.trial
     docker_cmd = args.docker_cmd
     runtime = args.runtime
+    port = args.db_port
     if trial is not None:
         out_dir = Path(args.out) / cond / f"trial_{trial}"
     else:
@@ -108,7 +114,7 @@ def main():
     print(f"Extracting {args.experiment}/{cond}{trial_label} from container "
           f"'{container}' …", file=sys.stderr)
 
-    creatures_rows = psql_copy(container, TABLES["creatures"][0], docker_cmd, runtime)
+    creatures_rows = psql_copy(container, TABLES["creatures"][0], docker_cmd, runtime, port)
     if len(creatures_rows) < 2:
         print("No creatures found — aborting.", file=sys.stderr)
         sys.exit(1)
@@ -120,13 +126,13 @@ def main():
         if table == "creatures":
             continue
         sql, post_process = TABLES[table]
-        rows = psql_copy(container, sql, docker_cmd, runtime)
+        rows = psql_copy(container, sql, docker_cmd, runtime, port)
         if post_process is not None:
             rows = post_process(rows)
         save(rows, out_dir, table, args.format, cond, trial)
 
     if not args.skip_backup:
-        pg_dump(container, out_dir / "db_backup.sql.gz", docker_cmd, runtime)
+        pg_dump(container, out_dir / "db_backup.sql.gz", docker_cmd, runtime, port)
 
     manifest_path = update_manifest(
         exp_dir=Path(args.out),

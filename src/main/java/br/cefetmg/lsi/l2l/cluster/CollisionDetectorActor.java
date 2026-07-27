@@ -3,6 +3,7 @@ package br.cefetmg.lsi.l2l.cluster;
 import akka.actor.*;
 import akka.cluster.Cluster;
 import akka.cluster.ClusterEvent.*;
+import static akka.cluster.ClusterEvent.initialStateAsEvents;
 import akka.cluster.Member;
 import akka.japi.pf.ReceiveBuilder;
 import br.cefetmg.lsi.l2l.cluster.settings.Simulation;
@@ -47,7 +48,11 @@ public class CollisionDetectorActor extends AbstractActor implements Registrable
     @Override
     public void preStart() throws Exception {
         super.preStart();
-        cluster.subscribe(self(), MemberUp.class);
+        // See Holder.preStart()'s comment on the same call shape — the plain
+        // 2-arg subscribe() defaults to InitialStateAsSnapshot, silently
+        // missing an already-Up manager instead of delivering the MemberUp
+        // event handleNewMember() depends on to register with it.
+        cluster.subscribe(self(), initialStateAsEvents(), MemberUp.class);
     }
 
     @Override

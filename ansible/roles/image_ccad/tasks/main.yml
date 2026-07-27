@@ -17,6 +17,10 @@
 #
 # Always re-pulls (--force) rather than caching — dl2l_image defaults to a
 # moving `:latest` tag, so skip-if-cached would silently run stale images.
+# The sandbox *build* step (build_image.sh.j2), unlike the pull, does skip
+# when the freshly-pulled SIF's digest matches the sandbox's last build —
+# see that template for why (a genuine live bug: rebuilding unconditionally
+# corrupted another invocation's already-running instances).
 - name: Fail if image.source is not 'registry'
   ansible.builtin.fail:
     msg: >-

@@ -61,7 +61,12 @@ public class SimulationManager extends UntypedActor {
     @Override
     public void preStart() throws Exception {
         metricsExt = MetricsExtension.of(context().system());
-        cluster.subscribe(self(), MemberUp.class, MemberJoined.class, MemberExited.class);
+        // See Holder.preStart()'s comment on the same call shape — the plain
+        // varargs subscribe() defaults to InitialStateAsSnapshot, not
+        // InitialStateAsEvents. Manager is always the first node up, so
+        // there's rarely anything already-Up to miss here in practice, but
+        // fixed for correctness/consistency with the other 3 call sites.
+        cluster.subscribe(self(), initialStateAsEvents(), MemberUp.class, MemberJoined.class, MemberExited.class);
         int maxRuntime = settings.getMaxRuntimeMinutes();
         if (maxRuntime > 0) {
             context().system().scheduler().scheduleOnce(
