@@ -52,6 +52,15 @@ public class PartialAppraisal extends CreatureComponent {
                 ? (List<Stimulus>) list
                 : List.of();
 
+        // Direct ground truth for this creature's real cognitive-cycle rate — every
+        // onReceive() call increments it, including the unconditional 1Hz keep-alive
+        // ticks (CreatureActor's own scheduler), so repeated scrapes let cycles/second
+        // be computed directly instead of inferred after the fact from a proxy like
+        // NeuromodulatorSystem's seq counter.
+        if (metricsExt != null) {
+            metricsExt.incrementCounter("dl2l_creature_cognitive_cycles_total", "creature", id.toString());
+        }
+
         checkDeath();
         AdrenergicStimulus adrenergic = tickMetabolicPacemaker();
         tickNeuromodulators();

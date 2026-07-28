@@ -1,0 +1,29 @@
+# Throwaway diagnostic, NOT a scientific experiment. Purpose: confirm the new
+# dl2l_creature_cognitive_cycles_total probe (+ JVM GC/CPU metrics scraped every 10s
+# into $TRIAL_DIR/metrics_*.log by run_trial.sh.j2) actually catch the node-specific
+# per-creature cycle-rate suppression found in 20260717_memory_vs_wm_dense_scarce.
+# One condition only (baseline) — the mechanism has already been shown to be
+# node-specific, not condition-specific (an isolated single-trial JEPA+Consol re-run
+# on the affected node reproduced the same suppression), so holding condition fixed
+# and sampling multiple trials/nodes is the cleanest, cheapest test.
+name: 20260728_tick_rate_diagnostic
+trials: 5
+
+conditions:
+  - key: 1_baseline
+    simulation: simulations/20260728_tick_rate_diagnostic_1_baseline.conf
+    label: Baseline
+    color: "#9e9e9e"
+
+image:
+  source: registry
+
+data_dir: ml/data_20260728_tick_rate_diagnostic
+
+extract:
+  format: parquet
+  backup: true
+  tables: all
+
+upload:
+  enabled: false
