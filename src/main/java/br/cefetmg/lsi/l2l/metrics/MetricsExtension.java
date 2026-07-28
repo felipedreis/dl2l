@@ -11,6 +11,10 @@ import akka.http.javadsl.server.AllDirectives;
 import akka.http.javadsl.server.Route;
 import akka.stream.Materializer;
 import io.micrometer.core.instrument.Tags;
+import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics;
+import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics;
+import io.micrometer.core.instrument.binder.jvm.JvmThreadMetrics;
+import io.micrometer.core.instrument.binder.system.ProcessorMetrics;
 import io.micrometer.prometheus.PrometheusConfig;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
 
@@ -71,6 +75,17 @@ public class MetricsExtension extends AbstractExtensionId<MetricsExtension.Impl>
                     ? system.settings().config().getString("dl2l.metrics.trial-id")
                     : "local";
             registry.config().commonTags("simulation", simulation, "trial", trial);
+
+            // Standard JVM/OS binders — added to diagnose a CCAD node-specific
+            // per-creature cognitive-cycle-rate suppression found in
+            // 20260717_memory_vs_wm_dense_scarce (some nodes showed ~6-8x fewer
+            // PartialAppraisal cycles than others for no code-level reason). GC
+            // pauses and CPU saturation were two of the leading candidates that
+            // couldn't be ruled in or out from the existing telemetry.
+            new JvmGcMetrics().bindTo(registry);
+            new JvmMemoryMetrics().bindTo(registry);
+            new JvmThreadMetrics().bindTo(registry);
+            new ProcessorMetrics().bindTo(registry);
 
             bindHttpServer(system);
 

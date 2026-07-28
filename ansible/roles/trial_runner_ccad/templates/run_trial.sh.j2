@@ -108,6 +108,7 @@ HOLDER_NAME="dl2l-holder-${SLURM_JOB_ID}"
 cleanup() {
   local rc=$?
   echo "$rc" > "$TRIAL_DIR/DONE"
+  kill "${SCRAPE_PID:-}" >/dev/null 2>&1 || true
   singularity instance stop "$DB_NAME" "$MANAGER_NAME" "$DETECTOR_NAME" "$HOLDER_NAME" >/dev/null 2>&1 || true
   for _ in $(seq 1 20); do
     singularity instance list 2>/dev/null | grep -qE "^(${DB_NAME}|${MANAGER_NAME}|${DETECTOR_NAME}|${HOLDER_NAME}) " || break
@@ -290,7 +291,7 @@ singularity instance start $WRITABLE \
   --bind "$CONFIG_BIND" \
   --env ROLE=manager,idProvider --env SIMULATION={{ cond.simulation }} \
   --env HOST=localhost --env PORT="$MANAGER_PORT" --env SEED_PORT="$MANAGER_PORT" \
-  --env METRICS_PORT="$METRICS_MANAGER_PORT" \
+  --env METRICS_PORT="$METRICS_MANAGER_PORT" --env TRIAL_ID="$TRIAL" \
   --env DL2L_DB_URL="jdbc:postgresql://localhost:${PG_PORT}/l2l" \
   {{ remote_work_dir }}/dl2l_sandbox "$MANAGER_NAME"
 
@@ -307,7 +308,7 @@ singularity instance start $WRITABLE \
   --bind "$CONFIG_BIND" \
   --env ROLE=collisionDetector --env SIMULATION={{ cond.simulation }} \
   --env HOST=localhost --env PORT="$DETECTOR_PORT" --env SEED_PORT="$MANAGER_PORT" \
-  --env METRICS_PORT="$METRICS_DETECTOR_PORT" \
+  --env METRICS_PORT="$METRICS_DETECTOR_PORT" --env TRIAL_ID="$TRIAL" \
   {{ remote_work_dir }}/dl2l_sandbox "$DETECTOR_NAME"
 
 # --- holder -------------------------------------------------------------------
@@ -315,7 +316,7 @@ singularity instance start $WRITABLE \
   --bind "$CONFIG_BIND" \
   --env ROLE=holder --env SIMULATION={{ cond.simulation }} \
   --env HOST=localhost --env PORT="$HOLDER_PORT" --env SEED_PORT="$MANAGER_PORT" \
-  --env METRICS_PORT="$METRICS_HOLDER_PORT" \
+  --env METRICS_PORT="$METRICS_HOLDER_PORT" --env TRIAL_ID="$TRIAL" \
   --env DL2L_DB_URL="jdbc:postgresql://localhost:${PG_PORT}/l2l" \
   {{ remote_work_dir }}/dl2l_sandbox "$HOLDER_NAME"
 
@@ -367,6 +368,32 @@ if [ "$sim_started" != 1 ]; then
   [ -n "${MANAGER_LOG:-}" ] && tail -80 "$MANAGER_LOG"
   exit 1
 fi
+
+# Diagnostic-only: periodically scrape each role's own /metrics endpoint
+# (already reachable at localhost:$METRICS_*_PORT — no network requirement
+# beyond what completion detection above already uses) and append raw
+# snapshots to $TRIAL_DIR, which rides along with the existing rescue sync
+# automatically. Added to catch a node-specific per-creature cognitive-cycle
+# suppression found in 20260717_memory_vs_wm_dense_scarce (see
+# dl2l_creature_cognitive_cycles_total, PartialAppraisal.onReceive) — some
+# nodes showed ~6-8x fewer cycles than others for creatures that otherwise
+# ran the full duration, with no error/warning/dead-letter evidence
+# explaining it from the existing telemetry alone. Killed in cleanup()'s
+# trap via $SCRAPE_PID; a trial that fails before this point never sets the
+# variable, which cleanup() already guards for.
+(
+  while true; do
+    ts=$(date +%s)
+    for role_port in manager:$METRICS_MANAGER_PORT detector:$METRICS_DETECTOR_PORT holder:$METRICS_HOLDER_PORT; do
+      role="${role_port%%:*}"
+      port="${role_port##*:}"
+      { echo "# scrape_ts $ts"; curl -s -m 3 "http://localhost:${port}/metrics" 2>/dev/null; } \
+        >> "$TRIAL_DIR/metrics_${role}.log"
+    done
+    sleep 10
+  done
+) &
+SCRAPE_PID=$!
 
 # CONFIRMED LIVE BUG: polling `singularity instance list` for the holder to
 # disappear is NOT reliable completion detection — under a real (non-smoke)
