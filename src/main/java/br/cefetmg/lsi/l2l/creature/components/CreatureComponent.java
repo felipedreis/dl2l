@@ -4,7 +4,6 @@ import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.ComponentRef;
 import br.cefetmg.lsi.l2l.creature.Creature;
 import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
-import br.cefetmg.lsi.l2l.creature.bd.Persister;
 import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
 
 import java.util.List;
@@ -33,8 +32,6 @@ public abstract class CreatureComponent {
 
     private SequentialId nextStimulusId;
 
-    private Persister persister;
-
     private ComponentRef selfRef;
 
     public CreatureComponent(SequentialId id) {
@@ -44,8 +41,8 @@ public abstract class CreatureComponent {
     }
 
     /** Overload for callers (tests) that don't have a MetricsExtension to wire in. */
-    public final void init(Creature creature, Persister persister, ComponentRef selfRef) {
-        init(creature, persister, selfRef, null);
+    public final void init(Creature creature, ComponentRef selfRef) {
+        init(creature, selfRef, null);
     }
 
     /**
@@ -53,10 +50,8 @@ public abstract class CreatureComponent {
      * harness in tests) before any message is delivered. Subclasses may override
      * {@link #preStart()} for extra wiring.
      */
-    public final void init(Creature creature, Persister persister, ComponentRef selfRef,
-                            MetricsExtension.Impl metricsExt) {
+    public final void init(Creature creature, ComponentRef selfRef, MetricsExtension.Impl metricsExt) {
         this.creature = creature;
-        this.persister = persister;
         this.selfRef = selfRef;
         this.metricsExt = metricsExt;
         try {
@@ -66,7 +61,7 @@ public abstract class CreatureComponent {
         }
     }
 
-    /** Override to run extra setup once {@link #creature} and {@link #persister} are wired. */
+    /** Override to run extra setup once {@link #creature} is wired. */
     public void preStart() throws Exception {
         // default: no-op
     }

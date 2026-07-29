@@ -13,6 +13,8 @@ import akka.pattern.Patterns;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.Persistence;
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.CompletionStage;
 
 /**
@@ -62,7 +64,7 @@ public class PersistenceExtension extends AbstractExtensionId<PersistenceExtensi
         private final ActorRef bdActor;
 
         Impl(ExtendedActorSystem system) {
-            this.emf = Persistence.createEntityManagerFactory("L2LPU", JpaPersister.jdbcUrlOverride());
+            this.emf = Persistence.createEntityManagerFactory("L2LPU", jdbcUrlOverride());
             this.bdActor = system.actorOf(Props.create(BDActor.class).withDispatcher("bd-dispatcher"), "bd");
 
             // Defense-in-depth for shutdown paths that bypass Holder's own two drain points
@@ -104,6 +106,21 @@ public class PersistenceExtension extends AbstractExtensionId<PersistenceExtensi
 
         public ActorRef bdActor() {
             return bdActor;
+        }
+
+        /**
+         * DL2L_DB_URL lets deployments without a fixed "dl2l-db" hostname (e.g. Singularity
+         * instances on CCAD, which share the host's network namespace and use localhost/a
+         * per-role port instead of Docker's per-container DNS) point at their actual postgres
+         * address without touching persistence.xml. Unset -> identical to today's hardcoded URL.
+         */
+        private static Map<String, Object> jdbcUrlOverride() {
+            Map<String, Object> overrides = new HashMap<>();
+            String dbUrl = System.getenv("DL2L_DB_URL");
+            if (dbUrl != null && !dbUrl.isEmpty()) {
+                overrides.put("javax.persistence.jdbc.url", dbUrl);
+            }
+            return overrides;
         }
     }
 }

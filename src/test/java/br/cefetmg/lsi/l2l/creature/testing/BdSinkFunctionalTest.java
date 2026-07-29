@@ -14,9 +14,10 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Regression net for the persist() rewire (docs/plans/bdactor-async-persistence-with-drain.md):
  * creature.bd().tell(state) - which TestingCreature already wired to an ExternalSink - was
- * present but never asserted on before this change, since persistence used to flow through
- * the injected Persister instead. Covers both persist-call-site categories: a one-off
- * transition (Eye, triggered by a specific stimulus) and a recurring, every-cycle log
+ * present but never asserted on before this change, since persistence used to flow through a
+ * per-component injected Persister instead (since removed - persistence now flows only through
+ * creature.bd()). Covers both persist-call-site categories: a one-off transition (Eye,
+ * triggered by a specific stimulus) and a recurring, every-cycle log
  * (PartialAppraisal.persistCycle, fired unconditionally on every tick()).
  */
 class BdSinkFunctionalTest {
