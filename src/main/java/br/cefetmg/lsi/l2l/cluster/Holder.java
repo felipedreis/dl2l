@@ -12,6 +12,7 @@ import akka.japi.pf.ReceiveBuilder;
 import akka.pattern.Patterns;
 import akka.util.Timeout;
 import br.cefetmg.lsi.l2l.analysis.DataAnalyser;
+import br.cefetmg.lsi.l2l.creature.bd.Flush;
 import br.cefetmg.lsi.l2l.creature.bd.PersistenceExtension;
 import br.cefetmg.lsi.l2l.creature.ml.MLServiceExtension;
 import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
@@ -235,6 +236,13 @@ public class Holder extends AbstractActor implements Registrable {
             metricsExt.setGauge("dl2l_creatures_alive", creatures.size());
 
             if(creatures.isEmpty()) {
+                // Wait for every write already in BDActor's mailbox to commit before
+                // DataAnalyser reads creature state back out of Postgres - persistence is now
+                // async (creature.bd().tell(state)), so without this drain the analysis could
+                // silently read a DB missing each creature's final ticks. See
+                // docs/plans/bdactor-async-persistence-with-drain.md §4a.
+                Sync.ask(PersistenceExtension.of(context().system()).bdActor(), new Flush(), 30);
+
                 EntityManager em = PersistenceExtension.of(context().system())
                         .entityManagerFactory().createEntityManager();
 
@@ -303,6 +311,11 @@ public class Holder extends AbstractActor implements Registrable {
 
     private void handleFinish(Finish finish) {
         logger.info("Received stop order from manager. Stopping ");
+        // Defensive second drain: cheap and idempotent (nothing left to flush in the common
+        // case, since handleRemoveObject's drain already ran) - covers a holder that never
+        // held a creature, or any future persistence path that doesn't go through the
+        // per-creature-death drain. See docs/plans/bdactor-async-persistence-with-drain.md §4b.
+        Sync.ask(PersistenceExtension.of(context().system()).bdActor(), new Flush(), 30);
         for(ActorRef component : worldObjects.values()) {
             context().stop(component);
         }

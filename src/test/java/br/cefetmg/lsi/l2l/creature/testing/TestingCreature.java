@@ -6,7 +6,6 @@ import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.ComponentRef;
 import br.cefetmg.lsi.l2l.creature.Creature;
-import br.cefetmg.lsi.l2l.creature.bd.NoOpPersister;
 import br.cefetmg.lsi.l2l.creature.components.*;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioningActor;
@@ -90,10 +89,10 @@ public final class TestingCreature implements Creature {
         register(cid = cid.next(), new NeuromodulatorSystem(cid));
         register(cid = cid.next(), new EndocrineSystem(cid));
 
-        // Wire each component to the Creature + persister + self-ref.
+        // Wire each component to the Creature + self-ref.
         components.forEach((cls, component) -> {
             RecordingComponentRef selfRef = refs.get(cls);
-            component.init(this, new NoOpPersister(), selfRef);
+            component.init(this, selfRef);
         });
     }
 

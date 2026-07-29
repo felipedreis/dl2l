@@ -6,9 +6,6 @@ import akka.actor.UntypedActor;
 import br.cefetmg.lsi.l2l.creature.AkkaComponentRef;
 import br.cefetmg.lsi.l2l.creature.Creature;
 import br.cefetmg.lsi.l2l.creature.CreatureActor;
-import br.cefetmg.lsi.l2l.creature.bd.JpaPersister;
-import br.cefetmg.lsi.l2l.creature.bd.Persister;
-import br.cefetmg.lsi.l2l.creature.bd.PersistenceExtension;
 import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
 
 /**
@@ -18,13 +15,13 @@ import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
  *
  * In {@link #preStart()} the adapter resolves the parent {@link Creature} via the
  * existing {@code TypedActor} lookup and wires it into the component along with a
- * {@link Persister} (JPA-backed, using an {@link javax.persistence.EntityManager}
- * from the shared per-JVM {@link PersistenceExtension}) and a self-{@link AkkaComponentRef}.
+ * self-{@link AkkaComponentRef}. Persistence flows through {@code creature.bd()} directly
+ * ({@code CreatureComponent.persist()} - see docs/plans/bdactor-async-persistence-with-drain.md),
+ * not through a per-component injected persister.
  */
 public class ComponentActor extends UntypedActor {
 
     private final CreatureComponent component;
-    private Persister persister;
 
     public ComponentActor(CreatureComponent component) {
         this.component = component;
@@ -33,12 +30,10 @@ public class ComponentActor extends UntypedActor {
     @Override
     public void preStart() throws Exception {
         super.preStart();
-        persister = new JpaPersister(PersistenceExtension.of(context().system())
-                .entityManagerFactory().createEntityManager());
         Creature creature = TypedActor.get(context().system())
                 .typedActorOf(new TypedProps<>(Creature.class, CreatureActor.class), context().parent());
         MetricsExtension.Impl metricsExt = MetricsExtension.of(context().system());
-        component.init(creature, persister, new AkkaComponentRef(self()), metricsExt);
+        component.init(creature, new AkkaComponentRef(self()), metricsExt);
     }
 
     @Override
@@ -48,11 +43,7 @@ public class ComponentActor extends UntypedActor {
 
     @Override
     public void postStop() throws Exception {
-        try {
-            component.postStop();
-        } finally {
-            if (persister != null) persister.close();
-            super.postStop();
-        }
+        component.postStop();
+        super.postStop();
     }
 }
