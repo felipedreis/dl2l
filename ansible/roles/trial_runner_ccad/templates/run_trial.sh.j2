@@ -382,6 +382,18 @@ fi
 # trap via $SCRAPE_PID; a trial that fails before this point never sets the
 # variable, which cleanup() already guards for.
 (
+  # CONFIRMED LIVE BUG (2026-07-29): this subshell inherits the parent script's
+  # `set -euo pipefail` (line 44). curl returns non-zero on a transient failure
+  # (connection refused during a brief window, timeout under the resource
+  # contention of several concurrent trials on one CCAD node) - with no `|| true`
+  # guard, errexit killed this ENTIRE background loop the moment any single
+  # scrape failed, silently, with no error surfaced anywhere (it's a detached
+  # background job nothing ever waits on or checks the exit status of). Observed
+  # live: every trial's metrics_*.log had exactly ONE scrape (the first,
+  # successful, round) and then nothing for the rest of an 18-minute run.
+  # `set +e` here means a bad scrape just yields an empty entry that round
+  # instead of ending all future scraping.
+  set +e
   while true; do
     ts=$(date +%s)
     for role_port in manager:$METRICS_MANAGER_PORT detector:$METRICS_DETECTOR_PORT holder:$METRICS_HOLDER_PORT; do
