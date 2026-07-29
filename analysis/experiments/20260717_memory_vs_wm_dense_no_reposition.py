@@ -103,7 +103,8 @@ def run(cfg: ExperimentAnalysis | None = None) -> None:
     expectancy["cycle"] = num(expectancy["cycle"])
     engrams["eligibility"] = num(engrams["eligibility"])
     engrams["emotion_delta"] = num(engrams["emotion_delta"])
-    sleep_ep["duration_ticks"] = num(sleep_ep["duration_ticks"])
+    if not sleep_ep.empty:
+        sleep_ep["duration_ticks"] = num(sleep_ep["duration_ticks"])
 
     creatures = attach_born_time_and_ticks(creatures, actions)
     behav = attach_elapsed_s(behav, creatures, "time")
@@ -624,36 +625,39 @@ def run(cfg: ExperimentAnalysis | None = None) -> None:
     # ══════════════════════════════════════════════════════════════════════
     print("\n=== 10. SLEEP EPISODES ===")
 
-    sleep_summary = sleep_ep.groupby("condition").agg(
-        count=("duration_ticks", "count"),
-        mean_dur=("duration_ticks", "mean"),
-        std_dur=("duration_ticks", "std"),
-    ).reindex([ck for ck, _ in CONDITIONS])
-    print(sleep_summary.to_string())
+    if sleep_ep.empty:
+        print("  No sleep_episodes.parquet data in any condition/trial - skipping this section.")
+    else:
+        sleep_summary = sleep_ep.groupby("condition").agg(
+            count=("duration_ticks", "count"),
+            mean_dur=("duration_ticks", "mean"),
+            std_dur=("duration_ticks", "std"),
+        ).reindex([ck for ck, _ in CONDITIONS])
+        print(sleep_summary.to_string())
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
-    ax = axes[0]
-    ax.bar(COND_LABELS,
-           [sleep_summary.loc[ck, "count"] if ck in sleep_summary.index else 0 for ck, _ in CONDITIONS],
-           color=[PALETTE[ck] for ck, _ in CONDITIONS], alpha=0.8)
-    ax.set_title("Sleep Episodes (total, 5 trials)")
-    ax.set_ylabel("Count")
-    ax.set_xticklabels(COND_LABELS, rotation=20, ha="right")
-    ax.grid(axis="y", alpha=0.3)
+        ax = axes[0]
+        ax.bar(COND_LABELS,
+               [sleep_summary.loc[ck, "count"] if ck in sleep_summary.index else 0 for ck, _ in CONDITIONS],
+               color=[PALETTE[ck] for ck, _ in CONDITIONS], alpha=0.8)
+        ax.set_title("Sleep Episodes (total, 5 trials)")
+        ax.set_ylabel("Count")
+        ax.set_xticklabels(COND_LABELS, rotation=20, ha="right")
+        ax.grid(axis="y", alpha=0.3)
 
-    ax = axes[1]
-    means = [sleep_summary.loc[ck, "mean_dur"] if ck in sleep_summary.index else 0 for ck, _ in CONDITIONS]
-    stds = [sleep_summary.loc[ck, "std_dur"] if ck in sleep_summary.index else 0 for ck, _ in CONDITIONS]
-    ax.bar(COND_LABELS, means, yerr=stds, capsize=5,
-           color=[PALETTE[ck] for ck, _ in CONDITIONS], alpha=0.8)
-    ax.set_title("Mean Sleep Episode Duration (ticks)")
-    ax.set_ylabel("Duration (ticks)")
-    ax.set_xticklabels(COND_LABELS, rotation=20, ha="right")
-    ax.grid(axis="y", alpha=0.3)
+        ax = axes[1]
+        means = [sleep_summary.loc[ck, "mean_dur"] if ck in sleep_summary.index else 0 for ck, _ in CONDITIONS]
+        stds = [sleep_summary.loc[ck, "std_dur"] if ck in sleep_summary.index else 0 for ck, _ in CONDITIONS]
+        ax.bar(COND_LABELS, means, yerr=stds, capsize=5,
+               color=[PALETTE[ck] for ck, _ in CONDITIONS], alpha=0.8)
+        ax.set_title("Mean Sleep Episode Duration (ticks)")
+        ax.set_ylabel("Duration (ticks)")
+        ax.set_xticklabels(COND_LABELS, rotation=20, ha="right")
+        ax.grid(axis="y", alpha=0.3)
 
-    plt.tight_layout()
-    save(fig, "11_sleep_episodes.png", cfg)
+        plt.tight_layout()
+        save(fig, "11_sleep_episodes.png", cfg)
 
     # ══════════════════════════════════════════════════════════════════════
     # 11. WORLD MODEL INFERENCE LATENCY
