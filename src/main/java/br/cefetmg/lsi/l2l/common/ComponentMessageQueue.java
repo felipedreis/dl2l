@@ -37,21 +37,56 @@ public class ComponentMessageQueue implements MessageQueue {
             return queue.poll();
         }
 
+        // Only meaningful for the single-unrecognized-message case below - a batch of several
+        // Stimulus/PersistenceState never had per-message sender tracking and still doesn't
+        // (nothing reads it), but a lone control message (e.g. Flush) needs its ORIGINAL
+        // sender preserved so an ask()-based reply (sender().tell(...)) actually reaches the
+        // asker instead of deadLetters.
+        Envelope singleUnrecognizedEnv = null;
+
         while (!queue.isEmpty()) {
             env = queue.peek();
 
             if (env.message() instanceof Stimulus || env.message() instanceof PersistenceState) {
                 list.add(env.message());
                 queue.poll();
+            } else if (env.message() instanceof PersistenceState[]) {
+                // A whole persist(states...) call, kept atomic (all-or-nothing in the same
+                // dequeue()) - see CreatureComponent.persist()'s javadoc. Some states
+                // reference each other (e.g. a @OneToOne join); splitting them across two
+                // BDActor transactions previously caused a duplicate-primary-key crash when
+                // the second transaction re-inserted an already-committed, now-detached
+                // entity. Flattened into the same list as individual states so BDActor's
+                // batch-persist loop doesn't need to know the difference.
+                for (Object state : (PersistenceState[]) env.message()) {
+                    list.add(state);
+                }
+                queue.poll();
             } else if (env.message() instanceof String) {
                 queue.poll();
             } else if(env.message() instanceof PoisonPill) {
                 System.out.println("Next message is a poison pill, handle previous messages first");
                 break;
+            } else {
+                // Any other message type (e.g. a control message like Flush) is delivered as
+                // its own single-element batch, never merged with a Stimulus/PersistenceState
+                // batch already collected - this preserves FIFO ordering (everything queued
+                // strictly before it is returned first, in an earlier dequeue() call) while
+                // guaranteeing forward progress. Previously this branch didn't exist, so an
+                // unrecognized message type at the head of the queue matched no case: the loop
+                // never called queue.poll() and never broke, spinning the dispatcher thread
+                // forever with no exception or log line.
+                if (list.isEmpty()) {
+                    singleUnrecognizedEnv = env;
+                    list.add(env.message());
+                    queue.poll();
+                }
+                break;
             }
         }
 
-        return Envelope.apply(list, ActorRef.noSender());
+        ActorRef sender = (singleUnrecognizedEnv != null) ? singleUnrecognizedEnv.sender() : ActorRef.noSender();
+        return Envelope.apply(list, sender);
     }
 
     public int numberOfMessages() {

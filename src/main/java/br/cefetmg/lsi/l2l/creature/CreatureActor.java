@@ -78,8 +78,6 @@ public class CreatureActor implements Creature {
 
     private ActorRef consolidator;
 
-    private ActorRef bdActor;
-
     private boolean alive;
     private Point position;
     private double direction;
@@ -177,9 +175,6 @@ public class CreatureActor implements Creature {
         } else {
             consolidator = context.system().deadLetters();
         }
-
-        //bdActor = context.system().actorOf(Props.create(BDActor.class, em)
-        //        .withDispatcher("bd-dispatcher"), "db");
 
         final MLServiceExtension.Impl mlExt = MLServiceExtension.of(context.system());
 
@@ -323,7 +318,7 @@ public class CreatureActor implements Creature {
 
     @Override
     public ComponentRef bd() {
-        return new AkkaComponentRef(bdActor != null ? bdActor : TypedActor.context().system().deadLetters());
+        return new AkkaComponentRef(PersistenceExtension.of(TypedActor.context().system()).bdActor());
     }
 
     public Point getPosition() {

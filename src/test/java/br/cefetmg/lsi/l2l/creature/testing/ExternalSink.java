@@ -1,6 +1,7 @@
 package br.cefetmg.lsi.l2l.creature.testing;
 
 import br.cefetmg.lsi.l2l.creature.ComponentRef;
+import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,7 +23,17 @@ public final class ExternalSink implements ComponentRef {
 
     @Override
     public void tell(Object msg) {
-        messages.add(msg);
+        // CreatureComponent.persist(states...) sends the whole array as one message (kept
+        // atomic - see its javadoc), matching ComponentMessageQueue's real-mailbox flattening
+        // behavior. Flatten here too so ofType()/hasAny() can assert on individual states,
+        // same as tests could before persist() routed through bd() instead of a Persister.
+        if (msg instanceof PersistenceState[]) {
+            for (PersistenceState state : (PersistenceState[]) msg) {
+                messages.add(state);
+            }
+        } else {
+            messages.add(msg);
+        }
     }
 
     public String name() {

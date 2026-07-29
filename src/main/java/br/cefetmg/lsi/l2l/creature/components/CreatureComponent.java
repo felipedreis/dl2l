@@ -79,10 +79,29 @@ public abstract class CreatureComponent {
     /** Subclasses implement the batch handler. */
     public abstract void onReceive(Object message);
 
+    /**
+     * Fire-and-forget: tells {@link Creature#bd()} (the per-JVM {@code BDActor}) instead of
+     * blocking this component's own dispatcher thread on a synchronous JPA transaction.
+     * {@code ComponentMessageQueue}'s FIFO batching coalesces everything queued between
+     * BDActor's mailbox polls into one committed transaction - see
+     * docs/plans/bdactor-async-persistence-with-drain.md.
+     *
+     * CONFIRMED LIVE: sends the whole {@code states} array as ONE message, not one .tell()
+     * per state. Some states reference each other (e.g. an EyeState/ObjectSeenState's
+     * @OneToOne changeStimulusState) - if the two ends of that reference landed in different
+     * BDActor batches/transactions (possible if sent as separate messages and BDActor's
+     * dispatcher thread happened to poll between them), the second transaction re-inserted
+     * the already-committed, now-detached referenced entity and hit a duplicate-primary-key
+     * constraint violation, which crashed BDActor outright (uncaught exception -> this
+     * project's StoppingSupervisorStrategy stops rather than restarts). Sending one array
+     * message keeps every persist(...) call atomic - always landed in the same batch/transaction,
+     * never split - restoring the same one-call-one-transaction invariant the old synchronous
+     * design always had.
+     */
     protected final void persist(PersistenceState... states) {
-        if (persister == null) return;
+        if (creature == null) return;
         logger.fine(() -> "persisting " + states.length + " state(s)");
-        persister.persist(states);
+        creature.bd().tell(states);
     }
 
     /**
