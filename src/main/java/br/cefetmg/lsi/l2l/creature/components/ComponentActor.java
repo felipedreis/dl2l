@@ -8,6 +8,7 @@ import br.cefetmg.lsi.l2l.creature.Creature;
 import br.cefetmg.lsi.l2l.creature.CreatureActor;
 import br.cefetmg.lsi.l2l.creature.bd.JpaPersister;
 import br.cefetmg.lsi.l2l.creature.bd.Persister;
+import br.cefetmg.lsi.l2l.creature.bd.PersistenceExtension;
 import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
 
 /**
@@ -17,27 +18,23 @@ import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
  *
  * In {@link #preStart()} the adapter resolves the parent {@link Creature} via the
  * existing {@code TypedActor} lookup and wires it into the component along with a
- * {@link Persister} (JPA-backed by default) and a self-{@link AkkaComponentRef}.
+ * {@link Persister} (JPA-backed, using an {@link javax.persistence.EntityManager}
+ * from the shared per-JVM {@link PersistenceExtension}) and a self-{@link AkkaComponentRef}.
  */
 public class ComponentActor extends UntypedActor {
 
     private final CreatureComponent component;
-    private final java.util.function.Supplier<Persister> persisterFactory;
     private Persister persister;
 
     public ComponentActor(CreatureComponent component) {
-        this(component, JpaPersister::new);
-    }
-
-    public ComponentActor(CreatureComponent component, java.util.function.Supplier<Persister> persisterFactory) {
         this.component = component;
-        this.persisterFactory = persisterFactory;
     }
 
     @Override
     public void preStart() throws Exception {
         super.preStart();
-        persister = persisterFactory.get();
+        persister = new JpaPersister(PersistenceExtension.of(context().system())
+                .entityManagerFactory().createEntityManager());
         Creature creature = TypedActor.get(context().system())
                 .typedActorOf(new TypedProps<>(Creature.class, CreatureActor.class), context().parent());
         MetricsExtension.Impl metricsExt = MetricsExtension.of(context().system());

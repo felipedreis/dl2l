@@ -8,13 +8,13 @@ import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.Creature;
 import br.cefetmg.lsi.l2l.creature.CreatureActor;
 import br.cefetmg.lsi.l2l.creature.bd.MemoryTraceStat;
+import br.cefetmg.lsi.l2l.creature.bd.PersistenceExtension;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.creature.memory.Engram;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
 import javax.persistence.EntityManager;
-import javax.persistence.Persistence;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -42,8 +42,7 @@ public class MemoryTraceConsolidator extends UntypedActor {
 
     private final long creatureKey;
     private MemorySystem memory;
-    private final EntityManager em = Persistence.createEntityManagerFactory("L2LPU",
-            br.cefetmg.lsi.l2l.creature.bd.JpaPersister.jdbcUrlOverride()).createEntityManager();
+    private EntityManager em;
 
     public MemoryTraceConsolidator(long creatureKey) {
         this.creatureKey = creatureKey;
@@ -52,6 +51,11 @@ public class MemoryTraceConsolidator extends UntypedActor {
     @Override
     public void preStart() throws Exception {
         super.preStart();
+        // Shared per-JVM EntityManagerFactory (see PersistenceExtension) - avoids each
+        // creature opening its own separate JDBC connection pool and sequence
+        // pre-allocation cache against the same Postgres instance.
+        em = PersistenceExtension.of(context().system())
+                .entityManagerFactory().createEntityManager();
         Creature creature = TypedActor.get(context().system())
                 .typedActorOf(new TypedProps<>(Creature.class, CreatureActor.class), context().parent());
         memory = creature.memory();

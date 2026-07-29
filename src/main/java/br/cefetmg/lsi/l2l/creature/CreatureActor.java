@@ -10,6 +10,7 @@ import br.cefetmg.lsi.l2l.common.Pair;
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.bd.CreatureState;
+import br.cefetmg.lsi.l2l.creature.bd.PersistenceExtension;
 import br.cefetmg.lsi.l2l.creature.components.*;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioningActor;
@@ -29,7 +30,6 @@ import br.cefetmg.lsi.l2l.physics.CreaturePositioningAttr;
 import scala.concurrent.duration.Duration;
 
 import javax.persistence.EntityManager;
-import javax.persistence.Persistence;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -62,7 +62,7 @@ public class CreatureActor implements Creature {
 
     private final Point worldBoundaries;
 
-    private final EntityManager em;
+    private EntityManager em;
 
     private SequentialId id;
 
@@ -103,13 +103,17 @@ public class CreatureActor implements Creature {
         this.position = position;
         this.worldBoundaries = worldBoundaries;
         this.learningSettings = learningSettings;
-        this.em = Persistence.createEntityManagerFactory("L2LPU",
-                br.cefetmg.lsi.l2l.creature.bd.JpaPersister.jdbcUrlOverride()).createEntityManager();
     }
 
     public void init() {
         ActorContext context = TypedActor.context();
         components = new HashMap<>();
+
+        // Shared per-JVM EntityManagerFactory (see PersistenceExtension) - avoids each
+        // creature/component opening its own separate JDBC connection pool and sequence
+        // pre-allocation cache against the same Postgres instance.
+        em = PersistenceExtension.of(context.system())
+                .entityManagerFactory().createEntityManager();
 
         state = new CreatureState(id);
         state.setBornTime(System.currentTimeMillis());
