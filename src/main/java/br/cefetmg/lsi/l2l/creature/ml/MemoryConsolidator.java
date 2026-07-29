@@ -23,6 +23,7 @@ import br.cefetmg.lsi.l2l.creature.Creature;
 import br.cefetmg.lsi.l2l.creature.CreatureActor;
 import br.cefetmg.lsi.l2l.creature.bd.ConsolidationBatchStat;
 import br.cefetmg.lsi.l2l.creature.bd.ConsolidationEpisodeStat;
+import br.cefetmg.lsi.l2l.creature.bd.PersistenceExtension;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.creature.memory.Engram;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
@@ -30,7 +31,6 @@ import br.cefetmg.lsi.l2l.world.FruitType;
 import br.cefetmg.lsi.l2l.world.PlantType;
 
 import javax.persistence.EntityManager;
-import javax.persistence.Persistence;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -89,8 +89,7 @@ public class MemoryConsolidator extends UntypedActor {
     private final AtomicBoolean abortFlag = new AtomicBoolean(false);
     private CompletableFuture<?> consolidationTask;
 
-    private final EntityManager em = Persistence.createEntityManagerFactory("L2LPU",
-            br.cefetmg.lsi.l2l.creature.bd.JpaPersister.jdbcUrlOverride()).createEntityManager();
+    private EntityManager em;
 
     public MemoryConsolidator(long creatureKey) {
         this.creatureKey = creatureKey;
@@ -99,6 +98,12 @@ public class MemoryConsolidator extends UntypedActor {
     @Override
     public void preStart() throws Exception {
         super.preStart();
+
+        // Shared per-JVM EntityManagerFactory (see PersistenceExtension) - avoids each
+        // creature opening its own separate JDBC connection pool and sequence
+        // pre-allocation cache against the same Postgres instance.
+        em = PersistenceExtension.of(context().system())
+                .entityManagerFactory().createEntityManager();
 
         Creature creature = TypedActor.get(context().system())
                 .typedActorOf(new TypedProps<>(Creature.class, CreatureActor.class), context().parent());

@@ -12,6 +12,7 @@ import akka.japi.pf.ReceiveBuilder;
 import akka.pattern.Patterns;
 import akka.util.Timeout;
 import br.cefetmg.lsi.l2l.analysis.DataAnalyser;
+import br.cefetmg.lsi.l2l.creature.bd.PersistenceExtension;
 import br.cefetmg.lsi.l2l.creature.ml.MLServiceExtension;
 import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
@@ -32,7 +33,6 @@ import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
 
 import javax.persistence.EntityManager;
-import javax.persistence.Persistence;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -235,9 +235,8 @@ public class Holder extends AbstractActor implements Registrable {
             metricsExt.setGauge("dl2l_creatures_alive", creatures.size());
 
             if(creatures.isEmpty()) {
-                EntityManager em = Persistence.createEntityManagerFactory("L2LPU",
-                        br.cefetmg.lsi.l2l.creature.bd.JpaPersister.jdbcUrlOverride())
-                        .createEntityManager();
+                EntityManager em = PersistenceExtension.of(context().system())
+                        .entityManagerFactory().createEntityManager();
 
                 DataAnalyser analyser = new DataAnalyser(em,  saveDir);
                 CompletableFuture all = analyser.run();
