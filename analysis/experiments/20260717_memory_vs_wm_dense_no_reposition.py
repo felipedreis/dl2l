@@ -1,6 +1,6 @@
 """
-Analysis: 20260717_memory_vs_wm_dense_scarce
-Memory-based learning vs. JEPA world model, dense world + SCARCE (no reposition) —
+Analysis: 20260717_memory_vs_wm_dense_no_reposition
+Memory-based learning vs. JEPA world model, dense world + no reposition (scarce food) —
 5 conditions × 5 trials × 10 creatures
 
 Conditions:
@@ -23,11 +23,11 @@ dramatic survival/foraging effects that vanished under resource abundance
 again, at this larger world/population scale. Re-run through the shared
 loading/stats/figure scaffold in analysis/dl2l_analysis/.
 
-Data: ml/data_20260717_memory_vs_wm_dense_scarce/
+Data: ml/data_20260717_memory_vs_wm_dense_no_reposition/
 
 Usage:
-  python3 -m dl2l_analysis --experiment 20260717_memory_vs_wm_dense_scarce
-  (or directly: python3 -m analysis.experiments.20260717_memory_vs_wm_dense_scarce)
+  python3 -m dl2l_analysis --experiment 20260717_memory_vs_wm_dense_no_reposition
+  (or directly: python3 -m analysis.experiments.20260717_memory_vs_wm_dense_no_reposition)
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ DRIVE_COLS = [
 DRIVE_PLOT_COLS = ["final_hunger", "final_sleep", "final_pain", "final_tedium"]
 DRIVE_PLOT_NAMES = ["Hunger", "Sleep", "Pain", "Tedium"]
 
-EXP_NAME = "20260717_memory_vs_wm_dense_scarce"
+EXP_NAME = "20260717_memory_vs_wm_dense_no_reposition"
 
 
 def run(cfg: ExperimentAnalysis | None = None) -> None:
