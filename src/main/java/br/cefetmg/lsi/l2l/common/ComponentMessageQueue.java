@@ -20,7 +20,22 @@ public class ComponentMessageQueue implements MessageQueue {
 
     private final Queue<Envelope> queue = new ConcurrentLinkedQueue<Envelope>();
 
+    /**
+     * Cap on how many top-level envelopes (a lone {@code Stimulus}/{@code PersistenceState}, or
+     * one whole {@code PersistenceState[]} array) {@link #dequeue()} merges into a single batch.
+     * {@code Integer.MAX_VALUE} (the no-arg constructor's default) preserves the original
+     * unbounded-drain behavior. A finite cap bounds how large a single {@code BDActor} transaction
+     * (and its EclipseLink UnitOfWork identity map) can grow under sustained backlog - see
+     * docs/plans/issue-77-bdactor-oom-fix.md.
+     */
+    private final int maxEnvelopesPerBatch;
+
     public ComponentMessageQueue(){
+        this(Integer.MAX_VALUE);
+    }
+
+    public ComponentMessageQueue(int maxEnvelopesPerBatch) {
+        this.maxEnvelopesPerBatch = maxEnvelopesPerBatch;
     }
 
     public void enqueue(ActorRef actorRef, Envelope envelope) {
@@ -44,12 +59,21 @@ public class ComponentMessageQueue implements MessageQueue {
         // asker instead of deadLetters.
         Envelope singleUnrecognizedEnv = null;
 
+        // Top-level envelopes merged into this batch so far - a whole PersistenceState[] array
+        // counts as ONE, never split (see the atomicity comment below). Bounds how large a single
+        // BDActor transaction (and its EclipseLink UnitOfWork identity map) can grow under
+        // sustained backlog; Integer.MAX_VALUE (unbounded, component-dispatcher's default) never
+        // trips this. See docs/plans/issue-77-bdactor-oom-fix.md.
+        int envelopesMerged = 0;
+
         while (!queue.isEmpty()) {
             env = queue.peek();
 
             if (env.message() instanceof Stimulus || env.message() instanceof PersistenceState) {
+                if (envelopesMerged >= maxEnvelopesPerBatch) break;
                 list.add(env.message());
                 queue.poll();
+                envelopesMerged++;
             } else if (env.message() instanceof PersistenceState[]) {
                 // A whole persist(states...) call, kept atomic (all-or-nothing in the same
                 // dequeue()) - see CreatureComponent.persist()'s javadoc. Some states
@@ -57,11 +81,15 @@ public class ComponentMessageQueue implements MessageQueue {
                 // BDActor transactions previously caused a duplicate-primary-key crash when
                 // the second transaction re-inserted an already-committed, now-detached
                 // entity. Flattened into the same list as individual states so BDActor's
-                // batch-persist loop doesn't need to know the difference.
+                // batch-persist loop doesn't need to know the difference. The batch-size cap
+                // (above) is checked BEFORE polling, so a capped-out array is left whole in the
+                // queue for the next dequeue() rather than being split.
+                if (envelopesMerged >= maxEnvelopesPerBatch) break;
                 for (Object state : (PersistenceState[]) env.message()) {
                     list.add(state);
                 }
                 queue.poll();
+                envelopesMerged++;
             } else if (env.message() instanceof String) {
                 queue.poll();
             } else if(env.message() instanceof PoisonPill) {

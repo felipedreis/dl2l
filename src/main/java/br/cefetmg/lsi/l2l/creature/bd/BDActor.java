@@ -1,5 +1,6 @@
 package br.cefetmg.lsi.l2l.creature.bd;
 
+import akka.actor.ActorRefWithCell;
 import akka.actor.PoisonPill;
 import akka.actor.UntypedActor;
 import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
@@ -52,6 +53,14 @@ public class BDActor extends UntypedActor {
 
             logger.fine("Persisting " + batch.size() + " states");
             metricsExt.setGauge("dl2l_bdactor_batch_size", batch.size());
+
+            // Remaining backlog still queued after this dequeue() - distinct from batch size
+            // above (what THIS transaction is about to commit). Sustained, non-decreasing
+            // growth here is the signal docs/plans/bdactor-async-persistence-with-drain.md §5
+            // named as the trigger to revisit backpressure - see
+            // docs/plans/issue-77-bdactor-oom-fix.md.
+            metricsExt.setGauge("dl2l_bdactor_queue_depth",
+                    ((ActorRefWithCell) getSelf()).underlying().numberOfMessages());
 
             long startNanos = System.nanoTime();
             em.getTransaction().begin();

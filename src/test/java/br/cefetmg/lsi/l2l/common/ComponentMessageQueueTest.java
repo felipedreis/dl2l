@@ -171,4 +171,98 @@ public class ComponentMessageQueueTest {
         assertEquals(List.of(unrecognized), secondBatch);
         assertFalse(queue.hasMessages());
     }
+
+    // --- Bounded batch size (docs/plans/issue-77-bdactor-oom-fix.md) ---
+
+    private void enqueueOn(ComponentMessageQueue q, Object message) {
+        q.enqueue(ActorRef.noSender(), Envelope.apply(message, ActorRef.noSender()));
+    }
+
+    @Test
+    public void capLimitsNumberOfTopLevelEnvelopesMergedPerDequeue() {
+        ComponentMessageQueue capped = new ComponentMessageQueue(2);
+        FakeState a = new FakeState();
+        FakeState b = new FakeState();
+        FakeState c = new FakeState();
+        enqueueOn(capped, a);
+        enqueueOn(capped, b);
+        enqueueOn(capped, c);
+
+        List<?> firstBatch = (List<?>) capped.dequeue().message();
+        assertEquals(List.of(a, b), firstBatch, "first dequeue() should stop at the cap");
+        assertTrue(capped.hasMessages(), "the remainder should stay queued, not be dropped");
+
+        List<?> secondBatch = (List<?>) capped.dequeue().message();
+        assertEquals(List.of(c), secondBatch);
+        assertFalse(capped.hasMessages());
+    }
+
+    @Test
+    public void capNeverSplitsAPersistenceStateArrayAcrossDequeues() {
+        // cap=1: a lone state fills the cap, so a subsequent whole array must be deferred
+        // entirely to the next dequeue() rather than being partially consumed - splitting an
+        // array's states across two BDActor transactions previously caused a duplicate-
+        // primary-key crash (see persistStateArraysAreFlattenedIntoTheSameBatchAtomically).
+        ComponentMessageQueue capped = new ComponentMessageQueue(1);
+        FakeState lone = new FakeState();
+        FakeState arrayA = new FakeState();
+        FakeState arrayB = new FakeState();
+        FakeState arrayC = new FakeState();
+        enqueueOn(capped, lone);
+        enqueueOn(capped, new PersistenceState[]{arrayA, arrayB, arrayC});
+
+        List<?> firstBatch = (List<?>) capped.dequeue().message();
+        assertEquals(List.of(lone), firstBatch);
+        assertTrue(capped.hasMessages());
+
+        List<?> secondBatch = (List<?>) capped.dequeue().message();
+        assertEquals(List.of(arrayA, arrayB, arrayC), secondBatch,
+                "the whole array must arrive together, never split across two dequeue() calls");
+        assertFalse(capped.hasMessages());
+    }
+
+    @Test
+    public void unboundedConstructorHandlesALargeBacklogInOneDequeue() {
+        // Regression guard: component-dispatcher (unset max-batch-size, defaults to
+        // Integer.MAX_VALUE) must keep today's unbounded-drain behavior.
+        ComponentMessageQueue unbounded = new ComponentMessageQueue();
+        int n = 10_000;
+        for (int i = 0; i < n; i++) {
+            enqueueOn(unbounded, new FakeState());
+        }
+
+        List<?> batch = (List<?>) unbounded.dequeue().message();
+
+        assertEquals(n, batch.size());
+        assertFalse(unbounded.hasMessages());
+    }
+
+    @Test
+    public void flushIsOnlyReturnedAloneAfterAllPriorCappedBatchesAreDrained() {
+        ComponentMessageQueue capped = new ComponentMessageQueue(2);
+        FakeState a = new FakeState();
+        FakeState b = new FakeState();
+        FakeState c = new FakeState();
+        FakeState d = new FakeState();
+        Object flushLike = new Object();
+        enqueueOn(capped, a);
+        enqueueOn(capped, b);
+        enqueueOn(capped, c);
+        enqueueOn(capped, d);
+        enqueueOn(capped, flushLike);
+
+        List<?> firstBatch = (List<?>) capped.dequeue().message();
+        assertEquals(List.of(a, b), firstBatch);
+        assertTrue(capped.hasMessages());
+
+        List<?> secondBatch = (List<?>) capped.dequeue().message();
+        assertEquals(List.of(c, d), secondBatch);
+        assertTrue(capped.hasMessages());
+
+        List<?> thirdBatch = (List<?>) capped.dequeue().message();
+        assertEquals(List.of(flushLike), thirdBatch,
+                "Flush must never be merged into a capped-out batch - it's only ever returned "
+                        + "alone, once every prior batch has drained through its own dequeue()");
+        assertFalse(capped.hasMessages());
+    }
 }

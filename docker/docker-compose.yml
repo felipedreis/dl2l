@@ -86,6 +86,11 @@ services:
         target: /config/docker-config.conf
         read_only: true
         type: bind
+      # Heap dump + GC log on OOM (see scripts/run-dl2l.sh, docs/plans/issue-77-bdactor-oom-fix.md)
+      # - dl2l-holder is the role that crashed under issue #77's sustained-load repro.
+      - source: ../heapdumps
+        target: /dl2l/heapdumps
+        type: bind
 
 networks:
   dl2l-network:
