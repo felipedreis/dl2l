@@ -25,6 +25,15 @@ public abstract class CreatureComponent {
 
     protected Creature creature;
 
+    /**
+     * Resolved once in {@link #init}, not re-resolved per {@link #persist} call. {@code
+     * creature.bd()} is a blocking Akka TypedActor accessor round-trip (every non-void
+     * {@link Creature} method is); its underlying value never changes for the creature's
+     * lifetime, so caching it here removes ~14 blocking round-trips/cognitive-cycle from
+     * the hot path (see docs/plans/issue-77-bdactor-oom-fix.md).
+     */
+    private ComponentRef bdRef;
+
     protected final Logger logger;
 
     /** Per-JVM Micrometer registry; null in test harnesses that don't wire one. */
@@ -52,6 +61,7 @@ public abstract class CreatureComponent {
      */
     public final void init(Creature creature, ComponentRef selfRef, MetricsExtension.Impl metricsExt) {
         this.creature = creature;
+        this.bdRef = creature.bd();
         this.selfRef = selfRef;
         this.metricsExt = metricsExt;
         try {
@@ -94,9 +104,9 @@ public abstract class CreatureComponent {
      * design always had.
      */
     protected final void persist(PersistenceState... states) {
-        if (creature == null) return;
+        if (bdRef == null) return;
         logger.fine(() -> "persisting " + states.length + " state(s)");
-        creature.bd().tell(states);
+        bdRef.tell(states);
     }
 
     /**

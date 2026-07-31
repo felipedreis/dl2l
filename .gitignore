@@ -19,6 +19,11 @@ ml/checkpoints/
 # Ansible per-run scratch state (rendered docker-compose.yml, etc.)
 ansible/.run/
 
+# Heap dumps / GC logs (see scripts/run-dl2l.sh, docs/plans/issue-77-bdactor-oom-fix.md) -
+# local diagnostic scratch, never committed.
+heapdumps/*
+!heapdumps/.gitkeep
+
 # Local secrets/PII — never commit (e.g. CCAD_USERNAME, a CPF)
 .env.local
 .env.*.local
