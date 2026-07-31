@@ -11,7 +11,12 @@ scrape_configs:
     static_configs:
       - targets: ["host.docker.internal:9091"]
 
-  - job_name: dl2l-holder
+  - job_name: dl2l-detector
     scrape_interval: 5s
     static_configs:
       - targets: ["host.docker.internal:9092"]
+
+  - job_name: dl2l-holder
+    scrape_interval: 5s
+    static_configs:
+      - targets: ["host.docker.internal:9093"]
