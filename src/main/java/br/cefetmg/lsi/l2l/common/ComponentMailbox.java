@@ -21,13 +21,24 @@ public class ComponentMailbox implements MailboxType {
      */
     private final int maxBatchSize;
 
+    /**
+     * Optional, independent per-dispatcher cap on total states (not envelopes) - see
+     * {@link ComponentMessageQueue#ComponentMessageQueue(int, int)}'s javadoc for why this
+     * exists alongside {@link #maxBatchSize} rather than replacing it. See
+     * docs/plans/issue-77-bdactor-oom-fix-followup.md.
+     */
+    private final int maxStatesPerBatch;
+
     public ComponentMailbox(ActorSystem.Settings settings, Config config) {
         this.maxBatchSize = config.hasPath("max-batch-size")
                 ? config.getInt("max-batch-size")
                 : Integer.MAX_VALUE;
+        this.maxStatesPerBatch = config.hasPath("max-states-per-batch")
+                ? config.getInt("max-states-per-batch")
+                : Integer.MAX_VALUE;
     }
 
     public MessageQueue create(Option<ActorRef> option, Option<ActorSystem> option1) {
-        return new ComponentMessageQueue(maxBatchSize);
+        return new ComponentMessageQueue(maxBatchSize, maxStatesPerBatch);
     }
 }

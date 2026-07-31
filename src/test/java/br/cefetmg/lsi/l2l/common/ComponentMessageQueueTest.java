@@ -265,4 +265,65 @@ public class ComponentMessageQueueTest {
                         + "alone, once every prior batch has drained through its own dequeue()");
         assertFalse(capped.hasMessages());
     }
+
+    // --- Bounded total states, independent of the envelope cap
+    // (docs/plans/issue-77-bdactor-oom-fix-followup.md) ---
+
+    @Test
+    public void stateCountCapStopsMergingEvenWithEnvelopeCapNotYetReached() {
+        // envelope cap is generous (10), state cap (3) is what should actually stop this batch -
+        // each envelope here is a 2-state array, so the envelope cap alone would never have
+        // caught a batch this large. The cap is checked BEFORE consuming an array (same
+        // atomicity tradeoff as maxEnvelopesPerBatch), so listSize can briefly exceed the cap
+        // by up to one array's worth - it stops merging on the NEXT array once already at/over
+        // the cap, not mid-array.
+        ComponentMessageQueue capped = new ComponentMessageQueue(10, 3);
+        FakeState a1 = new FakeState(), a2 = new FakeState();
+        FakeState b1 = new FakeState(), b2 = new FakeState();
+        FakeState c1 = new FakeState(), c2 = new FakeState();
+        enqueueOn(capped, new PersistenceState[]{a1, a2});
+        enqueueOn(capped, new PersistenceState[]{b1, b2});
+        enqueueOn(capped, new PersistenceState[]{c1, c2});
+
+        List<?> firstBatch = (List<?>) capped.dequeue().message();
+        assertEquals(List.of(a1, a2, b1, b2), firstBatch,
+                "listSize hits 2 after the first array (under the cap of 3), so a second array "
+                        + "is still merged, overshooting to 4; only the THIRD array is deferred");
+        assertTrue(capped.hasMessages());
+
+        List<?> secondBatch = (List<?>) capped.dequeue().message();
+        assertEquals(List.of(c1, c2), secondBatch);
+        assertFalse(capped.hasMessages());
+    }
+
+    @Test
+    public void stateCountCapNeverSplitsAPersistenceStateArray() {
+        ComponentMessageQueue capped = new ComponentMessageQueue(10, 1);
+        FakeState lone = new FakeState();
+        FakeState arrayA = new FakeState(), arrayB = new FakeState();
+        enqueueOn(capped, lone);
+        enqueueOn(capped, new PersistenceState[]{arrayA, arrayB});
+
+        List<?> firstBatch = (List<?>) capped.dequeue().message();
+        assertEquals(List.of(lone), firstBatch);
+
+        List<?> secondBatch = (List<?>) capped.dequeue().message();
+        assertEquals(List.of(arrayA, arrayB), secondBatch,
+                "the whole array must arrive together even though it exceeds the state cap by "
+                        + "itself - never split across two dequeue() calls");
+    }
+
+    @Test
+    public void unboundedTwoArgConstructorPreservesUnboundedBehavior() {
+        ComponentMessageQueue unbounded = new ComponentMessageQueue(Integer.MAX_VALUE, Integer.MAX_VALUE);
+        int n = 10_000;
+        for (int i = 0; i < n; i++) {
+            enqueueOn(unbounded, new FakeState());
+        }
+
+        List<?> batch = (List<?>) unbounded.dequeue().message();
+
+        assertEquals(n, batch.size());
+        assertFalse(unbounded.hasMessages());
+    }
 }

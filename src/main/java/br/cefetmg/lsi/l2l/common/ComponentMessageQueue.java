@@ -30,12 +30,31 @@ public class ComponentMessageQueue implements MessageQueue {
      */
     private final int maxEnvelopesPerBatch;
 
+    /**
+     * Independent, redundant cap on total flattened states (not envelopes) merged into a single
+     * batch. Added after a live crash (see docs/plans/issue-77-bdactor-oom-fix-followup.md)
+     * showed a single {@code dequeue()} call handing BDActor a batch of 2.19M states despite
+     * {@code maxEnvelopesPerBatch=500} - root cause not conclusively identified (extensive
+     * targeted reproduction, including a 2000-way concurrent config-resolution stress test,
+     * never reproduced the envelope-cap bypass), so this checks total state count with its own
+     * independent counter/comparison as a second line of defense: even if some as-yet-unexplained
+     * condition defeats the envelope cap, this cap still bounds the one thing that actually
+     * matters (how many entities land in one EclipseLink UnitOfWork). {@code Integer.MAX_VALUE}
+     * preserves unbounded behavior, same as {@link #maxEnvelopesPerBatch}.
+     */
+    private final int maxStatesPerBatch;
+
     public ComponentMessageQueue(){
-        this(Integer.MAX_VALUE);
+        this(Integer.MAX_VALUE, Integer.MAX_VALUE);
     }
 
     public ComponentMessageQueue(int maxEnvelopesPerBatch) {
+        this(maxEnvelopesPerBatch, Integer.MAX_VALUE);
+    }
+
+    public ComponentMessageQueue(int maxEnvelopesPerBatch, int maxStatesPerBatch) {
         this.maxEnvelopesPerBatch = maxEnvelopesPerBatch;
+        this.maxStatesPerBatch = maxStatesPerBatch;
     }
 
     public void enqueue(ActorRef actorRef, Envelope envelope) {
@@ -71,6 +90,7 @@ public class ComponentMessageQueue implements MessageQueue {
 
             if (env.message() instanceof Stimulus || env.message() instanceof PersistenceState) {
                 if (envelopesMerged >= maxEnvelopesPerBatch) break;
+                if (list.size() >= maxStatesPerBatch) break;
                 list.add(env.message());
                 queue.poll();
                 envelopesMerged++;
@@ -81,10 +101,11 @@ public class ComponentMessageQueue implements MessageQueue {
                 // BDActor transactions previously caused a duplicate-primary-key crash when
                 // the second transaction re-inserted an already-committed, now-detached
                 // entity. Flattened into the same list as individual states so BDActor's
-                // batch-persist loop doesn't need to know the difference. The batch-size cap
-                // (above) is checked BEFORE polling, so a capped-out array is left whole in the
-                // queue for the next dequeue() rather than being split.
+                // batch-persist loop doesn't need to know the difference. Both caps (above) are
+                // checked BEFORE polling, so a capped-out array is left whole in the queue for
+                // the next dequeue() rather than being split.
                 if (envelopesMerged >= maxEnvelopesPerBatch) break;
+                if (list.size() >= maxStatesPerBatch) break;
                 for (Object state : (PersistenceState[]) env.message()) {
                     list.add(state);
                 }

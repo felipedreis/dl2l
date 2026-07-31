@@ -1,0 +1,23 @@
+# Scraped by the prometheus/grafana services in docker-compose.yml — the default local
+# ad-hoc dev stack. Unlike observability/prometheus.yml (the long-lived stack for
+# docker-compose-observability.yml, which stays up across many ansible-driven trial
+# stacks and therefore scrapes via host.docker.internal + host-published ports),
+# prometheus here shares dl2l-network with dl2l-manager/detector/holder in the same
+# compose file, so it can reach each role directly by container DNS name on the
+# role's own internal metrics port (always 9091 inside the container regardless of
+# which host port docker-compose.yml maps it to).
+scrape_configs:
+  - job_name: dl2l-manager
+    scrape_interval: 5s
+    static_configs:
+      - targets: ["dl2l-manager:9091"]
+
+  - job_name: dl2l-detector
+    scrape_interval: 5s
+    static_configs:
+      - targets: ["dl2l-detector:9091"]
+
+  - job_name: dl2l-holder
+    scrape_interval: 5s
+    static_configs:
+      - targets: ["dl2l-holder:9091"]

@@ -58,4 +58,40 @@ public class ComponentMailboxTest {
         List<?> batch = (List<?>) queue.dequeue().message();
         assertEquals(n, batch.size());
     }
+
+    @Test
+    public void createEnforcesMaxStatesPerBatchIndependentlyOfEnvelopeCap() {
+        // Envelope cap generous (10), state cap (3) is what should actually stop this batch -
+        // see docs/plans/issue-77-bdactor-oom-fix-followup.md for why this second, independent
+        // cap exists alongside max-batch-size. Checked BEFORE consuming an array (same
+        // atomicity tradeoff as max-batch-size), so a third 2-state array is needed to observe
+        // the cap actually stopping anything (listSize overshoots to 4 after the second array).
+        Config config = ConfigFactory.parseString("max-batch-size = 10\nmax-states-per-batch = 3");
+        ComponentMessageQueue queue = createQueue(config);
+
+        br.cefetmg.lsi.l2l.creature.bd.PersistenceState[] arrayA = {new FakeState(), new FakeState()};
+        br.cefetmg.lsi.l2l.creature.bd.PersistenceState[] arrayB = {new FakeState(), new FakeState()};
+        br.cefetmg.lsi.l2l.creature.bd.PersistenceState[] arrayC = {new FakeState(), new FakeState()};
+        queue.enqueue(ActorRef.noSender(), Envelope.apply(arrayA, ActorRef.noSender()));
+        queue.enqueue(ActorRef.noSender(), Envelope.apply(arrayB, ActorRef.noSender()));
+        queue.enqueue(ActorRef.noSender(), Envelope.apply(arrayC, ActorRef.noSender()));
+
+        List<?> firstBatch = (List<?>) queue.dequeue().message();
+        assertEquals(4, firstBatch.size(), "third array would push total states to 6, over the cap of 3");
+        assertTrue(queue.hasMessages());
+    }
+
+    @Test
+    public void createStaysUnboundedOnStatesWhenMaxStatesPerBatchIsNotConfigured() {
+        Config config = ConfigFactory.parseString("max-batch-size = 5000");
+        ComponentMessageQueue queue = createQueue(config);
+
+        int n = 5_000;
+        for (int i = 0; i < n; i++) {
+            queue.enqueue(ActorRef.noSender(), Envelope.apply(new FakeState(), ActorRef.noSender()));
+        }
+
+        List<?> batch = (List<?>) queue.dequeue().message();
+        assertEquals(n, batch.size());
+    }
 }
