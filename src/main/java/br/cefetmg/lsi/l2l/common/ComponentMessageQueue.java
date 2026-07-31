@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
@@ -19,6 +20,18 @@ import java.util.stream.Collectors;
 public class ComponentMessageQueue implements MessageQueue {
 
     private final Queue<Envelope> queue = new ConcurrentLinkedQueue<Envelope>();
+
+    /**
+     * O(1) running count of queued envelopes, kept in step with every {@link #queue} offer/poll.
+     * {@link ConcurrentLinkedQueue#size()} is O(n) (it walks the whole list), and
+     * {@link #numberOfMessages()} is polled once per BDActor transaction to publish the
+     * {@code dl2l_bdactor_queue_depth} gauge - on the very same {@code bd-dispatcher} thread doing
+     * the draining. Under a large backlog that walk (millions of nodes) throttled the drain it was
+     * measuring; this counter makes the gauge read O(1). It is an approximate count under
+     * concurrent producers (same weak consistency {@code size()} already had), which is fine for a
+     * gauge. See docs/plans/issue-77-bdactor-oom-fix.md.
+     */
+    private final AtomicInteger size = new AtomicInteger(0);
 
     /**
      * Cap on how many top-level envelopes (a lone {@code Stimulus}/{@code PersistenceState}, or
@@ -59,6 +72,14 @@ public class ComponentMessageQueue implements MessageQueue {
 
     public void enqueue(ActorRef actorRef, Envelope envelope) {
         queue.offer(envelope);
+        size.incrementAndGet();
+    }
+
+    /** Poll one envelope off {@link #queue}, keeping {@link #size} in step. */
+    private Envelope poll() {
+        Envelope e = queue.poll();
+        if (e != null) size.decrementAndGet();
+        return e;
     }
 
     public Envelope dequeue() {
@@ -68,7 +89,7 @@ public class ComponentMessageQueue implements MessageQueue {
 
         if (env != null && env.message() instanceof PoisonPill) {
             System.out.println("Poison pill found");
-            return queue.poll();
+            return poll();
         }
 
         // Only meaningful for the single-unrecognized-message case below - a batch of several
@@ -92,7 +113,7 @@ public class ComponentMessageQueue implements MessageQueue {
                 if (envelopesMerged >= maxEnvelopesPerBatch) break;
                 if (list.size() >= maxStatesPerBatch) break;
                 list.add(env.message());
-                queue.poll();
+                poll();
                 envelopesMerged++;
             } else if (env.message() instanceof PersistenceState[]) {
                 // A whole persist(states...) call, kept atomic (all-or-nothing in the same
@@ -109,10 +130,10 @@ public class ComponentMessageQueue implements MessageQueue {
                 for (Object state : (PersistenceState[]) env.message()) {
                     list.add(state);
                 }
-                queue.poll();
+                poll();
                 envelopesMerged++;
             } else if (env.message() instanceof String) {
-                queue.poll();
+                poll();
             } else if(env.message() instanceof PoisonPill) {
                 System.out.println("Next message is a poison pill, handle previous messages first");
                 break;
@@ -128,7 +149,7 @@ public class ComponentMessageQueue implements MessageQueue {
                 if (list.isEmpty()) {
                     singleUnrecognizedEnv = env;
                     list.add(env.message());
-                    queue.poll();
+                    poll();
                 }
                 break;
             }
@@ -139,7 +160,7 @@ public class ComponentMessageQueue implements MessageQueue {
     }
 
     public int numberOfMessages() {
-        return queue.size();
+        return size.get();
     }
 
     public boolean hasMessages() {
@@ -150,5 +171,6 @@ public class ComponentMessageQueue implements MessageQueue {
         for (Envelope handle : queue) {
             deadLetters.enqueue(owner, handle);
         }
+        size.set(0);
     }
 }

@@ -38,6 +38,40 @@ public class ComponentMessageQueueTest {
     }
 
     @Test
+    public void numberOfMessagesTracksEnqueueAndDequeue() {
+        // numberOfMessages() backs the dl2l_bdactor_queue_depth gauge, read once per BDActor
+        // transaction on the drain thread. It must stay an O(1) running count kept in step with
+        // every enqueue/poll (a PersistenceState[] array counts as ONE envelope, matching how
+        // dequeue() consumes it) - not ConcurrentLinkedQueue.size()'s O(n) walk, which throttled
+        // the very drain it measured under a large backlog. See docs/plans/issue-77-bdactor-oom-fix.md.
+        assertEquals(0, queue.numberOfMessages());
+
+        enqueue(stimulus());
+        enqueue(stimulus());
+        enqueue(new PersistenceState[]{new FakeState(), new FakeState()}); // one envelope, not two
+        assertEquals(3, queue.numberOfMessages());
+
+        queue.dequeue(); // drains all three envelopes in one batch
+        assertEquals(0, queue.numberOfMessages());
+        assertFalse(queue.hasMessages());
+    }
+
+    @Test
+    public void numberOfMessagesReflectsRemainderAfterCappedDequeue() {
+        // A capped dequeue() leaves the remainder queued; the counter must reflect exactly what
+        // is left, not what was originally enqueued.
+        ComponentMessageQueue capped = new ComponentMessageQueue(2);
+        for (int i = 0; i < 5; i++) {
+            capped.enqueue(ActorRef.noSender(), Envelope.apply(stimulus(), ActorRef.noSender()));
+        }
+        assertEquals(5, capped.numberOfMessages());
+
+        List<?> batch = (List<?>) capped.dequeue().message();
+        assertEquals(2, batch.size());
+        assertEquals(3, capped.numberOfMessages());
+    }
+
+    @Test
     public void batchesStimuli() {
         Stimulus a = stimulus();
         Stimulus b = stimulus();
