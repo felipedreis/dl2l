@@ -8,7 +8,7 @@ package br.cefetmg.lsi.l2l.creature.components;
 public class DisabledCircadianClock implements CircadianClock {
 
     @Override
-    public void tick() {}
+    public void tick(double dtSeconds) {}
 
     @Override
     public double driveRate() {

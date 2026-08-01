@@ -177,26 +177,62 @@ string (a metabolism-only tick, no perception). That is the precedent to repurpo
 ### Design — scheduler-driven perception (RESOLVED; user chose "CreatureActor pacemaker")
 
 1. **Retune** the existing `clock` scheduler from a hardcoded 1000 ms to `1000 / TARGET_HZ`
-   ms (config-driven; see target-rate below).
-2. **Reroute** it: instead of `partial.tell("")`, each tick triggers exactly one
-   `updatePositioningAttribute()` on the `CreatureActor`'s **own thread** (via the TypedActor
-   self-proxy, so it is enqueued on the actor's mailbox and safely reads mutable geometry
-   state — the current lambda only does a `tell`, which is thread-safe, so this is the one
-   new thread-safety point to get right). One tick → one positioning send → one perception
-   round → one cognitive cycle → one `persistCycle` write.
+   ms.
+2. **Reroute** it through a new `Creature.tick()` (dispatched via the TypedActor self-proxy,
+   captured in `init()` while running on the actor's own thread, so it's safe to invoke from
+   the scheduler's thread - calls through it land on the actor's mailbox like any other
+   message). `CreatureActor.tick()` does **two** things, not one:
+   - **Sends the direct heartbeat** to `PartialAppraisal` (`componentRef(PartialAppraisal.class)
+     .tell("", ...)`) - this is the *same unconditional send* the old 1Hz scheduler made,
+     just now firing at `TARGET_HZ` instead of 1Hz. **Caught mid-implementation (by the
+     user) that dropping this would have been a real regression**: perception alone cannot
+     guarantee a cycle fires, because `SensoryCortex.onReceive` only calls
+     `creature.partialAppraisal().tell(...)` inside a loop over received stimuli - if
+     nothing is nearby, that loop runs zero times and `PartialAppraisal.onReceive` never
+     fires at all. Without the heartbeat, a creature alone in empty space would never
+     metabolize, never check death, never act - frozen, not bounded.
+   - **Calls `updatePositioningAttribute()`** - broadcasts this tick's position, which
+     asynchronously (and only if something is actually nearby) triggers the collision
+     detector to send perception stimuli, producing its own separate cycle(s) on
+     `PartialAppraisal`. This was always decoupled in timing from the heartbeat (the round
+     trip can cross nodes) - Phase B only changes *how often a new broadcast is triggered*
+     (once per tick, not once per movement), not this pre-existing asynchrony.
+
+   So one tick is **not** exactly one cognitive cycle - it's *at least* one (the heartbeat,
+   guaranteed) *plus possibly more* (perception-driven, bounded by how many sensors have
+   something to report, small and non-recursive since step 3 below means none of them
+   re-trigger another broadcast). This mirrors the pre-Phase-B system's actual structure
+   (1Hz heartbeat + independent, much-more-frequent perception-driven cycles) - Phase B caps
+   the *broadcast* rate, not the perception-driven cycle count directly.
 3. **Decouple the setters**: `setPosition`/`setVisionFieldOpening`/`setVisionFieldPosition`/
    `setOlfactoryFieldRadius` update internal state only and **no longer** call
    `updatePositioningAttribute()`. All geometry changes within a cycle coalesce into the
    next scheduled send. Between ticks the creature is static (it moves only when it
    cognizes, and it cognizes only on a tick), so the coalesced send always carries accurate
    geometry — no staleness, and food/world-object positioning attrs (separate senders) are
-   unaffected, so collision accuracy is unchanged.
+   unaffected, so collision accuracy is unchanged. **This step is what actually kills the
+   unbounded recursion** (no setter re-triggers a broadcast), independent of exactly how
+   many onReceive calls one tick produces.
 
-Net: the cascade stops perpetuating itself; the clock is the sole driver at a bounded,
-reproducible wall-clock rate. Metabolism, perception, cognition, and `persist()` production
-all advance at exactly `TARGET_HZ` regardless of CPU speed — **the OOM cause (unbounded
+Net: the cascade stops perpetuating itself; the clock is the sole driver of new broadcasts,
+at a bounded, reproducible wall-clock rate. Cycle count per creature is now bounded by
+`TARGET_HZ × (1 + small constant)` instead of unbounded - **the OOM cause (unbounded
 production) and the original issue-79 goal (machine-independent biological time) fall out of
-the same mechanism.**
+the same mechanism.** (Revise the write-throughput sanity check below accordingly - it
+assumed exactly 1 cycle/tick, which is now a lower bound, not exact.)
+
+**Fallback if this approach hits trouble in validation (user's suggestion, recorded
+2026-08-02):** debounce at `CollisionDetectorActor.checkCreatureCollisions` instead - a
+per-creature last-processed timestamp; skip the collision query + stimulus emission (the
+actual expensive, write-generating work) if called again before `1/TARGET_HZ` has elapsed,
+while still cheaply updating `creatureAttrs` bookkeeping every call. Leaves `CreatureActor`'s
+setters and the original 1Hz heartbeat **completely untouched** - no `Creature.tick()`, no
+self-proxy capture, no risk of the "no perception ⇒ no cognition" regression above, since
+nothing about how cognition gets triggered changes at all. Smaller, more contained diff (one
+method, one file) at the cost of two throttle points existing conceptually (broadcast is
+still unbounded in message count, only the expensive downstream work is rate-limited) rather
+than one clean gate. Worth trying if the CreatureActor-pacemaker approach shows problems in
+PB5's validation.
 
 **dt-weighting kept as the within-tick correction.** Even a fixed-rate scheduler jitters
 (we just watched ticks slip 2-13 s under the livelock). So still weight each cycle's
@@ -245,6 +281,57 @@ at `TARGET_HZ` (equivalently, re-express the per-cycle rate constants as per-sec
   `memorySystem.tickDecisionCycle()` (`FullAppraisal.java:186`) can stay cycle-based (it is
   a learning cadence, not a biological clock) — call that out explicitly.
 
+### PB4 implementation (completed 2026-08-02): unwound analytically, not re-measured
+
+Ran `p79_single_creature_diag.conf` (1 creature, 1000 food objects in an 800x600 world -
+the throwaway diagnostic conf from the earlier write-path work) under the finished PB1-3
+build to get a real lifespan number. Found two things:
+
+1. **Cognitive-cycle rate under the cap is ~300Hz, not ~30Hz**, because this diagnostic's
+   food density is unusually high - every tick, many objects are in sensory range, and
+   `SensoryCortex` forwards each perceived stimulus as its own separate `.tell()`, so a
+   single tick's `updatePositioningAttribute()` can produce many separate perception-driven
+   `PartialAppraisal.onReceive` calls (bounded, not recursive - see the `Creature.tick()`
+   correction above - but a much bigger constant than assumed). Documented as a caveat on
+   `Constants.TARGET_CYCLE_HZ`.
+2. **This doesn't actually matter for DELTA's calibration**, and is why: dt-weighting
+   (PB3) makes the *sum* of all cycles' contributions over any wall-clock window equal
+   `DELTA × TARGET_CYCLE_HZ × window_seconds`, *regardless of how many onReceive calls
+   happened in that window* - each call's `cycleEquivalent = dt × TARGET_CYCLE_HZ` shrinks
+   exactly enough to compensate for firing more often, since `Σ dt` over a fixed window is
+   always that window's duration. So the 300Hz-vs-30Hz question is irrelevant to lifespan;
+   only `TARGET_CYCLE_HZ` (the constant, not the actual call rate) matters.
+
+Given (2), a live re-measurement in this specific dense/atypical world was actually the
+*wrong* calibration tool (confirmed: a raw 74s two-point slope on the `dl2l_creature_arousal`
+gauge extrapolated to ~410s lifespan, order-of-magnitude consistent with but noisier than the
+analytical answer, muddied by sample-timing imprecision and this world's high eating
+frequency). The clean approach: since `TARGET_CYCLE_HZ=30` was deliberately chosen to match
+the pre-#76 baseline rate Phase A's `S` was originally computed against, **Phase A's rescale
+can be unwound analytically** - multiply/divide each dt-weighted constant by `S=5.858` to
+recover its pre-#76 original value:
+
+| Constant | Phase A value | × or ÷ S | Unwound | Used |
+|---|---|---|---|---|
+| `DELTA` | 2.56067e-4 | × | 1.50004e-3 | **1.5e-3** |
+| `BASE_SLEEP_DRIVE` | 1.70711e-4 | × | 1.00003e-3 | **1.0e-3** |
+| `CIRCADIAN_AMPLITUDE` | 8.53555e-5 | × | 5.00013e-4 | **5.0e-4** |
+| `CIRCADIAN_PERIOD_TICKS` | 1172 | ÷ | 200.07 | **200** |
+| `MIN_SLEEP_TICKS` | 59 | ÷ | 10.07 | **10** |
+
+Every one lands within 0.1% of a clean round number - strong corroborating evidence these
+*are* the genuine pre-#76 originals (not coincidence), and that `S=5.858` was accurately
+derived. Applied in `Constants.java`; `mvn test` still 228/228 green (nothing hardcoded the
+old values).
+
+**KNOWN GAP, deliberately not fixed here**: `TEDIUM_IDLE_RATE`/`TEDIUM_OBSERVE_RATE`/
+`TEDIUM_WANDER_RELIEF`/`PAIN_IMMUNE_RATE` were also Phase-A-rescaled but are consumed via
+`HomeostaticRegulation.handleTedium`/pain-immunity paths that fire per action-selection
+event, not per dt-weighted pacemaker cycle - PB3 never dt-weighted them, so unwinding their
+values without a dt-weighting mechanism to back it up would just guess. Left at their Phase A
+values; still call-rate-sensitive (same "re-breaks if throughput shifts" caveat Phase A
+always had). Follow-up if PB5 or later validation shows tedium/pain dynamics are off.
+
 ### Verify Phase B
 - `mvn package` + `mvn test`.
 - Re-run the p79 experiment on this Mac; additionally verify **reproducibility**: two runs
@@ -255,6 +342,38 @@ at `TARGET_HZ` (equivalently, re-express the per-cycle rate constants as per-sec
   (`p79_single_creature_diag.conf` or similar) under the rate cap and confirm
   `dl2l_bdactor_queue_depth` stays bounded/near-zero throughout — this is the real
   acceptance gate, not just lifespan/reproducibility.
+
+### PB5 core acceptance gate: PASSED (2026-08-02)
+
+Re-ran the exact scenario that OOM'd every single time earlier this session -
+`20260717_memory_vs_wm_dense_no_reposition_1_baseline.conf` (10 creatures),
+`PERSISTENCE_BACKEND=parquet` - against the finished PB1-4 build.
+
+**Result: clean, full, natural completion. No OOM, no livelock, no crash.**
+- All 3 containers (manager/detector/holder) exited **code 0**.
+- All **10/10 creatures died naturally** (`creature_state.parquet` has exactly 20 rows -
+  10 births + 10 deaths, matching `ParquetBackend`'s documented no-upsert duplicate-row
+  design) over a ~382s run - longer than the pure-starvation `DELTA` calibration's ~150s,
+  consistent with creatures eating to extend lifespan and this scenario's food-scarcity
+  (`reposition=false`) dynamics.
+- `dl2l_bdactor_queue_depth`, polled every 30s for the full run: **flat at 0 almost the
+  entire time**, with two small, self-resolving blips (8296 at t=159s, back to 0 by t=191s;
+  1998 at t=223s, back to 0 by t=255s) - nothing resembling the six-to-seven-figure runaway
+  growth of every prior crash (compare: 1.24M peak on the pre-Phase-B DuckDB run, 3.3M+ on
+  the row-group-tuned-but-pre-Phase-B Parquet run).
+- Holder RSS held flat at **~1.3-1.4GiB** the entire run (`docker stats`) - nowhere near the
+  2GB `-Xmx` ceiling every previous crash pinned against.
+- CPU dropped from ~650% to ~370% to ~30% over the run's final third, tracking creatures
+  dying off one by one - the expected shape, not a stall signature.
+- All 22 raw output tables present with substantial, real data (`stimulus_state.parquet`:
+  20,765,340 rows, 1.5GB; every other table non-empty and appropriately sized) - the write
+  path produced a complete, usable dataset, not just "didn't crash."
+
+**Not yet covered by this run** (genuine remaining PB5 scope, follow-up):
+reproducibility across host speeds, and a full behaviour-emergence report (p79-report-style,
+Purpose/Assumptions/Hypothesis/Results/Analysis) comparing pre- and post-Phase-B dynamics.
+The core, most consequential acceptance criterion - the exact original-crash scenario now
+survives cleanly end-to-end - is confirmed.
 
 ---
 

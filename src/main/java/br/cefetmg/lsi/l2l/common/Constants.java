@@ -5,21 +5,19 @@ package br.cefetmg.lsi.l2l.common;
  */
 public interface Constants {
 
-    // Issue #79: metabolic/circadian/sleep rates below are tied to cognitive-cycle count,
-    // not wall-clock time. #76 (async persistence) + #78 (bounded BDActor batch), then the
-    // full JPA/EclipseLink removal from the write path (docs/plans/remove-jpa-persistence-layer.md),
-    // removed the blocking/contending persistence that used to throttle the cognitive loop,
-    // so cycle throughput rose in wall-clock terms (measured via
-    // dl2l_creature_cognitive_cycles_total, pre-#76 baseline 155.33 Hz
-    // [docs/reports/p59_batching_fix_report.md data]). First rescale (S=4.286) was
-    // calibrated against 665.75 Hz, measured *before* the JPA removal; that removal freed
-    // CPU/dispatcher capacity JPA overhead used to contend for, so the cognitive loop itself
-    // sped up further too (measured 909.9 Hz pooled across the p79_metabolic_rescale
-    // validation run) - recalibrated here to S=5.858. The per-cycle accrual/clearing rates
-    // below are divided by S so lifespan and rhythm cadence are restored to their pre-#76
-    // wall-clock values; this is Phase A (cheap rescale) of #79's fix, not Phase B (true
-    // wall-clock coupling) - it re-breaks if cycle throughput ever shifts again.
-    double DELTA = 2.56067e-4;
+    // Issue #79 Phase B: DELTA is dt-weighted now (PartialAppraisal.tickMetabolicPacemaker -
+    // see cycleEquivalent there), so its effective real-time rate is DELTA * TARGET_CYCLE_HZ
+    // per real second, independent of how many onReceive calls happen in that second. This
+    // is Phase A's S-rescale (S=5.858, see git history/docs/plans/issue-79-decouple-biological-clock.md
+    // for the derivation) fully unwound back to its pre-#76 original value - confirmed via
+    // DELTA_original = DELTA_phaseA * S = 2.56067e-4 * 5.858 = 1.50004e-3, suspiciously close
+    // to a clean 1.5e-3 (same clean-round-number pattern holds for every other constant this
+    // section unwinds, strong corroborating evidence these are the genuine originals).
+    // Calibrated so a creature reaches MAX_AROUSAL_LEVEL from ~0 in ~L_target=150s at
+    // TARGET_CYCLE_HZ=30 (the pre-#76 p59 baseline: ~150s lifespan / ~4600 cycles) -
+    // dt-weighting means this now holds regardless of actual cycle throughput, unlike Phase
+    // A's flat per-cycle version which re-broke if cycle rate ever shifted again.
+    double DELTA = 1.5e-3;
 
     double CHOLINERGIC_DELTA = 1.70711e-2;
 
@@ -52,13 +50,21 @@ public interface Constants {
     String CURIOSITY = "curiosity";
     String FERTILITY = "fertility";
 
-    // Issue #79: rescaled /= S (see DELTA's comment above).
+    // Issue #79: rescaled /= S in Phase A (S=5.858, see DELTA's comment above), still at
+    // that Phase A value - NOT unwound like DELTA/circadian below. KNOWN GAP: these accrue
+    // per action-selection event (HomeostaticRegulation.handleTedium), not per dt-weighted
+    // pacemaker cycle, so they remain call-rate-sensitive rather than truly wall-clock-
+    // coupled - same "re-breaks if cycle throughput shifts" caveat Phase A always had.
+    // Left as a follow-up (see docs/plans/issue-79-decouple-biological-clock.md's Phase B
+    // section) rather than guessed at without a dt-weighting mechanism to make the value
+    // meaningful.
     double TEDIUM_IDLE_RATE     = 3.41422e-3;
     double TEDIUM_OBSERVE_RATE  = 8.53555e-3;
     double TEDIUM_WANDER_RELIEF = 8.53555e-3;
 
     double PAIN_IMMUNE_THRESHOLD = 0.2;
-    // Issue #79: rescaled /= S (see DELTA's comment above).
+    // Issue #79: rescaled /= S in Phase A - same KNOWN GAP as TEDIUM_* above (event-driven,
+    // not dt-weighted).
     double PAIN_IMMUNE_RATE      = 8.53555e-4;
 
     double MIN_AROUSAL_LEVEL = 0.18;
@@ -78,19 +84,50 @@ public interface Constants {
 
     int CONSOLIDATION_BATCH_SIZE = 16;
 
-    // Issue #79: rescaled *= S (see DELTA's comment above) so the circadian day stays
-    // ~constant in wall-clock seconds despite the higher cycle throughput.
-    int CIRCADIAN_PERIOD_TICKS = 1172;
+    // Issue #79 Phase B: ActiveCircadianClock.tick(dt) is dt-weighted now, so this - as a
+    // cycleEquivalent count - unwinds Phase A's *= S rescale back to its pre-#76 original:
+    // 1172 / 5.858 = 200.07, clean round 200. The circadian day is now correctly
+    // ~constant in wall-clock seconds (200/TARGET_CYCLE_HZ ≈ 6.7s) regardless of actual
+    // cycle throughput, unlike Phase A's version which only held at the one throughput it
+    // was measured against.
+    int CIRCADIAN_PERIOD_TICKS = 200;
 
-    // Issue #79: rescaled /= S (see DELTA's comment above).
-    double BASE_SLEEP_DRIVE = 1.70711e-4;
+    // Issue #79 Phase B: dt-weighted via ActiveCircadianClock.driveRate() * cycleEquivalent
+    // (PartialAppraisal.tickMetabolicPacemaker) - unwound like DELTA: 1.70711e-4 * 5.858 =
+    // 1.00003e-3, clean round 1.0e-3.
+    double BASE_SLEEP_DRIVE = 1.0e-3;
 
-    // Issue #79: rescaled /= S (see DELTA's comment above).
-    double CIRCADIAN_AMPLITUDE = 8.53555e-5;
+    // Issue #79 Phase B: same dt-weighting path as BASE_SLEEP_DRIVE - unwound:
+    // 8.53555e-5 * 5.858 = 5.00013e-4, clean round 5.0e-4.
+    double CIRCADIAN_AMPLITUDE = 5.0e-4;
 
-    // Issue #79: rescaled *= S (see DELTA's comment above) so the anti-micro-nap floor
-    // stays ~constant in wall-clock seconds despite the higher cycle throughput.
-    int MIN_SLEEP_TICKS = 59;
+    // Issue #79 Phase B: NOT dt-weighted (no mechanism dt-weights a tick *count* threshold
+    // the way it does an accrual rate) but its meaning - "how many cycles is a micro-nap
+    // floor" - is now naturally expressed in TARGET_CYCLE_HZ terms since cycle rate is
+    // bounded. Unwound like CIRCADIAN_PERIOD_TICKS: 59 / 5.858 = 10.07, clean round 10
+    // (≈10/TARGET_CYCLE_HZ ≈ 0.33s floor - same wall-clock intent as the original pre-#76
+    // value).
+    int MIN_SLEEP_TICKS = 10;
+
+    // Issue #79 Phase B: wall-clock rate cap. CreatureActor's own scheduler (see
+    // CreatureActor.java's `clock` field) fires at this rate; each tick guarantees AT LEAST
+    // one cognitive cycle (a direct heartbeat to PartialAppraisal) and broadcasts this
+    // tick's position for perception, which can independently produce further cycles when
+    // something is actually nearby (see CreatureActor.tick()'s javadoc for the full
+    // breakdown - NOT "exactly one cycle per tick"). This replaces the previous unbounded
+    // self-perpetuating cascade (every movement/perceptual-field change re-triggered
+    // perception immediately, with nothing to stop it running as fast as the dispatcher
+    // allowed - see docs/plans/issue-79-decouple-biological-clock.md's Phase B section for
+    // the full trace). 30 Hz matches the pre-#76 effective rate (p59 baseline, ~150s
+    // lifespan / ~4600 cycles), already shown sufficient for behaviour emergence and
+    // empirically survivable. CAVEAT (measured 2026-08-02 on p79_single_creature_diag.conf,
+    // an atypically dense 1000-food-object world): actual cognitive-cycle rate can run much
+    // higher than 30Hz (~300Hz observed) when many objects are in sensory range every tick -
+    // still *bounded* (not runaway/recursive, since setters no longer re-trigger a
+    // broadcast - see CreatureActor.java), just not tightly equal to TARGET_CYCLE_HZ. DELTA
+    // and the circadian constants below are dt-weighted specifically so their real-world
+    // effect stays correct regardless of this - see DELTA's comment.
+    int TARGET_CYCLE_HZ = 30;
 
     // --- Expectancy predictor (symbolic reward-prediction) ---
     // Rescorla-Wagner learning rate for the running-mean expected-reward update.

@@ -186,13 +186,18 @@ public class CreatureActor implements Creature {
             components.put(componentType, new Pair<>(cid, component));
         }
 
-        final ActorRef partial = components.get(PartialAppraisal.class).second;
+        // Issue #79 Phase B: captured while running ON the actor's own thread (init() is
+        // itself invoked through the typed-actor proxy - see Holder.java), so this proxy is
+        // safe to invoke from the scheduler's thread below; calls through it are dispatched
+        // onto the actor's mailbox like any other message, not executed directly on the
+        // scheduler thread. See Creature.tick()'s javadoc.
+        final Creature self = (Creature) TypedActor.self();
 
         clock = TypedActor.context().system().scheduler()
                 .schedule(Duration.apply(5, TimeUnit.SECONDS),
-                        Duration.apply(1000, TimeUnit.MILLISECONDS), () -> {
+                        Duration.apply(1000 / Constants.TARGET_CYCLE_HZ, TimeUnit.MILLISECONDS), () -> {
                             logger.fine("Clocking");
-                            partial.tell("", ActorRef.noSender());
+                            self.tick();
                         }, TypedActor.context().dispatcher());
 
         collisionDetector.tell(getPositioningAttr(), ActorRef.noSender());
@@ -235,6 +240,34 @@ public class CreatureActor implements Creature {
         logger.info("Sending remove order to holder");
         holderActorRef().tell(id, TypedActor.context().self());
         logger.info("Creature " + id + " killed");
+    }
+
+    /**
+     * Issue #79 Phase B: called once per wall-clock tick by the {@code clock} scheduler
+     * (see {@code init()}). Two independent things happen here, exactly as they did before
+     * Phase B, just now both gated to the same tick instead of one being 1Hz-fixed and the
+     * other unbounded:
+     *
+     * <p>1. The direct heartbeat to {@code PartialAppraisal} guarantees a cognitive cycle
+     * fires this tick even with zero perception. Without it, {@code PartialAppraisal.onReceive}
+     * only fires when {@code SensoryCortex} has a stimulus to forward - which never happens
+     * if nothing is within sensory range - so a creature alone in empty space would never
+     * metabolize, check death, or act. This is the same unconditional send the pre-Phase-B
+     * 1Hz keep-alive scheduler made.
+     *
+     * <p>2. {@link #updatePositioningAttribute()} broadcasts this tick's position/perceptual
+     * fields to the collision detector, which - asynchronously, and only if something is
+     * actually nearby - triggers its own separate perception-driven cycle(s) on
+     * {@code PartialAppraisal}. This was always decoupled in timing from the heartbeat (the
+     * collision-detector round trip can even cross nodes); Phase B only changes *how often*
+     * a new broadcast is triggered (once per tick, not once per movement), not this
+     * asynchrony. See this method's declaration on {@link Creature} for why it's routed
+     * through the typed-actor proxy.
+     */
+    @Override
+    public void tick() {
+        componentRef(PartialAppraisal.class).tell("", ActorRef.noSender());
+        updatePositioningAttribute();
     }
 
     private ActorRef holderActorRef() {
@@ -319,6 +352,15 @@ public class CreatureActor implements Creature {
         return position;
     }
 
+    // Issue #79 Phase B: setPosition/setVisionFieldOpening/setVisionFieldPosition/
+    // setOlfactoryFieldRadius below update state only - they used to each call
+    // updatePositioningAttribute() immediately, which is what made the perception cascade
+    // self-perpetuating (every movement/field change re-triggered a full perception round
+    // right away, unbounded by anything but dispatcher speed). tick() (driven by the
+    // wall-clock `clock` scheduler in init()) is now the sole place that calls
+    // updatePositioningAttribute(), so any number of these setters firing within one cycle
+    // coalesce into the one positioning send the next tick makes - see
+    // docs/plans/issue-79-decouple-biological-clock.md's Phase B section.
     public void  setPosition(Point point) {
         double x, y;
 
@@ -337,12 +379,10 @@ public class CreatureActor implements Creature {
             y = point.y;
 
         this.position = new Point(x, y);
-        updatePositioningAttribute();
     }
 
     public void setVisionFieldOpening(double opening) {
         this.visionFieldOpening = opening;
-        updatePositioningAttribute();
     }
 
     public double getVisionFieldOpening() {
@@ -351,7 +391,6 @@ public class CreatureActor implements Creature {
 
     public void setVisionFieldPosition(double arc) {
         this.visionFieldPosition = arc;
-        updatePositioningAttribute();
     }
 
     public double getVisionFieldPosition() {
@@ -370,7 +409,6 @@ public class CreatureActor implements Creature {
 
     public void setOlfactoryFieldRadius(double radius) {
         this.olfactoryFieldRadius = radius;
-        updatePositioningAttribute();
     }
 
     public double getOlfactoryFieldRadius() {

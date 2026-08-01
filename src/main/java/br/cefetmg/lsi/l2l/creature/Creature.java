@@ -59,6 +59,21 @@ public interface Creature {
 
     void kill();
 
+    /**
+     * Issue #79 Phase B: the creature's own wall-clock pacemaker (see
+     * {@code CreatureActor}'s {@code clock} field) calls this once per tick, at
+     * {@link br.cefetmg.lsi.l2l.common.Constants#TARGET_CYCLE_HZ}. Guarantees at least one
+     * cognitive cycle fires this tick (a direct heartbeat to PartialAppraisal - needed
+     * because perception alone cannot guarantee this: SensoryCortex only forwards to
+     * PartialAppraisal when it has a stimulus, so a creature with nothing nearby would
+     * otherwise never cognize) and broadcasts this tick's position for perception, which
+     * may asynchronously produce further, separate cycles - see the implementation's
+     * javadoc for the full breakdown. Routed through this interface (rather than the
+     * scheduler calling a private method directly) so the call is dispatched through the
+     * TypedActor proxy onto the actor's own thread, same as any other message.
+     */
+    void tick();
+
     /// TODO Memory systems
 
 
