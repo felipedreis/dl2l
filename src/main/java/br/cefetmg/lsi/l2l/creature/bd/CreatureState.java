@@ -1,84 +1,43 @@
 package br.cefetmg.lsi.l2l.creature.bd;
 
-
-import javax.persistence.*;
+import java.util.UUID;
 
 import br.cefetmg.lsi.l2l.common.SequentialId;
 
 /**
- * 
+ *
  * @author Felipe Duarte dos Reis
  *
  */
-@Entity
-@Table(name="creature_state", schema="data")
-@NamedQueries({
-		@NamedQuery(name="CreatureState.findAllCreatureIds", query="select c.sequential from CreatureState c"),
-		@NamedQuery(name="CreatureState.getLifetimes", query = "select c.sequential, c.deadTime - c.bornTime " +
-				"from CreatureState c"),
-
-		@NamedQuery(name="CreatureState.getBornTime",
-			query="select c.bornTime from CreatureState c where c.bornTime <> 0 and c.sequential.key = :keysuper",
-			hints = {
-					@QueryHint(name="eclipselink.query-results-cache", value="true"),
-					@QueryHint(name="eclipselink.query-results-cache.size", value="100")
-			}
-		),
-
-		@NamedQuery(name="CreatureState.getDeadTime",
-			query="select c.deadTime from CreatureState c  where c.deadTime <> 0 and c.sequential.key = :keysuper",
-			hints = {
-					@QueryHint(name="eclipselink.query-results-cache", value="true"),
-					@QueryHint(name="eclipselink.query-results-cache.size", value="100")
-			}
-		),
-})
 public class CreatureState implements PersistenceState {
-	
-	@Id 
-	@GeneratedValue
-	private int id;
 
-	@Embedded 
-	@AttributeOverrides({
-		@AttributeOverride(name="key", column=@Column(name="creature_key")),
-		@AttributeOverride(name="sequential", column=@Column(name="creature_sequential"))
-	})		
+	private final UUID id = UUID.randomUUID();
+
 	private SequentialId sequential;
-	
-	@Embedded
-	@AttributeOverrides({
-		@AttributeOverride(name="key", column=@Column(name="father_key")),
-		@AttributeOverride(name="sequential", column=@Column(name="father_sequential"))
-	})
+
 	private SequentialId fatherState;
 
-	@Embedded 
-	@AttributeOverrides({
-		@AttributeOverride(name="key", column=@Column(name="mother_key") ),
-		@AttributeOverride(name="sequential", column=@Column(name="mother_sequential"))
-	})
 	private SequentialId motherState;
 
 	private boolean gender;
-	
+
 	private long bornTime;
-	
+
 	private long deadTime;
-	
+
 	public CreatureState () {
-		
+
 	}
-	
+
 	public CreatureState(SequentialId sequential) {
 		this.sequential = sequential;
 	}
-	
+
 	public CreatureState (SequentialId sequential, boolean gender) {
 		this.sequential = sequential;
 		this.gender = gender;
 	}
-	
+
 	public CreatureState(SequentialId sequential, boolean gender,
 			SequentialId fatherState, SequentialId motherState) {
 		super();
@@ -88,14 +47,10 @@ public class CreatureState implements PersistenceState {
 		this.motherState = motherState;
 	}
 
-	public int getId() {
+	public UUID getId() {
 		return id;
 	}
-	
-	public void setId(int id) {
-		this.id = id;
-	}
-	
+
 	public SequentialId getSequential() {
 		return sequential;
 	}

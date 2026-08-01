@@ -24,13 +24,13 @@ import br.cefetmg.lsi.l2l.creature.CreatureActor;
 import br.cefetmg.lsi.l2l.creature.bd.ConsolidationBatchStat;
 import br.cefetmg.lsi.l2l.creature.bd.ConsolidationEpisodeStat;
 import br.cefetmg.lsi.l2l.creature.bd.PersistenceExtension;
+import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.creature.memory.Engram;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.world.FruitType;
 import br.cefetmg.lsi.l2l.world.PlantType;
 
-import javax.persistence.EntityManager;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -66,6 +66,7 @@ public class MemoryConsolidator extends UntypedActor {
 
     private final long creatureKey;
     private MemorySystem memory;
+    private ActorRef bdActor;
     private MLServiceExtension.Impl mlExt;
     private ModelContract contract;
     private ModelVariantStrategy strategy;
@@ -89,8 +90,6 @@ public class MemoryConsolidator extends UntypedActor {
     private final AtomicBoolean abortFlag = new AtomicBoolean(false);
     private CompletableFuture<?> consolidationTask;
 
-    private EntityManager em;
-
     public MemoryConsolidator(long creatureKey) {
         this.creatureKey = creatureKey;
     }
@@ -99,15 +98,13 @@ public class MemoryConsolidator extends UntypedActor {
     public void preStart() throws Exception {
         super.preStart();
 
-        // Shared per-JVM EntityManagerFactory (see PersistenceExtension) - avoids each
-        // creature opening its own separate JDBC connection pool and sequence
-        // pre-allocation cache against the same Postgres instance.
-        em = PersistenceExtension.of(context().system())
-                .entityManagerFactory().createEntityManager();
-
         Creature creature = TypedActor.get(context().system())
                 .typedActorOf(new TypedProps<>(Creature.class, CreatureActor.class), context().parent());
         memory = creature.memory();
+
+        // Resolved once here rather than per persistResult() call - same pattern as
+        // CreatureComponent's cached bdRef (see its javadoc).
+        bdActor = PersistenceExtension.of(context().system()).bdActor();
 
         mlExt = MLServiceExtension.of(context().system());
         contract = ModelContract.load(mlExt.modelDir());
@@ -167,7 +164,6 @@ public class MemoryConsolidator extends UntypedActor {
         closeSilently(criticModel);
         closeSilently(internalEncoderModel);
         closeSilently(unifiedPredictorModel);
-        em.close();
         logger.info("MemoryConsolidator[" + creatureKey + "]: resources released");
     }
 
@@ -239,11 +235,12 @@ public class MemoryConsolidator extends UntypedActor {
     }
 
     private void persistResult(ConsolidationResult result) {
-        em.getTransaction().begin();
-        em.persist(result.episode());
-        result.batches().forEach(em::persist);
-        em.getTransaction().commit();
-        em.clear();
+        // Routes through the single per-JVM BDActor (see PersistenceExtension) instead of
+        // opening its own connection - see docs/plans/remove-jpa-persistence-layer.md.
+        PersistenceState[] states = new PersistenceState[result.batches().size() + 1];
+        states[0] = result.episode();
+        for (int i = 0; i < result.batches().size(); i++) states[i + 1] = result.batches().get(i);
+        bdActor.tell(states, self());
     }
 
     // -----------------------------------------------------------------------

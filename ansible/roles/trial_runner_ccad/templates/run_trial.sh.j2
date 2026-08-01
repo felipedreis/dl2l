@@ -4,9 +4,10 @@
 #   sbatch --array=1-{{ experiment_cfg.trials }} run_trial_{{ experiment_cfg.name }}_{{ cond.key }}.sh
 #
 # Replaces docker-compose (no equivalent under Singularity: no bridge
-# networking/service-DNS, no depends_on/healthchecks) with 4 `singularity
-# instance start` calls sharing this node's network namespace — hence
-# HOST=localhost everywhere.
+# networking/service-DNS, no depends_on/healthchecks) with 3 `singularity
+# instance start` calls (manager, collisionDetector, holder — issue #79
+# removed the 4th, postgres, entirely: see docs/plans/parquet-write-path.md)
+# sharing this node's network namespace — hence HOST=localhost everywhere.
 #
 # CONFIRMED LIVE (2026-07-16): `--exclusive` (whole node per trial) was
 # dropped early on after tripping AssocGrpCpuLimit with a modest account
@@ -64,7 +65,8 @@ mkdir -p "$TRIAL_DIR"
 # differing by an exact multiple of 2000 — not realistic at the ~24
 # concurrent trials this account's CPU grant actually allows.
 PORT_BASE=$((20000 + (SLURM_JOB_ID % 2000) * 20))
-PG_PORT=$((PORT_BASE))
+# +0 (was PG_PORT) left unused — issue #79 removed Postgres entirely (see
+# docs/plans/parquet-write-path.md), no need to renumber the rest.
 MANAGER_PORT=$((PORT_BASE + 1))
 DETECTOR_PORT=$((PORT_BASE + 2))
 HOLDER_PORT=$((PORT_BASE + 3))
@@ -72,7 +74,6 @@ METRICS_MANAGER_PORT=$((PORT_BASE + 4))
 METRICS_DETECTOR_PORT=$((PORT_BASE + 5))
 METRICS_HOLDER_PORT=$((PORT_BASE + 6))
 
-DB_NAME="dl2l-db-${SLURM_JOB_ID}"
 MANAGER_NAME="dl2l-manager-${SLURM_JOB_ID}"
 DETECTOR_NAME="dl2l-detector-${SLURM_JOB_ID}"
 HOLDER_NAME="dl2l-holder-${SLURM_JOB_ID}"
@@ -109,9 +110,9 @@ cleanup() {
   local rc=$?
   echo "$rc" > "$TRIAL_DIR/DONE"
   kill "${SCRAPE_PID:-}" >/dev/null 2>&1 || true
-  singularity instance stop "$DB_NAME" "$MANAGER_NAME" "$DETECTOR_NAME" "$HOLDER_NAME" >/dev/null 2>&1 || true
+  singularity instance stop "$MANAGER_NAME" "$DETECTOR_NAME" "$HOLDER_NAME" >/dev/null 2>&1 || true
   for _ in $(seq 1 20); do
-    singularity instance list 2>/dev/null | grep -qE "^(${DB_NAME}|${MANAGER_NAME}|${DETECTOR_NAME}|${HOLDER_NAME}) " || break
+    singularity instance list 2>/dev/null | grep -qE "^(${MANAGER_NAME}|${DETECTOR_NAME}|${HOLDER_NAME}) " || break
     sleep 2
   done
 
@@ -134,141 +135,52 @@ cleanup() {
     done
   done
 
-  # CONFIRMED LIVE, expensively (2026-07-16): a Python 3.9-incompatibility
-  # bug in dl2l_data/db.py crashed extraction on EVERY trial of a 25-trial
-  # batch, right after each one had already run its full 60-minute
-  # simulation successfully — and this trap's old unconditional `rm -rf`
-  # below deleted every trial's postgres overlay (the only copy of that
-  # hour of work) before the fix could be deployed. 24/25 trials'
-  # data was unrecoverably lost. Postgres has just been cleanly stopped
-  # above (consistent on-disk state, not a live snapshot), so copy its
-  # overlay out to the NFS-backed $TRIAL_DIR before wiping node-local
-  # /scratch — a one-time end-of-trial copy, not the live read/write
-  # traffic during the run itself (which stays on node-local /scratch,
-  # unchanged, per the earlier fix for that specific problem). If
-  # extraction ever fails again, a fresh postgres instance can be started
-  # against this saved overlay (`singularity instance start --overlay
-  # <path> ... postgres_sandbox <name>`) and re-extracted by hand instead
-  # of losing the trial outright.
-  # CONFIRMED LIVE (2026-07-16), the same day this safety net was added: no
-  # `|| true` here meant a failed/slow copy (NFS contention from ~20
-  # trials all finishing and copying large overlays around the same time
-  # is the likely cause) aborted this trap early via `set -e` — and
-  # because an EXIT trap's own abnormal termination overrides the script's
-  # already-determined exit status, trials that had ALREADY succeeded
-  # (DONE correctly recorded "0", every parquet file + backup present and
-  # complete) were misreported to SLURM as FAILED. The data was never
-  # actually at risk; only the reported status was wrong. Never let this
-  # best-effort safety net take down an otherwise-successful trial's exit
-  # code again.
-  #
-  # CONFIRMED LIVE, same day, second bug: keeping the overlay UNCONDITIONALLY
-  # (including for trials that succeeded) blew through this account's NFS
-  # quota within one batch — 18 successful trials' redundant ~1-3GB overlays
-  # added up to 32GB and blocked even `mkdir` on $HOME (a *quota* limit, not
-  # raw disk space — `df` still showed 900+GB free). The whole point of this
-  # safety net is recovering a FAILED extraction; a successful one already
-  # has everything it needs in $TRIAL_DIR's parquet + pg_dump, so only keep
-  # the overlay when $rc (captured above, before extraction had a chance to
-  # run) is non-zero.
-  if [ "$rc" != 0 ] && [ -f "${PG_OVERLAY:-}" ]; then
-    cp --sparse=always "$PG_OVERLAY" "$TRIAL_DIR/pg_overlay.img" || echo "WARNING: overlay preservation copy failed (trial data itself is unaffected)"
+  # Issue #79 (see docs/plans/parquet-write-path.md): Postgres, its WAL-backed
+  # overlay, and the failure-recovery copy that used to live here are gone —
+  # BDActor now dumps raw per-table Parquet straight to $SAVE_DIR/raw (below,
+  # node-local /scratch, same locality rationale as the old overlay) and
+  # extraction reads those files directly, no live database to lose. Applying
+  # the same hard-won lesson that overlay safety net was built from (see git
+  # history on this file for the two incidents that shaped it - lost data
+  # from an unconditional `rm -rf` racing a real extraction bug, then an NFS
+  # quota blowup from keeping every trial's copy unconditionally): only copy
+  # $SAVE_DIR/raw out to the NFS-backed $TRIAL_DIR when extraction actually
+  # failed ($rc, captured above, non-zero) - a successful trial already has
+  # everything it needs in $TRIAL_DIR's processed Parquet, and extraction
+  # itself already deletes $SAVE_DIR/raw on success (--skip-backup below), so
+  # this is the only path that would otherwise lose it. No `|| true`-less
+  # command here that could abort this trap and misreport an
+  # already-succeeded trial as failed - same reasoning as the incident above.
+  if [ "$rc" != 0 ] && [ -d "${SAVE_DIR:-}/raw" ]; then
+    cp -r "$SAVE_DIR/raw" "$TRIAL_DIR/raw_backup" || echo "WARNING: raw-data preservation copy failed (nothing else to recover from for this trial)"
   fi
   rm -rf "/scratch/dl2l_${SLURM_JOB_ID:-unknown}"
 }
 trap cleanup EXIT
 
 CONFIG_BIND="{{ remote_work_dir }}/config/ccad-config.conf:/config/docker-config.conf:ro"
-INITDB_BIND="{{ remote_work_dir }}/config/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro"
 
 # A Singularity SIF is read-only by default — --writable-tmpfs gives every
 # instance an ephemeral, in-memory (tmpfs) writable overlay (discarded when
-# the instance stops). Fine for the app containers (logs/tmp writes only)
-# but CONFIRMED LIVE this is NOT enough for postgres: even a short trial's
-# DDL bootstrap + WAL churn hit "PANIC: could not write to file
-# pg_wal/xlogtemp.NN: No space left on device" — --writable-tmpfs has no
-# size flag, and its default is evidently just a few tens of MB. postgres
-# instead gets its own disk-backed (not RAM-backed) ext3 overlay image.
-# The node-local copy is still ephemeral by design (mirrors how the
-# local/Pi docker-compose postgres has no named volume either — extraction
-# below copies everything needed out to the shared NFS before teardown),
-# but the overlay ITSELF now survives the trial: cleanup()'s trap above
-# copies it to $TRIAL_DIR (NFS) before deleting the node-local original,
-# a recovery safety net (see that trap's own comment for why).
+# the instance stops), fine for the app containers themselves (logs/tmp
+# writes only — persistence no longer goes through a container filesystem at
+# all, see SAVE_DIR below).
 #
-# CONFIRMED LIVE, twice:
-# 1) A 1024 (1GB) overlay, sized only against a quick smoke write, filled up
-#    after just ~12.5 minutes of a real 10-creature/40-minute trial. Once
-#    full, EVERY subsequent postgres write failed with "No space left on
-#    device" and the app retried in a tight loop — 700K+/500K+ duplicate
-#    exception lines across holder/db logs in the remaining ~27 minutes.
-#    That retry-loop spam, not verbose app logging, was the real source of
-#    this session's multi-hundred-MB/GB log files. Bumped to 8192 (8GB) —
-#    /scratch has 500GB+ free per node, so headroom is cheap; revisit if a
-#    full-duration trial still exhausts this.
-# 2) The overlay image lived at $TRIAL_DIR, under remote_work_dir — CCAD's
-#    NFS-mounted $HOME — so every one of postgres's internal writes to it
-#    (WAL, subtrans, every BDActor flush) was network I/O, same class of
-#    problem as the singularity-instance-log issue above. Moved to
-#    node-local /scratch (confirmed present and writable on every compute
-#    node — a dedicated local disk mount, not NFS) instead; only the final
-#    extracted parquet/pg_dump (far smaller, and only written once at the
-#    end) still crosses the network into $TRIAL_DIR.
+# Issue #79 (see docs/plans/parquet-write-path.md): Postgres is gone
+# entirely — it was itself the bottleneck for BDActor's write path (a real
+# OOM crash under sustained load, confirmed on this exact cluster) and this
+# whole section used to be ~90 lines of postgres-specific overlay-sizing/
+# readiness-race workarounds (still visible in this file's git history).
+# Replaced with an embedded DuckDB inside the holder JVM — SAVE_DIR below is
+# where it writes its working file and the raw-table Parquet dump at trial
+# shutdown, node-local for the same reason the old postgres overlay was
+# (every write during the run would otherwise be NFS network I/O): only the
+# small, one-shot final extraction output crosses onto the network, into
+# $TRIAL_DIR.
 SCRATCH_DIR="/scratch/dl2l_${SLURM_JOB_ID}"
-mkdir -p "$SCRATCH_DIR"
+SAVE_DIR="$SCRATCH_DIR/dl2l_data"
+mkdir -p "$SAVE_DIR"
 WRITABLE="--writable-tmpfs"
-PG_OVERLAY="$SCRATCH_DIR/pg_overlay.img"
-singularity overlay create --size 8192 "$PG_OVERLAY"
-
-# --- postgres --------------------------------------------------------------
-# Runs from a pre-built sandbox directory (roles/image_ccad), not `docker://`
-# — confirmed live that compute nodes have no internet access, so any
-# `docker://` reference would fail here. No --fakeroot: CCAD support mapped
-# this account's uid on compute nodes (see docs/plans/ccad-singularity-experiments.md),
-# so the official postgres image's entrypoint runs fine as our real,
-# resolvable uid — no user-namespace trickery needed. PGPORT: the official
-# postgres image's entrypoint reads this to listen on a non-default port,
-# needed so concurrent trials on the same node don't all fight over :5432.
-singularity instance start --overlay "$PG_OVERLAY" \
-  --bind "$INITDB_BIND" \
-  --env POSTGRES_PASSWORD=postgres --env POSTGRES_DB=l2l --env PGPORT="$PG_PORT" \
-  {{ remote_work_dir }}/postgres_sandbox "$DB_NAME"
-
-echo "Waiting for postgres..."
-# CONFIRMED LIVE (2026-07-16): a single pg_isready success is NOT proof the
-# REAL postgres instance is ready — the official postgres image's own
-# entrypoint runs a brief TEMPORARY server first (to apply
-# docker-entrypoint-initdb.d/init-db.sql), shuts it down, then starts the
-# real, long-lived server a moment later. Under heavy node load this
-# bootstrap-to-real handoff apparently takes long enough that a single
-# pg_isready poll can catch the temporary server's brief listening window,
-# report ready, and let this script move straight on to starting
-# manager/holder — which then hit `Connection refused` connecting to a
-# postgres that had already shut down again, silently skipped all DDL/data
-# writes for the ENTIRE run (no retry, no crash), and only surfaced as
-# "relation does not exist" at extraction, an hour later, with the
-# simulation's own hour of work otherwise having run to completion
-# normally. Require 3 CONSECUTIVE successful checks (not just one) before
-# trusting readiness — cheap insurance against catching that transient
-# window, at the cost of a few extra seconds in the common case.
-pg_ready=0
-consecutive=0
-for _ in $(seq 1 60); do
-  if singularity exec "instance://${DB_NAME}" pg_isready -U postgres -p "$PG_PORT" >/dev/null 2>&1; then
-    consecutive=$((consecutive + 1))
-    [ "$consecutive" -ge 3 ] && { pg_ready=1; break; }
-  else
-    consecutive=0
-  fi
-  sleep 2
-done
-# CONFIRMED LIVE GAP (found via a smoke-test failure where the dl2l app's own
-# entrypoint was silently broken): the original loops here had no failure
-# check, so a service that never comes up is indistinguishable from one that
-# started instantly — the script just sails on to extraction, which then
-# fails opaquely ("No creatures found") instead of pointing at the real
-# problem. Every wait loop below now fails fast with the instance's own log.
-[ "$pg_ready" = 1 ] || { echo "FATAL: postgres never became ready"; singularity instance list; exit 1; }
 
 # Each trial's manager log is now uniquely named (dl2l-manager-<jobid>.err —
 # see MANAGER_NAME above), so unlike before there's no shared/appended file
@@ -292,7 +204,6 @@ singularity instance start $WRITABLE \
   --env ROLE=manager,idProvider --env SIMULATION={{ cond.simulation }} \
   --env HOST=localhost --env PORT="$MANAGER_PORT" --env SEED_PORT="$MANAGER_PORT" \
   --env METRICS_PORT="$METRICS_MANAGER_PORT" --env TRIAL_ID="$TRIAL" \
-  --env DL2L_DB_URL="jdbc:postgresql://localhost:${PG_PORT}/l2l" \
   {{ remote_work_dir }}/dl2l_sandbox "$MANAGER_NAME"
 
 echo "Waiting for manager..."
@@ -312,12 +223,15 @@ singularity instance start $WRITABLE \
   {{ remote_work_dir }}/dl2l_sandbox "$DETECTOR_NAME"
 
 # --- holder -------------------------------------------------------------------
+# --bind "$SAVE_DIR:/dl2l/data": the embedded DuckDB working file + raw-table
+# Parquet dump at shutdown land here (node-local /scratch, see SAVE_DIR above)
+# instead of a database container — only holder needs this (BDActor only
+# exists in the holder JVM, see PersistenceExtension).
 singularity instance start $WRITABLE \
-  --bind "$CONFIG_BIND" \
+  --bind "$CONFIG_BIND" --bind "$SAVE_DIR:/dl2l/data" \
   --env ROLE=holder --env SIMULATION={{ cond.simulation }} \
   --env HOST=localhost --env PORT="$HOLDER_PORT" --env SEED_PORT="$MANAGER_PORT" \
   --env METRICS_PORT="$METRICS_HOLDER_PORT" --env TRIAL_ID="$TRIAL" \
-  --env DL2L_DB_URL="jdbc:postgresql://localhost:${PG_PORT}/l2l" \
   {{ remote_work_dir }}/dl2l_sandbox "$HOLDER_NAME"
 
 # A holder that crashes on startup disappears from `instance list` almost
@@ -501,25 +415,32 @@ fi
 # take a few more seconds) — give it a moment before extracting.
 sleep 10
 
-# --- extract (before teardown; dl2l_data.extract does its own pg_dump backup) -
-# The system python3 has no pandas/pyarrow (needed for --format parquet) —
-# CONFIRMED LIVE this crashed extraction outright even after a trial
-# actually completed successfully. TRIED `module load miniforge3 && conda
-# activate` here (a dedicated dl2l-extract env, provisioned once by
-# provision-ccad.yml) — CONFIRMED LIVE this breaks the singularity exec
-# subprocess dl2l_data.db shells out to for psql (almost certainly
-# LD_LIBRARY_PATH contamination from the conda module, inherited by that
-# subprocess): postgres was demonstrably still running (a trial had already
-# succeeded moments earlier without this activation) but psql suddenly
-# couldn't find its own unix socket. Fixed by installing pandas/pyarrow into
-# the system python3's --user site-packages instead (provision-ccad.yml) —
-# no environment activation, so nothing here can leak into the singularity
-# subprocess call.
+# --- extract (before teardown) ----------------------------------------------
+# The system python3 needs pandas/pyarrow/duckdb (provision-ccad.yml installs
+# them into its --user site-packages — CONFIRMED LIVE the system python3
+# otherwise lacks them, crashing extraction even after a trial completed
+# successfully; a dedicated conda env was tried and rejected for the OLD
+# psql-subprocess-based extractor due to LD_LIBRARY_PATH contamination — that
+# concern no longer applies now that extraction reads local files directly
+# (no subprocess to contaminate), but there's no reason to introduce a second
+# install path, so --user site-packages stayed).
+#
+# Issue #79 (see docs/plans/parquet-write-path.md): reads BDActor's raw
+# Parquet dump directly (SAVE_DIR/raw, written synchronously before
+# Holder.handleFinish() lets the JVM proceed to terminate() — see
+# PersistenceExtension/BDActor — so this is never racing an in-flight write)
+# instead of querying a live Postgres instance. --skip-backup is unconditional
+# here (unlike trial_runner_local, which respects the experiment spec's
+# extract.backup) — CONFIRMED LIVE lesson from this exact file's old postgres-
+# overlay logic: keeping every trial's raw copy on NFS unconditionally blew
+# through this account's quota. cleanup()'s trap above already covers the one
+# case that matters (extraction itself failing) by copying SAVE_DIR/raw to
+# $TRIAL_DIR/raw_backup only then.
 PYTHONPATH="{{ remote_work_dir }}/scripts" python3 -m dl2l_data.extract \
   --experiment "{{ experiment_cfg.name }}" \
   --condition "{{ cond.key }}" \
   --trial "$TRIAL" \
   --out "{{ remote_work_dir }}/data/{{ experiment_cfg.name }}" \
-  --container "$DB_NAME" --runtime singularity --db-port "$PG_PORT" \
-  --format {{ experiment_cfg.extract.format }}{% if not experiment_cfg.extract.backup %} \
-  --skip-backup{% endif %}
+  --raw-dir "$SAVE_DIR/raw" \
+  --format {{ experiment_cfg.extract.format }} \
+  --skip-backup

@@ -11,7 +11,7 @@ import akka.cluster.Member;
 import akka.japi.pf.ReceiveBuilder;
 import akka.pattern.Patterns;
 import akka.util.Timeout;
-import br.cefetmg.lsi.l2l.analysis.DataAnalyser;
+import br.cefetmg.lsi.l2l.creature.bd.DumpParquet;
 import br.cefetmg.lsi.l2l.creature.bd.Flush;
 import br.cefetmg.lsi.l2l.creature.bd.PersistenceExtension;
 import br.cefetmg.lsi.l2l.creature.ml.MLServiceExtension;
@@ -33,10 +33,8 @@ import scala.concurrent.Await;
 import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
 
-import javax.persistence.EntityManager;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -71,6 +69,20 @@ public class Holder extends AbstractActor implements Registrable {
     private LearningSettings learningSettings;
 
     private MetricsExtension.Impl metricsExt;
+
+    // Issue #79: at the ~5x cognitive-cycle throughput measured post-#76/#78 (see
+    // docs/reports/p79_metabolic_clock_report.md), BDActor's backlog reached 1.4-2.5M
+    // queued states by the time the last of just 3 short-lived (~15-30s) creatures died,
+    // and draining it (at BDActor's measured ~17-18K states/s sustained rate - a raw
+    // Postgres write-throughput ceiling that neither JDBC batch-writing nor larger
+    // bd-dispatcher batch caps moved) took 97-155s. The old 30s timeout threw a
+    // TimeoutException before that finished, which aborted handleRemoveObject/handleFinish
+    // before AllCreaturesDead ever reached SimulationManager - the holder then never
+    // received a Finish and hung forever (docker wait on it never returns). 30 minutes
+    // gives headroom for creatures living the full ~150s Phase A targets at the same
+    // cycle rate (proportionally larger backlog) while still failing loudly if BDActor
+    // ever genuinely stalls rather than just being slow.
+    private static final int FLUSH_TIMEOUT_SECONDS = 1800;
 
     public Holder(Simulation settings, String saveDir) {
         this.saveDir = saveDir;
@@ -114,6 +126,9 @@ public class Holder extends AbstractActor implements Registrable {
         logger.setLevel(Level.SEVERE);
         // Register learning settings before any creature is spawned so components can read them.
         SimulationSettingsExtension.of(context().system()).configure(learningSettings);
+        // Opens the embedded DuckDB (see PersistenceExtension) before any creature is spawned -
+        // CreatureActor/component actors resolve bdActor() in their own preStart().
+        PersistenceExtension.of(context().system()).configure(saveDir);
         // Eagerly load the species ML models once for this JVM node.
         // Fails fast here (before any creature spawns) if the model contract is invalid.
         MLServiceExtension.of(context().system());
@@ -237,22 +252,25 @@ public class Holder extends AbstractActor implements Registrable {
 
             if(creatures.isEmpty()) {
                 // Wait for every write already in BDActor's mailbox to commit before
-                // DataAnalyser reads creature state back out of Postgres - persistence is now
-                // async (creature.bd().tell(state)), so without this drain the analysis could
-                // silently read a DB missing each creature's final ticks. See
+                // reporting the holder's work as done - persistence is async
+                // (creature.bd().tell(state)), so without this drain the Postgres data
+                // extracted afterward (scripts/dl2l_data.extract, Python-side) could be
+                // missing each creature's final ticks. See
                 // docs/plans/bdactor-async-persistence-with-drain.md §4a.
-                Sync.ask(PersistenceExtension.of(context().system()).bdActor(), new Flush(), 30);
+                //
+                // Issue #79: this used to also run DataAnalyser (JPA read queries across
+                // ~20 Extractor classes producing legacy per-creature CSVs) here - nothing
+                // in the current pipeline (ansible/dl2l_data, analysis/dl2l_analysis) ever
+                // read those CSVs, and both DataAnalyser and the extractor classes have
+                // since been deleted entirely (JPA is gone from this JVM, see
+                // docs/plans/remove-jpa-persistence-layer.md). Extraction is Python-side,
+                // now reading the Parquet files BDActor dumps at shutdown (see
+                // PersistenceExtension.of(...).bdActor(), docs/plans/parquet-write-path.md)
+                // instead of querying a live database.
+                Sync.ask(PersistenceExtension.of(context().system()).bdActor(), new Flush(), FLUSH_TIMEOUT_SECONDS);
 
-                EntityManager em = PersistenceExtension.of(context().system())
-                        .entityManagerFactory().createEntityManager();
-
-                DataAnalyser analyser = new DataAnalyser(em,  saveDir);
-                CompletableFuture all = analyser.run();
-
-                all.thenRun(() -> {
-                    manager.tell(new AllCreaturesDead(this.id), self());
-                    logger.info("This holder has finished his work.");
-                });
+                manager.tell(new AllCreaturesDead(this.id), self());
+                logger.info("This holder has finished his work.");
             }
 
             logger.info("Removed a creature");
@@ -315,7 +333,12 @@ public class Holder extends AbstractActor implements Registrable {
         // case, since handleRemoveObject's drain already ran) - covers a holder that never
         // held a creature, or any future persistence path that doesn't go through the
         // per-creature-death drain. See docs/plans/bdactor-async-persistence-with-drain.md §4b.
-        Sync.ask(PersistenceExtension.of(context().system()).bdActor(), new Flush(), 30);
+        Sync.ask(PersistenceExtension.of(context().system()).bdActor(), new Flush(), FLUSH_TIMEOUT_SECONDS);
+        // Every write is durably committed as of the Flush above - dump each raw table to its
+        // own Parquet file now, while the DuckDB connection is still open (see
+        // docs/plans/parquet-write-path.md). scripts/dl2l_data/extract.py reads these directly
+        // instead of querying a live database.
+        Sync.ask(PersistenceExtension.of(context().system()).bdActor(), new DumpParquet(), FLUSH_TIMEOUT_SECONDS);
         for(ActorRef component : worldObjects.values()) {
             context().stop(component);
         }

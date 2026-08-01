@@ -25,4 +25,25 @@ public class Sync {
             throw new IllegalStateException(ex);
         }
     }
+
+    /**
+     * Fires the same ask to every actor in {@code actorRefs} concurrently and waits for all
+     * replies - unlike calling {@link #ask} in a loop, the {@code seconds} timeout applies to
+     * the whole batch, not per-actor sequentially. Used to drain every {@code BDActor} shard
+     * (see PersistenceExtension) in parallel rather than one at a time.
+     */
+    public static <T> void askAll(ActorRef[] actorRefs, T message, int seconds) {
+        Timeout timeout = Timeout.apply(Duration.create(seconds, "second"));
+        Future<Object>[] futures = new Future[actorRefs.length];
+        for (int i = 0; i < actorRefs.length; i++) {
+            futures[i] = Patterns.ask(actorRefs[i], message, timeout);
+        }
+        try {
+            for (Future<Object> future : futures) {
+                Await.result(future, timeout.duration());
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
 }

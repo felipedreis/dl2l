@@ -122,12 +122,113 @@ emerge, or cross-run reproducibility remains a blocker, proceed to Phase B.
 
 ---
 
-## Phase B — Durable fix: couple the clock to wall-clock time (only if A insufficient)
+## Phase B — Durable fix: couple the clock to wall-clock time
 
-Make metabolic / circadian / sleep advance proportional to **elapsed wall-clock time**, so
-lifespan is invariant to cycle throughput and reproducible across hardware.
+**Revised after concrete evidence, see docs/plans/parquet-write-path.md's "Local
+validation log".** The dt-weighted design originally written below (keep cycle rate
+uncapped, just scale each tick's metabolic contribution by elapsed real time) was
+**disproved empirically, not just theoretically**: validating the issue-79 Parquet/DuckDB
+write-path pivot, a single uncontended local creature drove `dl2l_bdactor_queue_depth`
+from 0 to 3.8M in under 100 seconds (~38K states/sec) and OOM'd a 2GB heap in ~2 minutes.
+Confirmed via code search (`grep` for `scheduleAtFixedRate`/`scheduleWithFixedDelay`/
+`scheduler().schedule` across the whole app — only `SimulationManager`/`GUIActor`, neither
+in the per-creature path) and by tracing the message cascade end-to-end
+(`Body`/movement → `CollisionDetectorActor.checkCreatureCollisions` (triggered by
+receiving a `CreaturePositioningAttr`) → `Eye`/`Nose`/`Mouth`/`Body` stimuli →
+`SensoryCortex` → `PartialAppraisal`/`FullAppraisal` → action selection →
+`EffectorCortex` → movement → repeat): **there is no throttle anywhere in this loop.** It
+runs exactly as fast as the CPU/dispatcher allows. dt-weighting only changes *how much*
+each tick contributes to metabolism — it does nothing to *how many* ticks (and therefore
+`persist()` calls) happen per second, so it doesn't touch the actual crash.
 
-**Recommended design — dt-weighted advance (minimal, robust to jitter):**
+**Revised design — fixed-rate scheduler gates the cycle itself, not just metabolism:**
+Introduce real wall-clock pacing at the point a new cycle begins, rather than dt-weighting
+an uncapped one. This unifies two previously-separate concerns (reproducible biological
+time; bounded write volume) behind one mechanism, and is well-grounded rather than
+arbitrary: the pre-#76 system already ran at **~30 Hz** effective rate (p59 baseline,
+~150s lifespan / ~4,600 cycles) and Phase A's own success criteria already demonstrated
+that rate is *sufficient* for behaviour emergence — so capping back near there isn't a new
+constraint, it's restoring the rate the whole system (including Phase A's rescaled
+constants) was implicitly calibrated against, while keeping #76/#78's real win (cognition
+no longer *blocks* on synchronous persistence I/O).
+
+### Loop trace (completed 2026-08-02 — the design rests on this)
+
+One **cognitive cycle** = one `PartialAppraisal.onReceive` (`PartialAppraisal.java:48`):
+increments `dl2l_creature_cognitive_cycles_total`, ticks metabolism/neuromodulators/
+endocrine, builds the `EmotionalStimulus` → `FullAppraisal` → action selection → effector,
+and calls `persistCycle()` — **the write to `BDActor` happens here, once per cycle.**
+
+That `onReceive` fires because perception stimuli arrived from `SensoryCortex`, which exist
+only because the creature told the collision detector its geometry via
+`updatePositioningAttribute()` (`CreatureActor.java:265`). That method is the **sole
+loop-closer**: it is called only by the four movement/perceptual-field setters —
+`setPosition` (`Body.java:36`, MOVE), `setVisionFieldOpening`/`setVisionFieldPosition`
+(`Eye.java`, LOOK/eye-close), `setOlfactoryFieldRadius` (`Nose`). Each currently fires a
+**full perception round immediately**, so one decision touching several setters spawns
+several perception rounds, and the cascade self-perpetuates as fast as the dispatcher
+allows — **this is the unbounded producer that fills the mailbox and the heap.** The
+collision detector generates perception *only* on receiving a positioning attr
+(`CollisionDetectorActor.java:68-73`); nothing else re-triggers it. So gating that one send
+gates the entire cascade. `CreatureActor` already owns a wall-clock scheduler
+(`CreatureActor.java:191-196`) — a 1 Hz keep-alive that `tell`s `PartialAppraisal` an empty
+string (a metabolism-only tick, no perception). That is the precedent to repurpose.
+
+### Design — scheduler-driven perception (RESOLVED; user chose "CreatureActor pacemaker")
+
+1. **Retune** the existing `clock` scheduler from a hardcoded 1000 ms to `1000 / TARGET_HZ`
+   ms (config-driven; see target-rate below).
+2. **Reroute** it: instead of `partial.tell("")`, each tick triggers exactly one
+   `updatePositioningAttribute()` on the `CreatureActor`'s **own thread** (via the TypedActor
+   self-proxy, so it is enqueued on the actor's mailbox and safely reads mutable geometry
+   state — the current lambda only does a `tell`, which is thread-safe, so this is the one
+   new thread-safety point to get right). One tick → one positioning send → one perception
+   round → one cognitive cycle → one `persistCycle` write.
+3. **Decouple the setters**: `setPosition`/`setVisionFieldOpening`/`setVisionFieldPosition`/
+   `setOlfactoryFieldRadius` update internal state only and **no longer** call
+   `updatePositioningAttribute()`. All geometry changes within a cycle coalesce into the
+   next scheduled send. Between ticks the creature is static (it moves only when it
+   cognizes, and it cognizes only on a tick), so the coalesced send always carries accurate
+   geometry — no staleness, and food/world-object positioning attrs (separate senders) are
+   unaffected, so collision accuracy is unchanged.
+
+Net: the cascade stops perpetuating itself; the clock is the sole driver at a bounded,
+reproducible wall-clock rate. Metabolism, perception, cognition, and `persist()` production
+all advance at exactly `TARGET_HZ` regardless of CPU speed — **the OOM cause (unbounded
+production) and the original issue-79 goal (machine-independent biological time) fall out of
+the same mechanism.**
+
+**dt-weighting kept as the within-tick correction.** Even a fixed-rate scheduler jitters
+(we just watched ticks slip 2-13 s under the livelock). So still weight each cycle's
+metabolic advance by the *actual* elapsed `dt` (original design below), not an assumed
+`1/TARGET_HZ`. Division of labour: the rate cap bounds *how many* cycles/s (fixes the OOM);
+dt-weighting makes *each* cycle's biological advance accurate (fixes reproducibility
+precisely, robust to jitter).
+
+**Target rate — 30 Hz starting point, confirm by measurement (user chose "measure first").**
+30 Hz is the pre-#76 effective rate, already shown *sufficient* for behaviour emergence and
+*survivable*. Write-throughput sanity check: 30 Hz × 10 creatures = 300 cycles/s; one cycle
+emits far fewer than `38 000/30 ≈ 1266` states, and `ParquetBackend` cleanly absorbed one
+creature's full ~38 K states/s, so aggregate sits comfortably under the proven write ceiling.
+The acceptance gate (below) measures `queue_depth` directly under the cap and we tune if
+needed. Make `TARGET_HZ` a `Constants`/simulation-config value so it's tunable without a
+rebuild.
+
+**Phase A constants — re-derive together, don't layer (user chose this).** With cycle rate
+pinned near the ~30 Hz the Phase A constants were implicitly calibrated against, Phase A's
+`S`-rescale (S ≈ 10-20) largely unwinds (S → ~1). Treat cap + constants as one calibration:
+under the cap, re-measure lifespan on the capped build and set `DELTA` so `L_target ≈ 150 s`
+at `TARGET_HZ` (equivalently, re-express the per-cycle rate constants as per-second rates ×
+`dt`). Do **not** stack Phase A's ×S on top of the cap.
+
+**Risks to close in the mini-experiment (not just build-green):**
+- Some behaviour may implicitly rely on the tight self-perpetuating cascade (a "decision"
+  spanning several immediate perception rounds). Coalescing to one round per tick could
+  shift dynamics — behaviour-emergence metrics are part of the gate, not an afterthought.
+- The TypedActor self-invocation must go through the proxy, not the raw object — verify the
+  self-proxy handle is available at scheduler-setup time in `init()`.
+
+*(Original dt-weighted-only design, kept for reference — no longer the plan on its own:)*
 - Add a `long lastTickNanos` timestamp to `PartialAppraisal` (init in `preStart`).
 - In `tickMetabolicPacemaker()` (`PartialAppraisal.java:115`), compute
   `dt = (now - lastTickNanos) / 1e9` seconds each call and weight every per-time term by
@@ -144,17 +245,16 @@ lifespan is invariant to cycle throughput and reproducible across hardware.
   `memorySystem.tickDecisionCycle()` (`FullAppraisal.java:186`) can stay cycle-based (it is
   a learning cadence, not a biological clock) — call that out explicitly.
 
-*Alternative considered (drive metabolism only from a dedicated fixed-rate scheduler, reusing
-the `CreatureActor.java:196` precedent):* fully decouples but requires moving the pacemaker
-out of `onReceive` and loses the natural coupling to perception. Prefer the dt-weighted
-approach unless the experiment shows scheduler-only pacing is needed.
-
 ### Verify Phase B
 - `mvn package` + `mvn test`.
 - Re-run the p79 experiment on this Mac; additionally verify **reproducibility**: two runs
   at deliberately different cycle rates (e.g. throttle one, or compare Mac vs a slower
   config) must yield the **same wall-clock lifespan / drive trajectories**. Extend the same
   report with a Phase-B section and a lifespan-vs-cycle-rate figure.
+- **New, given the actual motivation this time**: re-run the write-path validation
+  (`p79_single_creature_diag.conf` or similar) under the rate cap and confirm
+  `dl2l_bdactor_queue_depth` stays bounded/near-zero throughout — this is the real
+  acceptance gate, not just lifespan/reproducibility.
 
 ---
 

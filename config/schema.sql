@@ -1,8 +1,18 @@
 -- DL2L persistence schema (issue #79 — replaces EclipseLink's runtime
 -- `drop-and-create-tables` DDL generation now that JPA is gone from the write path).
 --
--- Generated as a starting point from EclipseLink's own DDL output (captured via
--- eclipselink.ddl-generation.output-mode=sql-script against the still-JPA-annotated
+-- Runs against an embedded DuckDB (see docs/plans/parquet-write-path.md — Postgres
+-- proved too slow a sink for this append-only telemetry workload and was the direct
+-- cause of a CCAD OOM crash under sustained load). Issued once from Java
+-- (PersistenceExtension, at connection open) rather than mounted as a
+-- docker-entrypoint-initdb.d init script — an embedded DB has no separate server
+-- process to bootstrap. DuckDB's SQL dialect is a near-superset of the Postgres subset
+-- this file already used (schemas, uuid/varchar/bigint/float/boolean/integer/text,
+-- PRIMARY KEY), so no type changes were needed versus the original Postgres version of
+-- this file — same schema, different engine.
+--
+-- Originally generated as a starting point from EclipseLink's own DDL output (captured
+-- via eclipselink.ddl-generation.output-mode=sql-script against the still-JPA-annotated
 -- entity classes), then hand-edited:
 --   - every INTEGER surrogate `id` / foreign-key column -> uuid, always app-supplied
 --     (java.util.UUID.randomUUID(), assigned at object construction — see BDActor) —
@@ -10,7 +20,7 @@
 --   - no FOREIGN KEY constraints: this is an append-only telemetry log, not a
 --     transactional system: referential integrity comes from the app always
 --     generating consistent UUIDs, not DB-enforced checks, and skipping constraint
---     checking is part of what makes unordered bulk COPY loading fast.
+--     checking is part of what makes unordered bulk loading fast.
 --   - object_seen_state.type / object_smelt_state.objecttype: was BYTEA (EclipseLink's
 --     @Lob Java-serialization fallback for the WorldObjectType interface type) -> text
 --     (the type's plain name, e.g. "RED_APPLE"), written directly by the app now.
@@ -18,9 +28,9 @@
 --     dead entities, never constructed anywhere in the app and never read by
 --     scripts/dl2l_data or analysis/ (confirmed by repo-wide grep).
 --   - no secondary indexes beyond each table's primary key, matching the original
---     JPA-generated schema exactly (it had none either) — this keeps the write path
---     (COPY-loading) as fast as possible; add indexes later if Python-side extraction
---     read speed becomes the bottleneck instead.
+--     JPA-generated schema exactly (it had none either) — keeps the write path (bulk
+--     Appender loading) as fast as possible; add indexes later if extraction read speed
+--     ever becomes the bottleneck instead.
 
 CREATE SCHEMA IF NOT EXISTS data;
 

@@ -5,9 +5,23 @@ package br.cefetmg.lsi.l2l.common;
  */
 public interface Constants {
 
-    double DELTA = 1.5e-3;
+    // Issue #79: metabolic/circadian/sleep rates below are tied to cognitive-cycle count,
+    // not wall-clock time. #76 (async persistence) + #78 (bounded BDActor batch), then the
+    // full JPA/EclipseLink removal from the write path (docs/plans/remove-jpa-persistence-layer.md),
+    // removed the blocking/contending persistence that used to throttle the cognitive loop,
+    // so cycle throughput rose in wall-clock terms (measured via
+    // dl2l_creature_cognitive_cycles_total, pre-#76 baseline 155.33 Hz
+    // [docs/reports/p59_batching_fix_report.md data]). First rescale (S=4.286) was
+    // calibrated against 665.75 Hz, measured *before* the JPA removal; that removal freed
+    // CPU/dispatcher capacity JPA overhead used to contend for, so the cognitive loop itself
+    // sped up further too (measured 909.9 Hz pooled across the p79_metabolic_rescale
+    // validation run) - recalibrated here to S=5.858. The per-cycle accrual/clearing rates
+    // below are divided by S so lifespan and rhythm cadence are restored to their pre-#76
+    // wall-clock values; this is Phase A (cheap rescale) of #79's fix, not Phase B (true
+    // wall-clock coupling) - it re-breaks if cycle throughput ever shifts again.
+    double DELTA = 2.56067e-4;
 
-    double CHOLINERGIC_DELTA = 1e-1;
+    double CHOLINERGIC_DELTA = 1.70711e-2;
 
     double MAX_VISION_FIELD_OPENING = 150;
     double MIN_VISION_FIELD_OPENING = 50;
@@ -38,12 +52,14 @@ public interface Constants {
     String CURIOSITY = "curiosity";
     String FERTILITY = "fertility";
 
-    double TEDIUM_IDLE_RATE     = 2e-2;
-    double TEDIUM_OBSERVE_RATE  = 5e-2;
-    double TEDIUM_WANDER_RELIEF = 5e-2;
+    // Issue #79: rescaled /= S (see DELTA's comment above).
+    double TEDIUM_IDLE_RATE     = 3.41422e-3;
+    double TEDIUM_OBSERVE_RATE  = 8.53555e-3;
+    double TEDIUM_WANDER_RELIEF = 8.53555e-3;
 
     double PAIN_IMMUNE_THRESHOLD = 0.2;
-    double PAIN_IMMUNE_RATE      = 5e-3;
+    // Issue #79: rescaled /= S (see DELTA's comment above).
+    double PAIN_IMMUNE_RATE      = 8.53555e-4;
 
     double MIN_AROUSAL_LEVEL = 0.18;
     double MAX_AROUSAL_LEVEL = 7;
@@ -62,13 +78,19 @@ public interface Constants {
 
     int CONSOLIDATION_BATCH_SIZE = 16;
 
-    int CIRCADIAN_PERIOD_TICKS = 200;
+    // Issue #79: rescaled *= S (see DELTA's comment above) so the circadian day stays
+    // ~constant in wall-clock seconds despite the higher cycle throughput.
+    int CIRCADIAN_PERIOD_TICKS = 1172;
 
-    double BASE_SLEEP_DRIVE = 1e-3;
+    // Issue #79: rescaled /= S (see DELTA's comment above).
+    double BASE_SLEEP_DRIVE = 1.70711e-4;
 
-    double CIRCADIAN_AMPLITUDE = 5e-4;
+    // Issue #79: rescaled /= S (see DELTA's comment above).
+    double CIRCADIAN_AMPLITUDE = 8.53555e-5;
 
-    int MIN_SLEEP_TICKS = 10;
+    // Issue #79: rescaled *= S (see DELTA's comment above) so the anti-micro-nap floor
+    // stays ~constant in wall-clock seconds despite the higher cycle throughput.
+    int MIN_SLEEP_TICKS = 59;
 
     // --- Expectancy predictor (symbolic reward-prediction) ---
     // Rescorla-Wagner learning rate for the running-mean expected-reward update.
@@ -102,7 +124,8 @@ public interface Constants {
     // Passive boredom accrual per cognitive cycle when no reward arrives. Kept below the metabolic
     // hunger drift (DELTA) so hunger dominates and drives foraging; boredom is a gentle background
     // pressure that surfaces only when basic needs are met and no reward is arriving.
-    double BOREDOM_RISE_RATE = 8e-4;
+    // Issue #79: rescaled /= S (see DELTA's comment above) - preserves the < DELTA ratio.
+    double BOREDOM_RISE_RATE = 1.36569e-4;
     // Tedium relief per unit of positive reward-prediction error (a rewarding/novel event).
     double DA_TEDIUM_RELIEF = 1.0;
     // How strongly serotonergic contentment (satiety) slows the passive boredom rise.
@@ -127,13 +150,19 @@ public interface Constants {
     int DEPRIVATION_RPE_INTERVAL = 10;
 
     // --- Homeostatic message batching ---
-    // PartialAppraisal fires at ~134 Hz (eye-driven). Sending one AdrenergicStimulus and one
-    // AdenosinergicStimulus per cycle floods HomeostaticRegulation (processes ~25/s due to
-    // TypedActor overhead), creating a backlog of stale metabolic stimuli that push sleep to MAX
-    // before CholinergicStimuli from actual sleep episodes can clear it.
+    // PartialAppraisal fired at ~134 Hz (eye-driven) when this was written. Sending one
+    // AdrenergicStimulus and one AdenosinergicStimulus per cycle floods HomeostaticRegulation
+    // (processes ~25/s due to TypedActor overhead), creating a backlog of stale metabolic
+    // stimuli that push sleep to MAX before CholinergicStimuli from actual sleep episodes can
+    // clear it.
     // Fix: accumulate deltas and send ONE batched message every HOMEO_BATCH_SIZE cycles.
-    // Rate drops to 134/20 × 2 ≈ 13/s (well below the 25/s processing capacity). The
+    // Rate dropped to 134/20 × 2 ≈ 13/s (well below the 25/s processing capacity). The
     // total biological effect (sum of deltas) is unchanged.
+    // Issue #79: post-#76/#78/JPA-removal the measured rate is ~910 Hz (see the DELTA
+    // rescale comment near the top of this file), so the batched rate is now ~910/20×2≈91/s -
+    // above the 25/s figure above; whether this reproduces the original stale-backlog symptom
+    // is unverified. Left unscaled in Phase A along with the other decay/batch-cadence
+    // constants - watch for it in the Phase A mini-experiment's sleep-arousal results.
     int HOMEO_BATCH_SIZE = 20;
 
     // --- Cortisol / HPA axis ---

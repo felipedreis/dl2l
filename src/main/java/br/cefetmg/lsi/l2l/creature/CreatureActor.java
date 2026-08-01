@@ -11,6 +11,7 @@ import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.bd.CreatureState;
 import br.cefetmg.lsi.l2l.creature.bd.PersistenceExtension;
+import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
 import br.cefetmg.lsi.l2l.creature.components.*;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioningActor;
@@ -29,7 +30,6 @@ import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
 import br.cefetmg.lsi.l2l.physics.CreaturePositioningAttr;
 import scala.concurrent.duration.Duration;
 
-import javax.persistence.EntityManager;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -61,8 +61,6 @@ public class CreatureActor implements Creature {
     private final Logger logger = Logger.getLogger(CreatureActor.class.getName());
 
     private final Point worldBoundaries;
-
-    private EntityManager em;
 
     private SequentialId id;
 
@@ -107,18 +105,15 @@ public class CreatureActor implements Creature {
         ActorContext context = TypedActor.context();
         components = new HashMap<>();
 
-        // Shared per-JVM EntityManagerFactory (see PersistenceExtension) - avoids each
-        // creature/component opening its own separate JDBC connection pool and sequence
-        // pre-allocation cache against the same Postgres instance.
-        em = PersistenceExtension.of(context.system())
-                .entityManagerFactory().createEntityManager();
-
         state = new CreatureState(id);
         state.setBornTime(System.currentTimeMillis());
 
-        em.getTransaction().begin();
-        em.persist(state);
-        em.getTransaction().commit();
+        // Routes through the single per-JVM BDActor (see PersistenceExtension) instead of
+        // opening its own connection - avoids a repeat of the "~70-100 separate connections"
+        // incident documented there. Async like every other creature write; Holder's
+        // pre-extraction Flush (handleRemoveObject/handleFinish) guarantees this lands
+        // before data is read back out.
+        bd().tell(new PersistenceState[]{state});
 
         alive = true;
         direction = 0;
@@ -233,10 +228,9 @@ public class CreatureActor implements Creature {
         MLServiceExtension.of(TypedActor.context().system()).releaseAdapter(id.key);
         SimulationSettingsExtension.of(TypedActor.context().system()).releaseCreatureSettings(id.key);
 
-        em.getTransaction().begin();
-        em.persist(state);
-        em.getTransaction().commit();
-        em.close();
+        // Same UUID as the birth write above - BDActor upserts (ON CONFLICT DO UPDATE), so
+        // this correctly overwrites deadtime rather than being dropped as a duplicate.
+        bd().tell(new PersistenceState[]{state});
 
         logger.info("Sending remove order to holder");
         holderActorRef().tell(id, TypedActor.context().self());

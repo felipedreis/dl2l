@@ -1,6 +1,6 @@
 package br.cefetmg.lsi.l2l.creature.bd;
 
-import javax.persistence.*;
+import java.util.UUID;
 
 /**
  * Time series of tonic neuromodulator concentrations (dopamine, serotonin, orexin) and the
@@ -9,35 +9,15 @@ import javax.persistence.*;
  * the base oscillator without joining additional tables. {@code seq} is a monotonic per-component
  * counter.
  */
-@Entity
-@Table(name = "neuromodulator_state_log", schema = "data")
-@NamedNativeQueries({
-    @NamedNativeQuery(name = "NeuromodulatorStateLog.getForCreature",
-        query = "SELECT n.creature_key, n.seq, n.dopamine, n.serotonin, n.orexin, n.circadian_phase " +
-                "FROM data.neuromodulator_state_log n " +
-                "WHERE n.creature_key = ? ORDER BY n.seq")
-})
 public class NeuromodulatorStateLog implements PersistenceState {
 
-    @Id @GeneratedValue
-    private int id;
+    private final UUID id = UUID.randomUUID();
 
-    @Column(name = "creature_key")
     private long creatureKey;
-
-    @Column(name = "seq")
     private long seq;
-
-    @Column(name = "dopamine")
     private double dopamine;
-
-    @Column(name = "serotonin")
     private double serotonin;
-
-    @Column(name = "orexin")
     private double orexin;
-
-    @Column(name = "circadian_phase")
     private double circadianPhase;
 
     public NeuromodulatorStateLog() { }
@@ -52,4 +32,12 @@ public class NeuromodulatorStateLog implements PersistenceState {
         this.orexin         = orexin;
         this.circadianPhase = circadianPhase;
     }
+
+    public UUID getId() { return id; }
+    public long getCreatureKey() { return creatureKey; }
+    public long getSeq() { return seq; }
+    public double getDopamine() { return dopamine; }
+    public double getSerotonin() { return serotonin; }
+    public double getOrexin() { return orexin; }
+    public double getCircadianPhase() { return circadianPhase; }
 }

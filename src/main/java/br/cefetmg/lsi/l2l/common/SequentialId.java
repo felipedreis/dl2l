@@ -1,12 +1,10 @@
 package br.cefetmg.lsi.l2l.common;
 
-import javax.persistence.Embeddable;
 import java.io.Serializable;
 
 /**
  * Created by felipe on 02/01/17.
  */
-@Embeddable
 public class SequentialId implements Serializable {
 
     public final long key;

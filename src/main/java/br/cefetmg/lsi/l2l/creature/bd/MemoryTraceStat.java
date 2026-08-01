@@ -1,24 +1,14 @@
 package br.cefetmg.lsi.l2l.creature.bd;
 
-import javax.persistence.*;
+import java.util.UUID;
 
-@Entity
-@Table(name = "memory_trace_stat", schema = "data")
 public class MemoryTraceStat implements PersistenceState {
 
-    @Id @GeneratedValue
-    private int id;
+    private final UUID id = UUID.randomUUID();
 
-    @Column(name = "creature_key")
     private long creatureKey;
-
-    @Column(name = "onset_cycle")
     private long onsetCycle;
-
-    @Column(name = "engram_count")
     private int engramCount;
-
-    @Column(name = "groups_consolidated")
     private int groupsConsolidated;
 
     public MemoryTraceStat() {}
@@ -30,7 +20,7 @@ public class MemoryTraceStat implements PersistenceState {
         this.groupsConsolidated = groupsConsolidated;
     }
 
-    public int  getId()                 { return id; }
+    public UUID getId()                 { return id; }
     public long getCreatureKey()        { return creatureKey; }
     public long getOnsetCycle()         { return onsetCycle; }
     public int  getEngramCount()        { return engramCount; }

@@ -1,5 +1,6 @@
 package br.cefetmg.lsi.l2l.creature.ml;
 
+import akka.actor.ActorRef;
 import akka.actor.TypedActor;
 import akka.actor.TypedProps;
 import akka.actor.UntypedActor;
@@ -9,12 +10,12 @@ import br.cefetmg.lsi.l2l.creature.Creature;
 import br.cefetmg.lsi.l2l.creature.CreatureActor;
 import br.cefetmg.lsi.l2l.creature.bd.MemoryTraceStat;
 import br.cefetmg.lsi.l2l.creature.bd.PersistenceExtension;
+import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.creature.memory.Engram;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
-import javax.persistence.EntityManager;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -42,7 +43,7 @@ public class MemoryTraceConsolidator extends UntypedActor {
 
     private final long creatureKey;
     private MemorySystem memory;
-    private EntityManager em;
+    private ActorRef bdActor;
 
     public MemoryTraceConsolidator(long creatureKey) {
         this.creatureKey = creatureKey;
@@ -51,21 +52,18 @@ public class MemoryTraceConsolidator extends UntypedActor {
     @Override
     public void preStart() throws Exception {
         super.preStart();
-        // Shared per-JVM EntityManagerFactory (see PersistenceExtension) - avoids each
-        // creature opening its own separate JDBC connection pool and sequence
-        // pre-allocation cache against the same Postgres instance.
-        em = PersistenceExtension.of(context().system())
-                .entityManagerFactory().createEntityManager();
         Creature creature = TypedActor.get(context().system())
                 .typedActorOf(new TypedProps<>(Creature.class, CreatureActor.class), context().parent());
         memory = creature.memory();
+        // Resolved once here rather than per persist() call - same pattern as
+        // CreatureComponent's cached bdRef (see its javadoc).
+        bdActor = PersistenceExtension.of(context().system()).bdActor();
         logger.info("MemoryTraceConsolidator[" + creatureKey + "]: started (Mapa consolidation mode)");
     }
 
     @Override
     public void postStop() throws Exception {
         super.postStop();
-        em.close();
         logger.info("MemoryTraceConsolidator[" + creatureKey + "]: stopped");
     }
 
@@ -101,10 +99,9 @@ public class MemoryTraceConsolidator extends UntypedActor {
     }
 
     private void persist(MemoryTraceStat stat) {
-        em.getTransaction().begin();
-        em.persist(stat);
-        em.getTransaction().commit();
-        em.clear();
+        // Routes through the single per-JVM BDActor (see PersistenceExtension) instead of
+        // opening its own connection - see docs/plans/remove-jpa-persistence-layer.md.
+        bdActor.tell(new PersistenceState[]{stat}, self());
     }
 
     /**

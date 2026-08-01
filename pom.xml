@@ -22,12 +22,6 @@
     <dependencies>
 
         <dependency>
-            <groupId>org.eclipse.persistence</groupId>
-            <artifactId>eclipselink</artifactId>
-            <version>2.7.15</version>
-        </dependency>
-
-        <dependency>
             <groupId>commons-cli</groupId>
             <artifactId>commons-cli</artifactId>
             <version>1.2</version>
@@ -76,15 +70,19 @@
         </dependency>
 
         <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>postgresql</artifactId>
-            <version>9.3-1102-jdbc4</version>
+            <groupId>org.duckdb</groupId>
+            <artifactId>duckdb_jdbc</artifactId>
+            <version>1.5.5.0</version>
         </dependency>
 
+        <!-- Strategy alternative to the DuckDB write path (see PersistenceBackend) - writes
+             Parquet directly, no SQL/DB layer at all. Hadoop-free wrapper around the standard
+             parquet-column/parquet-hadoop libraries (bundles minimal Hadoop API-compatible
+             shim classes, not a real Hadoop dependency/runtime). -->
         <dependency>
-            <groupId>net.sf.opencsv</groupId>
-            <artifactId>opencsv</artifactId>
-            <version>2.3</version>
+            <groupId>blue.strategic.parquet</groupId>
+            <artifactId>parquet-floor</artifactId>
+            <version>1.51</version>
         </dependency>
 
         <dependency>

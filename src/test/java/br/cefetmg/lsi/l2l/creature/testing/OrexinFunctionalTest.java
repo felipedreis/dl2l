@@ -132,13 +132,22 @@ class OrexinFunctionalTest {
             TestingHarness h = TestingHarness.builder().learningSettings(settings).build();
 
             // Set sleep pressure first, then prime so orexin stabilises at the right level.
-            // With OREXIN_SLEEP_GATE_THRESHOLD=15 and OREXIN_DECAY=0.97, orexin crosses 15
-            // after ~25 ticks at full release. Use 50 ticks: orexin ≈ 22, comfortably above gate
-            // even as sleep pressure drifts upward during priming (reducing release slightly).
+            // Priming must run enough ticks for orexin to converge (~25 ticks at full release,
+            // per OREXIN_DECAY) AND, if the RANDOM filter happens to pick SLEEP before orexin
+            // has gated it out, enough ticks for the anti-micro-nap hysteresis floor
+            // (MIN_SLEEP_TICKS - see FullAppraisal.enforceHysteresisGate) to fully resolve
+            // before the "first decision" is measured - otherwise an early accidental SLEEP
+            // can still be hysteresis-locked in at measurement time even though orexin itself
+            // is correctly gating it out. MIN_SLEEP_TICKS scales with the issue #79 metabolic
+            // rescale factor S (see Constants.java), so this must scale with it too rather than
+            // hardcode a fixed tick count - CONFIRMED LIVE: MIN_SLEEP_TICKS growing past the
+            // old hardcoded 50-tick priming window (e.g. to 59) made this test fail almost
+            // always (share=0.988) instead of the intended near-zero.
+            int primeTicks = Constants.MIN_SLEEP_TICKS + 50;
             double currentSleep = h.creature().emotions().getLevel(Constants.SLEEP);
             h.creature().emotions().regulate(Constants.SLEEP, sleepLevel - currentSleep);
 
-            for (int t = 0; t < 50; t++) h.tick();
+            for (int t = 0; t < primeTicks; t++) h.tick();
 
             Point pos = h.creature().getPosition();
             SequentialId sid = new SequentialId(200_000L + i * 3L);

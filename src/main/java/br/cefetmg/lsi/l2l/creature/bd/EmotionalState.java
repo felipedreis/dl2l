@@ -1,53 +1,28 @@
 package br.cefetmg.lsi.l2l.creature.bd;
 
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.GeneratedValue;
-import javax.persistence.Id;
-import javax.persistence.Table;
+import java.util.UUID;
 
-@Entity
-@Table(name="emotional_state", schema="data")
 public class EmotionalState implements PersistenceState {
 
-	@Id
-	@GeneratedValue
-	private int id;
-	
-	@Column(name="hunger_arausal")
+	private final UUID id = UUID.randomUUID();
+
 	private double hunger;
-	
-	@Column(name="sleep_arausal")
 	private double sleep;
-	
-	@Column(name="apathy_arausal")
 	private double apathy;
-	
-	@Column(name="stress_arausal")
 	private double stress;
-	
-	@Column(name="pain_arausal")
 	private double pain;
-	
-	@Column(name="tedium_arausal")
 	private double tedium;
-	
-	@Column(name="fear_arausal")
 	private double fear;
-	
-	@Column(name="curiosity_arausal")
 	private double curiosity;
-	
-	@Column(name="fertility_arausal")
 	private double fertility;
-	
+
 	public EmotionalState(){
-		
+
 	}
-	
-	public EmotionalState(double hunger, double sleep, double apathy, double stress, 
+
+	public EmotionalState(double hunger, double sleep, double apathy, double stress,
 			double pain, double tedium, double fear, double curiosity, double fertility) {
-		
+
 		this.hunger = hunger;
 		this.sleep = sleep;
 		this.apathy = apathy;
@@ -59,12 +34,8 @@ public class EmotionalState implements PersistenceState {
 		this.fertility = fertility;
 	}
 
-	public int getId() {
+	public UUID getId() {
 		return id;
-	}
-
-	public void setId(int id) {
-		this.id = id;
 	}
 
 	public double getHunger() {
