@@ -1,0 +1,35 @@
+name: p79_ccad_baseline_validation
+trials: 2
+
+conditions:
+  - key: 1_baseline
+    simulation: simulations/20260717_memory_vs_wm_dense_no_reposition_1_baseline.conf
+    label: Baseline
+    color: "#9e9e9e"
+
+# CCAD has no local docker daemon — pull the manually-pushed post-JPA-removal
+# image instead of building. Run with:
+#   ansible-playbook -i inventories/ccad run-experiment.yml \
+#     -e experiment=p79_ccad_baseline_validation \
+#     -e dl2l_image=ghcr.io/felipedreis/dl2l:issue-79-jpa-removal
+image:
+  source: registry
+
+# Full-scale (10-creature, 1200x900, reposition=false) end-to-end validation of
+# issue #79's Phase A rescale + JPA-removal/BDActor-sharding rewrite on CCAD,
+# reusing 20260717_memory_vs_wm_dense_no_reposition's baseline condition
+# unmodified. 2 trials (not the usual 5) — the sharded-BDActor outlier-creature
+# pathology (see docs/plans/remove-jpa-persistence-layer.md) is a known,
+# unresolved risk at this scale; keeping trial count low limits exposure while
+# still exercising the full pipeline on CCAD's real SLURM/Singularity path.
+data_dir: ml/data_p79_ccad_baseline_validation
+
+extract:
+  format: parquet
+  backup: true
+  tables: all
+
+upload:
+  enabled: true
+  repo: felipedreis/dl2l-experiments
+  prefix: p79/ccad_baseline_validation
