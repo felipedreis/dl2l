@@ -28,10 +28,9 @@ import java.util.logging.Logger;
  * connection, avoiding any repeat of the "~70-100 separate connections" incident documented
  * on {@link PersistenceExtension}.
  *
- * <p>The actual write mechanics are pluggable - see {@link PersistenceBackend} (strategy
- * pattern; {@link DuckDBBackend} or {@link ParquetBackend}, selected in
- * {@link PersistenceExtension}) - this class only owns the actor protocol (batching,
- * {@link Flush}/{@link DumpParquet} handling) and the backend-agnostic object-graph
+ * <p>The actual write mechanics live behind {@link PersistenceBackend} ({@link ParquetBackend},
+ * constructed by {@link PersistenceExtension}) - this class only owns the actor protocol
+ * (batching, {@link Flush}/{@link DumpParquet} handling) and the backend-agnostic object-graph
  * expansion/table-grouping ({@link #expand}/{@link #tableFor}). See
  * docs/plans/parquet-write-path.md.
  *

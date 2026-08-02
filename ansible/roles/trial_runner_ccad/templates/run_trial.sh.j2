@@ -171,8 +171,8 @@ CONFIG_BIND="{{ remote_work_dir }}/config/ccad-config.conf:/config/docker-config
 # OOM crash under sustained load, confirmed on this exact cluster) and this
 # whole section used to be ~90 lines of postgres-specific overlay-sizing/
 # readiness-race workarounds (still visible in this file's git history).
-# Replaced with an embedded DuckDB inside the holder JVM — SAVE_DIR below is
-# where it writes its working file and the raw-table Parquet dump at trial
+# Replaced with the holder JVM writing Parquet directly (ParquetBackend) —
+# SAVE_DIR below is where it writes the raw-table Parquet dump at trial
 # shutdown, node-local for the same reason the old postgres overlay was
 # (every write during the run would otherwise be NFS network I/O): only the
 # small, one-shot final extraction output crosses onto the network, into
@@ -236,10 +236,10 @@ singularity instance start $WRITABLE \
   {{ remote_work_dir }}/dl2l_sandbox "$DETECTOR_NAME"
 
 # --- holder -------------------------------------------------------------------
-# --bind "$SAVE_DIR:/dl2l/data": the embedded DuckDB working file + raw-table
-# Parquet dump at shutdown land here (node-local /scratch, see SAVE_DIR above)
-# instead of a database container — only holder needs this (BDActor only
-# exists in the holder JVM, see PersistenceExtension).
+# --bind "$SAVE_DIR:/dl2l/data": the raw-table Parquet dump BDActor writes at
+# shutdown lands here (node-local /scratch, see SAVE_DIR above) instead of a
+# database container — only holder needs this (BDActor only exists in the
+# holder JVM, see PersistenceExtension).
 # --bind "$HEAPDUMP_DIR:/dl2l/heapdumps": see HEAPDUMP_DIR's comment above -
 # only holder runs BDActor / carries the write-path OOM risk, so only it
 # needs this.
@@ -248,7 +248,6 @@ singularity instance start $WRITABLE \
   --env ROLE=holder --env SIMULATION={{ cond.simulation }} \
   --env HOST=localhost --env PORT="$HOLDER_PORT" --env SEED_PORT="$MANAGER_PORT" \
   --env METRICS_PORT="$METRICS_HOLDER_PORT" --env TRIAL_ID="$TRIAL" \
-  --env PERSISTENCE_BACKEND=parquet \
   {{ remote_work_dir }}/dl2l_sandbox "$HOLDER_NAME"
 
 # A holder that crashes on startup disappears from `instance list` almost

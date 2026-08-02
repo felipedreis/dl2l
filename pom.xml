@@ -69,16 +69,10 @@
             </exclusions>
         </dependency>
 
-        <dependency>
-            <groupId>org.duckdb</groupId>
-            <artifactId>duckdb_jdbc</artifactId>
-            <version>1.5.5.0</version>
-        </dependency>
-
-        <!-- Strategy alternative to the DuckDB write path (see PersistenceBackend) - writes
-             Parquet directly, no SQL/DB layer at all. Hadoop-free wrapper around the standard
-             parquet-column/parquet-hadoop libraries (bundles minimal Hadoop API-compatible
-             shim classes, not a real Hadoop dependency/runtime). -->
+        <!-- ParquetBackend (see PersistenceBackend) - the sole persistence write path, no
+             SQL/DB layer. Hadoop-free wrapper around the standard parquet-column/parquet-hadoop
+             libraries (bundles minimal Hadoop API-compatible shim classes, not a real Hadoop
+             dependency/runtime). -->
         <dependency>
             <groupId>blue.strategic.parquet</groupId>
             <artifactId>parquet-floor</artifactId>

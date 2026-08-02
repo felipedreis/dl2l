@@ -5,10 +5,9 @@
 # ${VAR} env-var substitutions (not Jinja) so ONE rendered file is reused
 # across every condition/trial in the matrix — the trial runner exports a
 # different value per `docker compose` invocation instead of re-rendering.
-# DL2L_RAW_DATA_DIR is where dl2l-holder writes its embedded DuckDB file and
-# the raw-table Parquet dump at trial shutdown (see PersistenceExtension,
-# docs/plans/parquet-write-path.md) — replaces the old dl2l-db Postgres
-# service entirely.
+# DL2L_RAW_DATA_DIR is where dl2l-holder writes its raw-table Parquet dump at
+# trial shutdown (see PersistenceExtension, docs/plans/parquet-write-path.md)
+# — replaces the old dl2l-db Postgres service entirely.
 version: "3.1"
 
 services:

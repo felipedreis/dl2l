@@ -3,6 +3,7 @@ package br.cefetmg.lsi.l2l.creature.bd;
 import blue.strategic.parquet.Dehydrator;
 import blue.strategic.parquet.ValueWriter;
 import br.cefetmg.lsi.l2l.common.SequentialId;
+import br.cefetmg.lsi.l2l.world.WorldObjectType;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Type;
 import org.apache.parquet.schema.Types;
@@ -22,25 +23,28 @@ import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT32;
 import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64;
 
 /**
- * {@link PersistenceBackend} strategy alternative to {@link DuckDBBackend} - writes Parquet
- * files directly via {@code parquet-floor} (a Hadoop-free wrapper around the standard
- * {@code parquet-column}/{@code parquet-hadoop} libraries), no SQL/DB layer at all. Exists
- * because the DuckDB write path's real slowness was never conclusively root-caused (see
- * {@link DuckDBBackend#appenders}' javadoc) - this sidesteps the question entirely by
- * removing the intermediary. One {@link TunedParquetWriter} per table, opened once at
- * construction and held for the actor's whole lifetime; {@code write()} buffers rows
- * in-memory and flushes row-groups internally once {@link TunedParquetWriter#ROW_GROUP_SIZE_BYTES}
- * is reached (analogous to DuckDB's Appender auto-flush threshold) - see that class's javadoc
+ * {@link PersistenceBackend} implementation - writes Parquet files directly via
+ * {@code parquet-floor} (a Hadoop-free wrapper around the standard
+ * {@code parquet-column}/{@code parquet-hadoop} libraries), no SQL/DB layer at all. The sole
+ * backend as of issue #79's write-path pivot - an earlier embedded-DuckDB backend was tried
+ * first, but its real-world write throughput was never conclusively root-caused despite
+ * extensive isolated benchmarking (DuckDB's own APIs were fast in isolation), so this
+ * sidesteps the question entirely by removing the intermediary - see
+ * docs/plans/parquet-write-path.md for the full investigation history (still in git history
+ * as {@code DuckDBBackend}, removed once this backend was validated as the better path). One
+ * {@link TunedParquetWriter} per table, opened once at construction and held for the actor's
+ * whole lifetime; {@code write()} buffers rows in-memory and flushes row-groups internally
+ * once {@link TunedParquetWriter#ROW_GROUP_SIZE_BYTES} is reached - see that class's javadoc
  * for why the row-group size needed overriding away from parquet-hadoop's 128MiB default.
  *
- * <p><b>No upsert semantics</b> - unlike {@link DuckDBBackend}, there is no equivalent of
- * {@code ON CONFLICT DO UPDATE}. The three tables that legitimately get re-persisted with
- * the same id (see {@code DuckDBBackend.UPSERT_TABLES}' javadoc: {@code creature_state}
+ * <p><b>No upsert semantics</b> - there is no equivalent of {@code ON CONFLICT DO UPDATE}.
+ * The three tables that legitimately get re-persisted with the same id ({@code creature_state}
  * birth+death, {@code change_stimulus_state}/{@code stimulus_state}'s cross-persist()-call
- * duplicate references) land here as duplicate rows instead of being collapsed to one.
- * Deferred by design, per explicit scope: this class validates the *write* path only; the
- * extraction/analysis side (which would need to dedupe by id, e.g. keep-last) is separate,
- * later work - see docs/plans/parquet-write-path.md.
+ * duplicate references - see {@code CreatureComponent.persist()}'s javadoc) land here as
+ * duplicate rows instead of being collapsed to one. Deferred by design, per explicit scope:
+ * this class validates the *write* path only; the extraction/analysis side (which would need
+ * to dedupe by id, e.g. keep-last) is separate, later work - see
+ * docs/plans/parquet-write-path.md.
  *
  * <p>{@link #flush()} is a deliberate no-op - see its own javadoc for why (CONFIRMED LIVE:
  * closing writers there crashed a later write). Only {@link #dumpToParquet()} (and
@@ -243,6 +247,10 @@ public class ParquetBackend implements PersistenceBackend {
         return id == null ? null : id.toString();
     }
 
+    private static String worldObjectTypeName(WorldObjectType type) {
+        return type != null ? type.name() : null;
+    }
+
     /**
      * One shared {@link Dehydrator} for every table's {@link ParquetWriter} - each writer
      * only ever receives states of the one type {@code persistBatch()} routes to it (via
@@ -314,7 +322,7 @@ public class ParquetBackend implements PersistenceBackend {
                 w.write("angle", os.getAngle());
                 w.write("direction", os.getDirection());
                 w.write("distance", os.getDistance());
-                writeIfPresent(w, "type", DuckDBBackend.worldObjectTypeName(os.getType()));
+                writeIfPresent(w, "type", worldObjectTypeName(os.getType()));
                 writeSequentialId(w, "key", "sequential", os.getObjectNumber());
                 writeIfPresent(w, "changestimulusstate_id",
                         uuidOrNull(os.getChangeStimulusState() != null ? os.getChangeStimulusState().getId() : null));
@@ -333,7 +341,7 @@ public class ParquetBackend implements PersistenceBackend {
             }
             case ObjectSmeltState oss -> {
                 w.write("id", oss.getId().toString());
-                writeIfPresent(w, "objecttype", DuckDBBackend.worldObjectTypeName(oss.getObjectType()));
+                writeIfPresent(w, "objecttype", worldObjectTypeName(oss.getObjectType()));
                 writeIfPresent(w, "smelltype", oss.getSmellType() != null ? oss.getSmellType().name() : null);
                 writeSequentialId(w, "key", "sequential", oss.getComponent());
                 writeIfPresent(w, "changestimulusstate_id",

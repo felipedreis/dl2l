@@ -22,13 +22,15 @@ Issue #79 (see docs/plans/parquet-write-path.md): this used to run each of
 `tables.py`'s SQL queries via `psql` against a live Postgres container/
 instance (`docker exec`/`singularity exec`). Postgres itself turned out to be
 the bottleneck for BDActor's write path (an append-only telemetry workload,
-never queried mid-run) and was replaced with an embedded DuckDB that the JVM
-dumps to one raw Parquet file per table at trial shutdown (`--raw-dir`).
-Extraction now runs the *exact same* `tables.py` SQL (unchanged) via an
-in-process DuckDB reading those files instead of a live database - no psql,
-no container/instance, no network. The raw dump itself *is* the backup now
-(already columnar, no restore step needed) - `--skip-backup` controls whether
-it's kept alongside the final output or deleted once extraction succeeds.
+never queried mid-run) and the JVM now writes one raw Parquet file per table
+directly at trial shutdown instead (`ParquetBackend`, `--raw-dir`) - no DB
+layer on the write side at all. Extraction runs the *exact same* `tables.py`
+SQL (unchanged) via its own in-process embedded DuckDB - used purely as a
+query engine over those Parquet files, unrelated to the (DuckDB-free) write
+path - instead of a live database: no psql, no container/instance, no
+network. The raw dump itself *is* the backup now (already columnar, no
+restore step needed) - `--skip-backup` controls whether it's kept alongside
+the final output or deleted once extraction succeeds.
 """
 
 import argparse

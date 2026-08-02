@@ -76,12 +76,14 @@
     # without needing network access there.
     #
     # duckdb added for issue #79's Parquet write-path pivot (see
-    # docs/plans/parquet-write-path.md) — extraction now reads the raw
-    # Parquet files the JVM dumps at shutdown via an embedded DuckDB instead
-    # of shelling out to psql against a live postgres instance, so the
-    # LD_LIBRARY_PATH concern above no longer applies to extraction (there's
-    # no more subprocess to contaminate) — kept on the same --user install
-    # here anyway since there's no reason to introduce a second install path.
+    # docs/plans/parquet-write-path.md) — the JVM now writes raw Parquet files
+    # directly at shutdown (ParquetBackend), and extraction reads/joins them
+    # via its own embedded DuckDB (a query engine over the Parquet files, not
+    # related to the write path) instead of shelling out to psql against a
+    # live postgres instance, so the LD_LIBRARY_PATH concern above no longer
+    # applies to extraction (there's no more subprocess to contaminate) —
+    # kept on the same --user install here anyway since there's no reason to
+    # introduce a second install path.
     - name: "Install pandas/pyarrow/duckdb into the system python3's --user site-packages"
       ansible.builtin.pip:
         name:

@@ -72,9 +72,9 @@ services:
       - source: ../heapdumps
         target: /dl2l/heapdumps
         type: bind
-      # Embedded DuckDB file + the raw-table Parquet dump BDActor writes at trial shutdown
-      # (DATA_DIR="/dl2l/data" - see docker/Dockerfile, PersistenceExtension.configure()).
-      # Replaces the old dl2l-db Postgres service entirely - see docs/plans/parquet-write-path.md.
+      # The raw-table Parquet dump BDActor writes at trial shutdown (DATA_DIR="/dl2l/data" -
+      # see docker/Dockerfile, PersistenceExtension.configure()). Replaces the old dl2l-db
+      # Postgres service entirely - see docs/plans/parquet-write-path.md.
       - source: ../data/raw
         target: /dl2l/data
         type: bind

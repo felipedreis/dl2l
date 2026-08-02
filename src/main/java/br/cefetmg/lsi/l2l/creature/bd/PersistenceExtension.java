@@ -12,10 +12,6 @@ import akka.pattern.Patterns;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.Duration;
 
 /**
@@ -34,11 +30,13 @@ import java.time.Duration;
  * <p>Postgres itself was the wrong tool for this workload (append-only telemetry, never
  * queried mid-run, already shipped downstream as Parquet) - a client-server RDBMS pays
  * network round-trip + WAL/MVCC/lock overhead on every write regardless of batching.
- * The actual write mechanics are now a pluggable {@link PersistenceBackend} strategy,
- * selected via the {@code PERSISTENCE_BACKEND} env var ({@code duckdb} default, or
- * {@code parquet}) - see {@link DuckDBBackend}/{@link ParquetBackend}'s own javadoc for
- * why both exist. A single {@link BDActor}/backend instance (no more sharding - not yet
- * proven necessary; revisit only if a local diagnostic shows otherwise).
+ * The actual write mechanics are a {@link PersistenceBackend} (currently the sole
+ * implementation, {@link ParquetBackend} - an earlier embedded-DuckDB backend was tried and
+ * removed once Parquet proved the better path, see its own javadoc and
+ * docs/plans/parquet-write-path.md), kept behind this interface so a future alternative
+ * doesn't need to touch {@link BDActor} or callers. A single {@link BDActor}/backend
+ * instance (no more sharding - not yet proven necessary; revisit only if a local diagnostic
+ * shows otherwise).
  *
  * <p>Usage: {@code PersistenceExtension.of(context().system()).configure(saveDir)} once from
  * {@link br.cefetmg.lsi.l2l.cluster.Holder#preStart()}, before any creature is spawned (mirrors
@@ -60,12 +58,8 @@ public class PersistenceExtension extends AbstractExtensionId<PersistenceExtensi
 
     public static class Impl implements Extension {
 
-        private enum BackendKind { DUCKDB, PARQUET }
-
         private final ExtendedActorSystem system;
 
-        private volatile BackendKind backendKind;
-        private volatile Connection conn;
         private volatile ActorRef bdActor;
         private volatile Path rawDumpDir;
 
@@ -74,13 +68,11 @@ public class PersistenceExtension extends AbstractExtensionId<PersistenceExtensi
         }
 
         /**
-         * Resolves which {@link PersistenceBackend} to use (opening the embedded DuckDB file
-         * + issuing the schema if that's the chosen one), sets up {@code saveDir}/raw, and
-         * starts the single {@link BDActor}. Idempotent - safe to call more than once (only
-         * the first call takes effect), so callers don't need to coordinate who calls it
-         * first. Must complete before any creature is spawned, since
-         * {@link CreatureActor}/component actors resolve {@link #bdActor()} in their own
-         * {@code preStart()}.
+         * Sets up {@code saveDir}/raw and starts the single {@link BDActor}. Idempotent -
+         * safe to call more than once (only the first call takes effect), so callers don't
+         * need to coordinate who calls it first. Must complete before any creature is
+         * spawned, since {@link CreatureActor}/component actors resolve {@link #bdActor()}
+         * in their own {@code preStart()}.
          */
         public synchronized void configure(String saveDir) {
             if (bdActor != null) return;
@@ -89,20 +81,8 @@ public class PersistenceExtension extends AbstractExtensionId<PersistenceExtensi
                 Files.createDirectories(dir);
                 this.rawDumpDir = dir.resolve("raw");
                 Files.createDirectories(rawDumpDir);
-
-                String env = System.getenv("PERSISTENCE_BACKEND");
-                this.backendKind = "parquet".equalsIgnoreCase(env) ? BackendKind.PARQUET : BackendKind.DUCKDB;
-
-                if (backendKind == BackendKind.DUCKDB) {
-                    this.conn = DriverManager.getConnection("jdbc:duckdb:" + dir.resolve("dl2l.duckdb"));
-                    try (Statement stmt = conn.createStatement()) {
-                        for (String ddlStatement : SCHEMA_DDL) {
-                            stmt.execute(ddlStatement);
-                        }
-                    }
-                }
-            } catch (SQLException | IOException e) {
-                throw new RuntimeException("PersistenceExtension failed to open its backend", e);
+            } catch (IOException e) {
+                throw new RuntimeException("PersistenceExtension failed to set up its raw dump dir", e);
             }
 
             this.bdActor = system.actorOf(
@@ -136,21 +116,16 @@ public class PersistenceExtension extends AbstractExtensionId<PersistenceExtensi
         }
 
         /**
-         * Constructs the {@link PersistenceBackend} chosen by {@code configure()}'s
-         * {@code PERSISTENCE_BACKEND} env var. Called once, from {@link BDActor}'s own
+         * Constructs the {@link PersistenceBackend}. Called once, from {@link BDActor}'s own
          * constructor (single instance per JVM - see class javadoc).
          */
         PersistenceBackend newBackend() throws Exception {
-            return switch (backendKind) {
-                case DUCKDB -> new DuckDBBackend(conn, rawDumpDir);
-                case PARQUET -> new ParquetBackend(rawDumpDir);
-            };
+            return new ParquetBackend(rawDumpDir);
         }
 
         /**
-         * Every table this schema defines, in dependency-irrelevant order (no FK constraints -
-         * see config/schema.sql's header). Kept alongside the DDL so {@link BDActor#dumpToParquet()}
-         * can iterate the same list without duplicating it.
+         * Every table {@link ParquetBackend} writes, in dependency-irrelevant order (no FK
+         * constraints - this is an append-only telemetry log, not a relational store).
          */
         static final String[] TABLES = {
                 "change_stimulus_state", "stimulus_state", "creature_state", "emotional_state",
@@ -159,84 +134,6 @@ public class PersistenceExtension extends AbstractExtensionId<PersistenceExtensi
                 "behavioural_efficiency_state", "regulation_batch_stat", "engram_state",
                 "sleep_episode_state", "consolidation_episode_stat", "consolidation_batch_stat",
                 "memory_trace_stat", "expectancy_state", "neuromodulator_state_log", "endocrine_state_log",
-        };
-
-        /**
-         * DuckDB dialect of config/schema.sql, issued once per JVM at {@link #configure}. Kept
-         * inline (not a separate mounted init script) because an embedded database has no
-         * separate server process to bootstrap against - see config/schema.sql's own header for
-         * why this is (almost) verbatim what used to run against Postgres.
-         */
-        private static final String[] SCHEMA_DDL = {
-                "CREATE SCHEMA IF NOT EXISTS data",
-                "CREATE TABLE IF NOT EXISTS data.change_stimulus_state (" +
-                        "id uuid NOT NULL PRIMARY KEY, componentclass varchar, time bigint, key bigint, sequential bigint)",
-                "CREATE TABLE IF NOT EXISTS data.stimulus_state (" +
-                        "id uuid NOT NULL PRIMARY KEY, stimulusclass varchar, type varchar, componentkey bigint, " +
-                        "stimulusseq bigint, changestimulusemitted_id uuid, changestimulusreceived_id uuid)",
-                "CREATE TABLE IF NOT EXISTS data.creature_state (" +
-                        "id uuid NOT NULL PRIMARY KEY, borntime bigint, deadtime bigint, gender boolean, " +
-                        "father_key bigint, father_sequential bigint, mother_key bigint, mother_sequential bigint, " +
-                        "creature_key bigint, creature_sequential bigint)",
-                "CREATE TABLE IF NOT EXISTS data.emotional_state (" +
-                        "id uuid NOT NULL PRIMARY KEY, apathy_arausal double, curiosity_arausal double, " +
-                        "fear_arausal double, fertility_arausal double, hunger_arausal double, pain_arausal double, " +
-                        "sleep_arausal double, stress_arausal double, tedium_arausal double)",
-                "CREATE TABLE IF NOT EXISTS data.internal_dynamic_state (" +
-                        "id uuid NOT NULL PRIMARY KEY, changestimulusstate_id uuid, finalemotionalstate_id uuid, " +
-                        "initialemotionalstate_id uuid)",
-                "CREATE TABLE IF NOT EXISTS data.eye_state (" +
-                        "id uuid NOT NULL PRIMARY KEY, finalopening double, finalstartangle double, " +
-                        "initialopening double, initialstartangle double, changestimulusstate_id uuid)",
-                "CREATE TABLE IF NOT EXISTS data.object_seen_state (" +
-                        "id uuid NOT NULL PRIMARY KEY, angle double, direction double, distance double, " +
-                        "type varchar, key bigint, sequential bigint, changestimulusstate_id uuid)",
-                "CREATE TABLE IF NOT EXISTS data.mouth_interactions_state (" +
-                        "id uuid NOT NULL PRIMARY KEY, objecttype varchar, type varchar, key bigint, " +
-                        "sequential bigint, changestimulusstate_id uuid)",
-                "CREATE TABLE IF NOT EXISTS data.nose_state (" +
-                        "id uuid NOT NULL PRIMARY KEY, key bigint, sequential bigint)",
-                "CREATE TABLE IF NOT EXISTS data.object_smelt_state (" +
-                        "id uuid NOT NULL PRIMARY KEY, objecttype varchar, smelltype varchar, key bigint, " +
-                        "sequential bigint, changestimulusstate_id uuid)",
-                "CREATE TABLE IF NOT EXISTS data.chosen_action_state (" +
-                        "id uuid NOT NULL PRIMARY KEY, action varchar, actionselectiontype varchar, " +
-                        "inference_duration_ms bigint, key bigint, sequential bigint, changestimulusstate_id uuid)",
-                "CREATE TABLE IF NOT EXISTS data.body_state (" +
-                        "id uuid NOT NULL PRIMARY KEY, finalx double, finaly double, initialx double, " +
-                        "initialy double, speed double, stimulusstate_id uuid)",
-                "CREATE TABLE IF NOT EXISTS data.behavioural_efficiency_state (" +
-                        "id uuid NOT NULL PRIMARY KEY, behaviouralefficiency double, complextask boolean, " +
-                        "numberofobjects integer, changestimulusstate_id uuid)",
-                "CREATE TABLE IF NOT EXISTS data.regulation_batch_stat (" +
-                        "id uuid NOT NULL PRIMARY KEY, batchsize integer, drivestouchedmask integer, " +
-                        "regulatingcount integer, samedrivecollision boolean, changestimulusstate_id uuid)",
-                "CREATE TABLE IF NOT EXISTS data.engram_state (" +
-                        "id uuid NOT NULL PRIMARY KEY, action_type varchar, creature_key bigint, cycle_gap bigint, " +
-                        "eligibility double, emotion_delta double, lay_cycle bigint, reinforced_cycle bigint)",
-                "CREATE TABLE IF NOT EXISTS data.sleep_episode_state (" +
-                        "id uuid NOT NULL PRIMARY KEY, creature_key bigint, duration_ticks integer, " +
-                        "onset_cycle bigint, wake_cycle bigint)",
-                "CREATE TABLE IF NOT EXISTS data.consolidation_episode_stat (" +
-                        "id uuid NOT NULL PRIMARY KEY, aborted boolean, batches_completed integer, " +
-                        "creature_key bigint, engram_count integer, mean_eligibility double, onset_cycle bigint, " +
-                        "std_eligibility double)",
-                "CREATE TABLE IF NOT EXISTS data.consolidation_batch_stat (" +
-                        "id uuid NOT NULL PRIMARY KEY, batch_index integer, batch_size integer, " +
-                        "creature_key bigint, loss double, onset_cycle bigint)",
-                "CREATE TABLE IF NOT EXISTS data.memory_trace_stat (" +
-                        "id uuid NOT NULL PRIMARY KEY, creature_key bigint, engram_count integer, " +
-                        "groups_consolidated integer, onset_cycle bigint)",
-                "CREATE TABLE IF NOT EXISTS data.expectancy_state (" +
-                        "id uuid NOT NULL PRIMARY KEY, action varchar, creature_key bigint, cycle bigint, " +
-                        "drive varchar, drive_level double, expected double, mode varchar, reward double, " +
-                        "rpe double, target varchar)",
-                "CREATE TABLE IF NOT EXISTS data.neuromodulator_state_log (" +
-                        "id uuid NOT NULL PRIMARY KEY, circadian_phase double, creature_key bigint, " +
-                        "dopamine double, orexin double, seq bigint, serotonin double)",
-                "CREATE TABLE IF NOT EXISTS data.endocrine_state_log (" +
-                        "id uuid NOT NULL PRIMARY KEY, cortisol_tonic double, creature_key bigint, seq bigint, " +
-                        "stress_level double)",
         };
     }
 }

@@ -126,8 +126,8 @@ public class Holder extends AbstractActor implements Registrable {
         logger.setLevel(Level.SEVERE);
         // Register learning settings before any creature is spawned so components can read them.
         SimulationSettingsExtension.of(context().system()).configure(learningSettings);
-        // Opens the embedded DuckDB (see PersistenceExtension) before any creature is spawned -
-        // CreatureActor/component actors resolve bdActor() in their own preStart().
+        // Sets up the persistence backend (see PersistenceExtension) before any creature is
+        // spawned - CreatureActor/component actors resolve bdActor() in their own preStart().
         PersistenceExtension.of(context().system()).configure(saveDir);
         // Eagerly load the species ML models once for this JVM node.
         // Fails fast here (before any creature spawns) if the model contract is invalid.
@@ -334,10 +334,10 @@ public class Holder extends AbstractActor implements Registrable {
         // held a creature, or any future persistence path that doesn't go through the
         // per-creature-death drain. See docs/plans/bdactor-async-persistence-with-drain.md §4b.
         Sync.ask(PersistenceExtension.of(context().system()).bdActor(), new Flush(), FLUSH_TIMEOUT_SECONDS);
-        // Every write is durably committed as of the Flush above - dump each raw table to its
-        // own Parquet file now, while the DuckDB connection is still open (see
-        // docs/plans/parquet-write-path.md). scripts/dl2l_data/extract.py reads these directly
-        // instead of querying a live database.
+        // Every write is durably committed as of the Flush above - finalize each raw table's
+        // Parquet file now (see docs/plans/parquet-write-path.md).
+        // scripts/dl2l_data/extract.py reads these directly instead of querying a live
+        // database.
         Sync.ask(PersistenceExtension.of(context().system()).bdActor(), new DumpParquet(), FLUSH_TIMEOUT_SECONDS);
         for(ActorRef component : worldObjects.values()) {
             context().stop(component);
