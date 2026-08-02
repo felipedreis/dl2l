@@ -182,6 +182,19 @@ SAVE_DIR="$SCRATCH_DIR/dl2l_data"
 mkdir -p "$SAVE_DIR"
 WRITABLE="--writable-tmpfs"
 
+# CONFIRMED LIVE BUG (2026-08-02): unlike SAVE_DIR above, /dl2l/heapdumps was
+# never bound to anything - it landed on $WRITABLE's own ephemeral,
+# in-memory tmpfs overlay. A HeapDumpOnOutOfMemoryError attempt there both
+# competes with the JVM heap itself for the same node's RAM and is
+# unrecoverable after the instance stops either way. Confirmed live: an
+# actual OOM produced "Dump file is incomplete: No space left on device" and
+# no gc.log ever reached persistent storage, blocking exactly the
+# post-mortem (GC log inspection) that diagnosed every prior crash this
+# session. Bind it to node-local scratch disk instead, same rationale as
+# SAVE_DIR (real disk, not tmpfs, not NFS).
+HEAPDUMP_DIR="$SCRATCH_DIR/heapdumps"
+mkdir -p "$HEAPDUMP_DIR"
+
 # Each trial's manager log is now uniquely named (dl2l-manager-<jobid>.err —
 # see MANAGER_NAME above), so unlike before there's no shared/appended file
 # across trials to worry about skipping past — every match here is
@@ -227,8 +240,11 @@ singularity instance start $WRITABLE \
 # Parquet dump at shutdown land here (node-local /scratch, see SAVE_DIR above)
 # instead of a database container — only holder needs this (BDActor only
 # exists in the holder JVM, see PersistenceExtension).
+# --bind "$HEAPDUMP_DIR:/dl2l/heapdumps": see HEAPDUMP_DIR's comment above -
+# only holder runs BDActor / carries the write-path OOM risk, so only it
+# needs this.
 singularity instance start $WRITABLE \
-  --bind "$CONFIG_BIND" --bind "$SAVE_DIR:/dl2l/data" \
+  --bind "$CONFIG_BIND" --bind "$SAVE_DIR:/dl2l/data" --bind "$HEAPDUMP_DIR:/dl2l/heapdumps" \
   --env ROLE=holder --env SIMULATION={{ cond.simulation }} \
   --env HOST=localhost --env PORT="$HOLDER_PORT" --env SEED_PORT="$MANAGER_PORT" \
   --env METRICS_PORT="$METRICS_HOLDER_PORT" --env TRIAL_ID="$TRIAL" \
