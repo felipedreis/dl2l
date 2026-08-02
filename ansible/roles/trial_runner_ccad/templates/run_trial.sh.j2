@@ -232,6 +232,7 @@ singularity instance start $WRITABLE \
   --env ROLE=holder --env SIMULATION={{ cond.simulation }} \
   --env HOST=localhost --env PORT="$HOLDER_PORT" --env SEED_PORT="$MANAGER_PORT" \
   --env METRICS_PORT="$METRICS_HOLDER_PORT" --env TRIAL_ID="$TRIAL" \
+  --env PERSISTENCE_BACKEND=parquet \
   {{ remote_work_dir }}/dl2l_sandbox "$HOLDER_NAME"
 
 # A holder that crashes on startup disappears from `instance list` almost

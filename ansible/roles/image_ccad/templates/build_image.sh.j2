@@ -14,6 +14,22 @@
 # the whole run.
 set -euo pipefail
 
+# CONFIRMED LIVE BUG (2026-08-02): `singularity pull`/`build` stage layer
+# extraction and squashfs construction in $SINGULARITY_TMPDIR (defaults to
+# /tmp) - on this login node /tmp is the tiny root filesystem (6.3G total,
+# only ~1.6G free), while {{ remote_work_dir }} lives on /home (973G free).
+# A larger image (e.g. after adding duckdb_jdbc + parquet-hadoop/
+# parquet-column) blew right through /tmp's headroom: "Write failed because
+# No space left on device" mid-build, despite /home having ample room.
+# Redirect both temp staging and the pull cache onto /home instead. Must be
+# ABSOLUTE - CONFIRMED LIVE: a relative path here ("l2l/.singularity_tmp")
+# failed differently ("failed to find mount point for l2l/.singularity_tmp:
+# no parent mount point found"), unlike SIF/SANDBOX below which tolerate
+# relative paths fine for ordinary file I/O.
+export SINGULARITY_TMPDIR="$HOME/{{ remote_work_dir }}/.singularity_tmp"
+export SINGULARITY_CACHEDIR="$HOME/{{ remote_work_dir }}/.singularity_cache"
+mkdir -p "$SINGULARITY_TMPDIR" "$SINGULARITY_CACHEDIR"
+
 SIF="{{ remote_work_dir }}/{{ item.sif }}"
 SANDBOX="{{ remote_work_dir }}/{{ item.name }}_sandbox"
 DIGEST_MARKER="{{ remote_work_dir }}/.{{ item.name }}_sandbox.digest"

@@ -7,21 +7,26 @@ conditions:
     label: Baseline
     color: "#9e9e9e"
 
-# CCAD has no local docker daemon — pull the manually-pushed post-JPA-removal
-# image instead of building. Run with:
+# CCAD has no local docker daemon — pull the manually-pushed image instead of
+# building. Run with:
 #   ansible-playbook -i inventories/ccad run-experiment.yml \
 #     -e experiment=p79_ccad_baseline_validation \
-#     -e dl2l_image=ghcr.io/felipedreis/dl2l:issue-79-jpa-removal
+#     -e dl2l_image=ghcr.io/felipedreis/dl2l:issue-79-phase-b
 image:
   source: registry
 
 # Full-scale (10-creature, 1200x900, reposition=false) end-to-end validation of
-# issue #79's Phase A rescale + JPA-removal/BDActor-sharding rewrite on CCAD,
-# reusing 20260717_memory_vs_wm_dense_no_reposition's baseline condition
-# unmodified. 2 trials (not the usual 5) — the sharded-BDActor outlier-creature
-# pathology (see docs/plans/remove-jpa-persistence-layer.md) is a known,
-# unresolved risk at this scale; keeping trial count low limits exposure while
-# still exercising the full pipeline on CCAD's real SLURM/Singularity path.
+# issue #79's fix on CCAD, reusing 20260717_memory_vs_wm_dense_no_reposition's
+# baseline condition unmodified — the exact scenario that OOM'd on CCAD
+# (jobs 519/520, cancelled) under the original JPA-removal/BDActor-sharding
+# rewrite. Re-run 2026-08-02 against the finished fix (docs/plans/parquet-write-path.md
+# + docs/plans/issue-79-decouple-biological-clock.md's Phase B): pluggable
+# ParquetBackend with a tuned row-group size, and - the actual root cause fix -
+# CreatureActor's cognitive-cycle rate capped at TARGET_CYCLE_HZ instead of
+# running unbounded. Confirmed clean locally (10-creature Docker Compose run,
+# queue_depth flat, RSS flat, all containers exit 0) immediately before this
+# CCAD re-run; this is the real-hardware confirmation. 2 trials (not the usual
+# 5) — kept low since this is a targeted regression check, not a fresh study.
 data_dir: ml/data_p79_ccad_baseline_validation
 
 extract:
