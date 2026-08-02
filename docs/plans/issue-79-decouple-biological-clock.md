@@ -375,6 +375,58 @@ Purpose/Assumptions/Hypothesis/Results/Analysis) comparing pre- and post-Phase-B
 The core, most consequential acceptance criterion - the exact original-crash scenario now
 survives cleanly end-to-end - is confirmed.
 
+### CCAD re-run (2026-08-02): OOM reproduced — Phase B's fix is CPU-headroom-dependent, not unconditional
+
+Re-ran the same scenario for real on CCAD (`p79_ccad_baseline_validation`, image
+`ghcr.io/felipedreis/dl2l:issue-79-phase-b`), the original crash site (jobs 519/520,
+cancelled earlier this session). Two infra bugs fixed along the way (both committed,
+unrelated to Phase B itself):
+- CCAD's login node `/tmp` is a tiny 6.3G root filesystem (~1.6G free) that
+  `singularity pull`/`build` stage into by default; the larger post-write-path image blew
+  through it. Fixed: `SINGULARITY_TMPDIR`/`CACHEDIR` redirected to `$HOME/l2l` (973G free)
+  - must be an absolute path (a relative one fails differently: "no parent mount point
+    found").
+- `/dl2l/heapdumps` was never bound to anything, landing on the instance's ephemeral
+  `--writable-tmpfs` overlay - a `HeapDumpOnOutOfMemoryError` attempt there both competes
+  with the JVM heap for the same node's RAM and is unrecoverable after the instance stops.
+  Fixed: bound to node-local `/scratch` (same rationale as `SAVE_DIR`).
+
+**With both infra fixes in place, the OOM reproduced anyway - twice (jobs 521 and 523),
+same ~7-8 minute timing both times.** Retrieved the heap dump + GC log this time (job 523,
+via `srun --jobid=<id> --overlap` to reach node-local `/scratch` from the login node - not
+visible from the login node's own filesystem). GC log shows the unmistakable, now-familiar
+signature: **1297 consecutive "Pause Full" cycles**, heap pinned at `2046M/2048M`, `Old
+regions: 1980->1980` unchanged across all of them - reclaiming nothing, for over 13 minutes
+of wall-clock time, still ongoing when cancelled.
+
+**Root cause hypothesis (strong, not yet conclusively proven): CPU headroom, not the rate
+cap.** The GC log shows G1 `"Using 6 workers of 6"` for every full compaction - exactly
+matching CCAD's SLURM allocation (`scontrol show job`: `NumCPUs=6, CPUs/Task=6`, one trial
+per node, not contending with its sibling). My Mac's local validation ran with ~9-10 cores
+available (`docker stats` showed CPU% up to 900%+). G1's parallel-GC reclaim throughput
+scales with available cores; with only 6, the same "Mark live objects" phase that took
+~1.1-1.2s locally likely takes proportionally longer here, and if `BDActor`'s own Parquet
+write throughput is similarly CPU-bound and core-limited, the same nominal
+`TARGET_CYCLE_HZ=30` production rate - safely under the write/GC capacity on a beefier
+local machine - can still outpace it when squeezed onto 6 cores.
+
+**What this means**: Phase B's fix is real and directionally correct (confirmed: it turns
+an *unbounded* producer into a *bounded* one), but "bounded" was implicitly validated
+against local hardware's CPU headroom, not proven independent of it. CCAD - the actual
+original crash site issue #79 was trying to fix - still OOMs at the same 10-creature scale
+under its own real resource constraints. This is a genuine, unresolved gap, not a
+documentation nit: **the local PB5 "PASSED" result does not, by itself, mean CCAD is fixed.**
+
+**Options going forward (not yet decided):**
+- Lower `TARGET_CYCLE_HZ` specifically for CPU-constrained deployments (trades behavioural
+  fidelity/throughput for safety margin under fewer cores) - would need to be
+  config/env-driven, not the current hardcoded `Constants` value.
+- Request more CPUs per CCAD trial in the SLURM submission (if the cluster has the
+  capacity) to close the core-count gap with local instead of changing app behavior.
+- Reduce creature count for CCAD-scale validation as a stopgap while the above is decided.
+- Investigate whether `BDActor`'s Parquet write throughput specifically (not just G1 GC) is
+  the more core-sensitive half of this - not yet isolated from the GC evidence alone.
+
 ---
 
 ## Files to modify
