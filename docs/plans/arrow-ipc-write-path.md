@@ -42,7 +42,8 @@ Port the 22 column lists/getters verbatim from `ParquetBackend.java` (incl. two-
 - `flush()` stays a **no-op** (documented mid-run `Flush` contract from `Holder.handleRemoveObject`); `dumpToParquet()` (name kept — renaming touches Holder/messages for zero behavior; fix javadoc) finalizes idempotently.
 - **Post-finalize writes**: counted + logged no-op (`DL2L-PERSISTENCE-LATE-WRITE` marker + gauge), never a crash.
 - **Constructor self-check**: 1-row in-memory write+read round trip; failure throws naming the exact `--add-opens` flag → holder fails loudly at preStart.
-- Fat jar: existing `ServicesResourceTransformer` should suffice; add a post-`mvn package` startup smoke check (shade 2.4.1 is old; fallback = shade bump / `module-info.class` exclusion).
+- Fat jar: **bump maven-shade-plugin 2.4.1 → 3.x proactively** (user-approved) — Arrow 18.x artifacts carry `module-info.class` and multi-release sections that predate-2015 shade mishandles; exclude `module-info.class` from the shaded jar. Keep the post-`mvn package` startup smoke check regardless (unit tests run unshaded and cannot catch shading bugs).
+- Allocator choice note (user asked): `arrow-memory-netty` is a near-zero-cost swap if `-unsafe` misbehaves — both are fully off-heap (no GC pressure either way), and the per-allocation overhead netty adds is irrelevant to our reuse-heavy pattern (buffers allocated once per table, hot path is `setSafe` into existing memory). Netty does NOT remove the `--add-opens` requirement (that belongs to `arrow-memory-core`'s `MemoryUtil`), costs ~1.5MB of netty-4 jars (coexists with Akka 2.5's netty 3 — different packages), and must never be on the classpath together with `-unsafe` (both define `DefaultAllocationManagerFactory` — the duplicate-class shading hazard).
 
 ### W3. Fast-fail watchdog + O(1) queue depth + loud supervision (resilience pillar)
 
@@ -103,7 +104,7 @@ Memory gets sized per environment in W5; CPU must be too — the CCAD OOM was CP
 
 ## Risks
 
-- arrow-java 18.x on JDK 23 / old shade 2.4.1 (allocator init, resource merge) — mitigated by constructor self-check + package smoke; fallbacks: `arrow-memory-netty`, shade bump.
+- arrow-java 18.x on JDK 23 (reflective allocator init fails only at first use, with an obscure `ExceptionInInitializerError`; JDK 24+ `Unsafe` deprecation horizon applies to both allocator backends) — mitigated by constructor self-check + shaded-jar smoke check; fallback: swap to `arrow-memory-netty` (no GC/perf cost for our pattern — see W2 note). Shade 3.x bump is now proactive, not a fallback.
 - CCAD sizing (`6g`/`24G`/`14 CPUs` + per-role budgets) is a measured starting point — tune off the first job's numbers. Fewer trials per node (≤4 instead of up to 9) lengthens experiment wall-clock — explicitly accepted in favour of stability.
 - `ActiveProcessorCount=1` on manager/idProvider is tight (slower JIT warmup, single GC worker) — they're near-idle roles, but bump to 2 if startup handshakes get sluggish.
 - Watchdog false abort — 500k threshold vs 8k benign blips + hysteresis; worst case is a cheap loud abort of a trial that was invalid anyway.
