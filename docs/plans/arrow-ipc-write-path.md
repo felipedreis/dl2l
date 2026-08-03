@@ -111,12 +111,49 @@ Memory gets sized per environment in W5; CPU must be too — the CCAD OOM was CP
 - Buffering delays last-moment states — postStop flush + late-write counter make the residual window observable, strictly smaller than the silent-dead-writer window it replaces.
 - Stream truncation on crash — readable to last complete batch by design; document the recovery one-liner.
 
-## Key files
+## Affected artifacts (summary)
 
-- `src/main/java/br/cefetmg/lsi/l2l/creature/bd/ParquetBackend.java` (schema source → `TableSchemas`, then deleted)
-- `src/main/java/br/cefetmg/lsi/l2l/creature/bd/PersistenceExtension.java` (backend construction, watchdog + watcher)
-- `src/main/java/br/cefetmg/lsi/l2l/creature/bd/BDActor.java` (tableFor delegation, try/catch markers)
-- `src/main/java/br/cefetmg/lsi/l2l/creature/components/CreatureComponent.java` + `ComponentActor.java` (buffering, flush-on-stop)
-- `src/main/java/br/cefetmg/lsi/l2l/common/ComponentMessageQueue.java` (O(1) counter)
-- `scripts/run-dl2l.sh`, `scripts/dl2l_data/extract.py`
-- `ansible/roles/trial_runner_{local,pi,ccad}` templates, `docker/docker-compose.yml`, `ansible/roles/common/templates/docker-compose.yml.j2`, `inventories/ccad/group_vars/all.yml`
+| Artifact | Change | Work item | PR |
+|---|---|---|---|
+| **Java — persistence** | | | |
+| `creature/bd/TableSchemas.java` | **new** — declarative 22-table schema, single source of truth | W1 | 1 |
+| `creature/bd/ArrowIpcBackend.java` | **new** — Arrow IPC stream writer, off-heap, self-check | W2 | 1 |
+| `creature/bd/ParquetBackend.java` | **deleted** (schemas/getters ported to `TableSchemas` first) | W1/W2 | 1 |
+| `creature/bd/TunedParquetWriter.java` | **deleted** | W2 | 1 |
+| `creature/bd/PersistenceBackend.java` | modified — javadoc; interface kept for extensibility | W2 | 1 |
+| `creature/bd/PersistenceExtension.java` | modified — builds `ArrowIpcBackend`; starts watchdog thread + BDActor death-watch | W2/W3 | 1 |
+| `creature/bd/BDActor.java` | modified — `tableFor()` delegates to `TableSchemas`; try/catch with `DL2L-FATAL-*` markers | W1/W3 | 1 |
+| **Java — pipeline & components** | | | |
+| `common/ComponentMessageQueue.java` | modified — O(1) `AtomicLong` envelope counter | W3 | 1 |
+| `creature/components/CreatureComponent.java` | modified — `persist()` buffering (N=256) + `flushPersistBuffer()` | W4 | 1 |
+| `creature/components/ComponentActor.java` | modified — `postStop()` flushes buffer before subclass hook | W4 | 1 |
+| `creature/ml/MemoryConsolidator.java`, `MemoryTraceConsolidator.java` | modified — call-site comments (left unbuffered, per-episode rate) | W4 | 1 |
+| `common/Constants.java` | modified — `TARGET_CYCLE_HZ` env-overridable | W5 | 1 |
+| `creature/CreatureActor.java` | modified — stale "BDActor upserts" comment fixed | W5 | 1 |
+| **Build** | | | |
+| `pom.xml` | modified — add `arrow-vector`/`arrow-memory-core`/`arrow-memory-unsafe`; remove `parquet-floor`; shade plugin 2.4.1 → 3.x + `module-info.class` exclusion | W2 | 1 |
+| **Config & launch** | | | |
+| `scripts/run-dl2l.sh` | modified — `JAVA_XMX`, `JAVA_CPUS` (`-XX:ActiveProcessorCount`), `--add-opens`, `JAVA_OPTS` passthrough | W2/W5/W5b | 1 |
+| `src/main/resources/application.conf` | modified — `cluster-dispatcher` (fixed pool); explicit `collision-dispatcher` executor; `max-states-per-batch` 8192; `${?DL2L_...}` parallelism substitution | W4/W5b | 1 |
+| `config/docker-config.conf`, `config/ccad-config.conf` | modified — same dispatcher/batch changes as application.conf | W4/W5b | 1 |
+| `docker/docker-compose.yml` | modified — bind trial dir (fixes `raw/raw`); `JAVA_XMX` env | W5 | 1 |
+| `ansible/roles/common/templates/docker-compose.yml.j2` | modified — `JAVA_XMX`/`TARGET_CYCLE_HZ` env on holder | W5 | 1 |
+| **Ansible / environments** | | | |
+| `ansible/roles/trial_runner_local/tasks/one_trial.yml` | modified — bind trial dir, not `.../raw` (fixes `raw/raw` extraction failure) | W5 | 1 |
+| `ansible/roles/trial_runner_pi/templates/dl2l_trial.sh.j2` | modified — rewrite extraction to current CLI (drop `dl2l-db`, `--container/--docker-cmd`) | W5 | 1 |
+| `ansible/roles/trial_runner_ccad/templates/run_trial.sh.j2` | modified — `#SBATCH --mem`; per-role `JAVA_XMX`/`JAVA_CPUS`; `OMP_NUM_THREADS` on holder | W5/W5b | 1 |
+| `ansible/inventories/ccad/group_vars/all.yml` | modified — `ccad_sim_cpus: 14`, `ccad_holder_xmx: 6g`, `ccad_sim_mem: 24G` | W5/W5b | 1 |
+| **Python — extraction (PR 1)** | | | |
+| `scripts/dl2l_data/extract.py` | modified — read `.arrow` via pyarrow mmap + DuckDB register; `RAW_TABLES` deleted; backup glob | W6 | 1 |
+| `scripts/dl2l_data/tables.py` | **untouched** — 15 queries run verbatim | W6 | — |
+| **Tests (PR 1)** | | | |
+| `src/test/...` new: `TableSchemasTest` (golden parity), `ArrowIpcBackendTest` (round-trip, nulls, batch boundary, post-finalize, allocator limit), buffering tests; updated: `ComponentMessageQueueTest`/`ComponentMailboxTest` | new/modified | W7 | 1 |
+| Cross-language golden test (JUnit dump → `dl2l_data.extract` → assert 15 Parquet outputs) | **new** | W7 | 1 |
+| **Python — read path (PR 2)** | | | |
+| `analysis/dl2l_analysis/loading.py` | modified — retire `num()` coercions (shim for old datasets) | PR2-1 | 2 |
+| `ml/scripts/prepare_dataset.py` | modified — drop `_cast_numeric`; optional `--emit-arrow` | PR2-2 | 2 |
+| `ml/jepa/dataset.py` | modified — optional `.arrow` zero-copy fast path | PR2-3 | 2 |
+| `scripts/dl2l_data/extract.py` | modified — `creatures` birth/death dedup (post-query) | PR2-4 | 2 |
+| **Docs** | | | |
+| `docs/plans/parquet-write-path.md` | modified — postscript pointing here | PR2-5 | 2 |
+| `docs/plans/arrow-ipc-write-path.md` | this plan | — | 1 |
