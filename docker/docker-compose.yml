@@ -58,6 +58,9 @@ services:
       HOST: "dl2l-holder"
       PORT: "2551"
       TRIAL_ID: ${TRIAL_ID:-local}
+      # See scripts/run-dl2l.sh and docs/plans/arrow-ipc-write-path.md, W5.
+      JAVA_XMX: ${DL2L_JAVA_XMX:-2g}
+      TARGET_CYCLE_HZ: ${TARGET_CYCLE_HZ:-30}
     ports:
       - "9093:9091"
     networks:
@@ -72,10 +75,12 @@ services:
       - source: ../heapdumps
         target: /dl2l/heapdumps
         type: bind
-      # The raw-table Parquet dump BDActor writes at trial shutdown (DATA_DIR="/dl2l/data" -
-      # see docker/Dockerfile, PersistenceExtension.configure()). Replaces the old dl2l-db
-      # Postgres service entirely - see docs/plans/parquet-write-path.md.
-      - source: ../data/raw
+      # The raw-table Arrow IPC dump BDActor writes at trial shutdown (DATA_DIR="/dl2l/data" -
+      # see docker/Dockerfile, PersistenceExtension.configure()). PersistenceExtension appends
+      # its OWN "raw" subdir on top of DATA_DIR, so binding ../data here (not ../data/raw) is
+      # required - binding .../raw directly doubles it up into ../data/raw/raw on the host,
+      # which extraction never looks in - see docs/plans/arrow-ipc-write-path.md, W5.
+      - source: ../data
         target: /dl2l/data
         type: bind
 

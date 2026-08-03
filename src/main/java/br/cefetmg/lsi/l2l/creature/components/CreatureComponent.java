@@ -6,6 +6,7 @@ import br.cefetmg.lsi.l2l.creature.Creature;
 import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
 import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 
@@ -43,10 +44,54 @@ public abstract class CreatureComponent {
 
     private ComponentRef selfRef;
 
+    /**
+     * Threshold (in flattened {@link PersistenceState}s, not {@link #persist} calls) at which
+     * {@link #persist} auto-flushes its buffer as one consolidated array instead of telling
+     * BDActor immediately. {@code DL2L_PERSIST_BUFFER_STATES=0} restores the old one-tell-per-
+     * {@code persist()}-call behavior (passthrough). A cognitive cycle emits ~20-40 states
+     * across ~14 {@code persist()} calls at up to ~300Hz - buffering to 256 cuts BDActor's
+     * mailbox envelope rate by roughly two orders of magnitude. See
+     * docs/plans/arrow-ipc-write-path.md, W4.
+     *
+     * <p>Resolved once per instance (not a shared static constant) so
+     * {@link #setPersistBufferThresholdForTesting} can override just one component under
+     * test without every other component/test in the same JVM sharing that override.
+     */
+    private int persistBufferThreshold = persistBufferStatesFromEnv();
+
+    private static int persistBufferStatesFromEnv() {
+        String v = System.getenv("DL2L_PERSIST_BUFFER_STATES");
+        return v != null ? Integer.parseInt(v) : 256;
+    }
+
+    /**
+     * {@code null} when {@link #persistBufferThreshold} is 0 (passthrough - see {@link #persist}).
+     * Plain {@link ArrayList}, no locking: components are single-threaded actors (one message
+     * at a time via {@code ComponentActor}/{@code ComponentMailbox}), so this is only ever
+     * touched from that one thread.
+     */
+    private List<PersistenceState> persistBuffer =
+            persistBufferThreshold > 0 ? new ArrayList<>(persistBufferThreshold) : null;
+
     public CreatureComponent(SequentialId id) {
         this.id = id;
         this.nextStimulusId = new SequentialId(id.sequential);
         this.logger = Logger.getLogger(this.getClass().getName());
+    }
+
+    /**
+     * Test-only hook overriding this component's {@link #persistBufferThreshold} without
+     * depending on process env vars (which, being read once per instance from
+     * {@link System#getenv}, can't otherwise be varied within one test JVM). Production code
+     * never calls this - the env var ({@code DL2L_PERSIST_BUFFER_STATES}) is the only knob
+     * there. Public because test harnesses live in a different package
+     * ({@code br.cefetmg.lsi.l2l.creature.testing}); any pending buffered states are flushed
+     * first so switching modes mid-test never silently drops them.
+     */
+    public final void setPersistBufferThresholdForTesting(int threshold) {
+        flushPersistBuffer();
+        this.persistBufferThreshold = threshold;
+        this.persistBuffer = threshold > 0 ? new ArrayList<>(threshold) : null;
     }
 
     /** Overload for callers (tests) that don't have a MetricsExtension to wire in. */
@@ -102,11 +147,43 @@ public abstract class CreatureComponent {
      * message keeps every persist(...) call atomic - always landed in the same batch/transaction,
      * never split - restoring the same one-call-one-transaction invariant the old synchronous
      * design always had.
+     *
+     * <p>Producer-side buffered when {@link #persistBufferThreshold} &gt; 0 (the default -
+     * see docs/plans/arrow-ipc-write-path.md, W4): appends to {@link #persistBuffer} instead of
+     * telling BDActor immediately, auto-flushing (still as one array, preserving the atomicity
+     * guarantee above) once the buffer reaches the threshold. {@link #flushPersistBuffer()}
+     * (called on threshold here, and from {@code ComponentActor.postStop()}) is what actually
+     * sends.
      */
     protected final void persist(PersistenceState... states) {
         if (bdRef == null) return;
-        logger.fine(() -> "persisting " + states.length + " state(s)");
-        bdRef.tell(states);
+        if (persistBuffer == null) {
+            logger.fine(() -> "persisting " + states.length + " state(s)");
+            bdRef.tell(states);
+            return;
+        }
+        for (PersistenceState s : states) persistBuffer.add(s);
+        if (persistBuffer.size() >= persistBufferThreshold) {
+            flushPersistBuffer();
+        }
+    }
+
+    /**
+     * Sends whatever is currently buffered as one consolidated array and clears the buffer -
+     * a no-op if buffering is off ({@link #persistBufferThreshold}=0) or nothing is pending.
+     * Called automatically once {@link #persist} fills the buffer to threshold, and once more
+     * from {@code ComponentActor.postStop()} so a component dying mid-buffer (creature death,
+     * actor restart) doesn't silently drop its last, sub-threshold batch of states - the only
+     * residual window is between a persist() call and this component's own postStop(), strictly
+     * smaller than the risk it replaces (every unbuffered persist() was already only as durable
+     * as BDActor's mailbox FIFO, same as before this change).
+     */
+    final void flushPersistBuffer() {
+        if (persistBuffer == null || persistBuffer.isEmpty() || bdRef == null) return;
+        PersistenceState[] batch = persistBuffer.toArray(new PersistenceState[0]);
+        persistBuffer.clear();
+        logger.fine(() -> "flushing persist buffer of " + batch.length + " state(s)");
+        bdRef.tell(batch);
     }
 
     /**

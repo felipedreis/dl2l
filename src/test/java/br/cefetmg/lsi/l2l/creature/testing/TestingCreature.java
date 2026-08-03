@@ -93,6 +93,15 @@ public final class TestingCreature implements Creature {
         components.forEach((cls, component) -> {
             RecordingComponentRef selfRef = refs.get(cls);
             component.init(this, selfRef);
+            // Functional tests assert on bdSink() synchronously, right after a single
+            // stimulus/tick - production's producer-side persist() buffering (see
+            // CreatureComponent.persist(), docs/plans/arrow-ipc-write-path.md W4) would
+            // otherwise hold most single-cycle writes back until a much later flush, which
+            // this harness has no equivalent trigger for. Passthrough mode here tests the
+            // same "does persist() eventually reach bd()" behavior the buffering itself
+            // doesn't change; the buffering's own threshold/flush mechanics are covered by
+            // CreatureComponentPersistBufferingTest instead.
+            component.setPersistBufferThresholdForTesting(0);
         });
     }
 

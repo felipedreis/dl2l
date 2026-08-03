@@ -43,6 +43,10 @@ public class ComponentActor extends UntypedActor {
 
     @Override
     public void postStop() throws Exception {
+        // Flush any producer-side-buffered persist() states (see CreatureComponent.persist(),
+        // docs/plans/arrow-ipc-write-path.md W4) before the subclass's own teardown hook, so a
+        // component dying with a sub-threshold batch still pending doesn't drop it.
+        component.flushPersistBuffer();
         component.postStop();
         super.postStop();
     }

@@ -8,13 +8,20 @@
     _trial: "{{ trial_item.trial }}"
     _proj: "exp_{{ experiment_cfg.name }}_{{ trial_item.condition.key }}_t{{ trial_item.trial }}"
 
-- name: Set per-trial raw-data dir fact
+- name: Set per-trial dir facts
   ansible.builtin.set_fact:
+    # Bind-mounted into dl2l-holder as /dl2l/data (see docker-compose.yml.j2) - the JVM (DATA_DIR=
+    # /dl2l/data, see docker/Dockerfile) appends its OWN "raw" subdir on top of that
+    # (PersistenceExtension.configure) writing to /dl2l/data/raw/*.arrow. Binding _raw_dir
+    # itself here (as this used to) doubled that up into .../trial_N/raw/raw/*.arrow on the
+    # host, which extraction below never looked in - see docs/plans/arrow-ipc-write-path.md, W5.
+    # Bind the trial dir instead so the JVM's own "raw" append lands at exactly _raw_dir.
+    _trial_dir: "{{ experiment_data_dir }}/{{ _cond.key }}/trial_{{ _trial }}"
     _raw_dir: "{{ experiment_data_dir }}/{{ _cond.key }}/trial_{{ _trial }}/raw"
 
-- name: "[{{ _proj }}] Ensure the raw-data dir exists (bind-mounted into dl2l-holder as /dl2l/data)"
+- name: "[{{ _proj }}] Ensure the trial dir exists (bind-mounted into dl2l-holder as /dl2l/data)"
   ansible.builtin.file:
-    path: "{{ _raw_dir }}"
+    path: "{{ _trial_dir }}"
     state: directory
     mode: "0755"
 
@@ -23,7 +30,7 @@
     argv: [docker, compose, -p, "{{ _proj }}", -f, "{{ compose_file }}", down, -v, --remove-orphans]
   environment:
     SIMULATION: "{{ _cond.simulation }}"
-    DL2L_RAW_DATA_DIR: "{{ _raw_dir }}"
+    DL2L_RAW_DATA_DIR: "{{ _trial_dir }}"
   changed_when: false
   failed_when: false
 
@@ -32,7 +39,7 @@
     argv: [docker, compose, -p, "{{ _proj }}", -f, "{{ compose_file }}", up, -d]
   environment:
     SIMULATION: "{{ _cond.simulation }}"
-    DL2L_RAW_DATA_DIR: "{{ _raw_dir }}"
+    DL2L_RAW_DATA_DIR: "{{ _trial_dir }}"
   changed_when: true
 
 - name: "[{{ _proj }}] Resolve holder container id"
@@ -40,7 +47,7 @@
     argv: [docker, compose, -p, "{{ _proj }}", -f, "{{ compose_file }}", ps, -q, dl2l-holder]
   environment:
     SIMULATION: "{{ _cond.simulation }}"
-    DL2L_RAW_DATA_DIR: "{{ _raw_dir }}"
+    DL2L_RAW_DATA_DIR: "{{ _trial_dir }}"
   register: _holder_id
   changed_when: false
 
@@ -73,5 +80,5 @@
     argv: [docker, compose, -p, "{{ _proj }}", -f, "{{ compose_file }}", down, -v]
   environment:
     SIMULATION: "{{ _cond.simulation }}"
-    DL2L_RAW_DATA_DIR: "{{ _raw_dir }}"
+    DL2L_RAW_DATA_DIR: "{{ _trial_dir }}"
   changed_when: true

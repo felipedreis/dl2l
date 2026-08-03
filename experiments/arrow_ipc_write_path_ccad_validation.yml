@@ -1,0 +1,43 @@
+name: arrow_ipc_write_path_ccad_validation
+trials: 2
+
+conditions:
+  - key: 1_baseline
+    simulation: simulations/20260717_memory_vs_wm_dense_no_reposition_1_baseline.conf
+    label: Baseline
+    color: "#9e9e9e"
+
+# CCAD has no local docker daemon — pull the manually-pushed image instead of
+# building. Run with:
+#   ansible-playbook -i inventories/ccad run-experiment.yml \
+#     -e experiment=arrow_ipc_write_path_ccad_validation \
+#     -e dl2l_image=ghcr.io/felipedreis/dl2l:arrow-ipc-write-path
+image:
+  source: registry
+
+# PR1 verification item 6 of docs/plans/arrow-ipc-write-path.md: real-hardware
+# confirmation of the Arrow IPC write path (ArrowIpcBackend, off-heap buffers,
+# producer-side persist() buffering, the fast-fail watchdog) under CCAD's tight
+# CPU/memory constraints, with the W5/W5b sizing changes (JAVA_XMX/JAVA_CPUS,
+# --mem, ccad_sim_cpus 6->14) applied. Reuses the same condition
+# p79_ccad_baseline_validation.yml validated the direct-Parquet write path
+# against (20260717_memory_vs_wm_dense_no_reposition's baseline, the exact
+# scenario that OOM'd on CCAD under the original JPA-removal/BDActor-sharding
+# rewrite) so the two runs are directly comparable. Confirmed clean on a local
+# 10-creature Docker Compose run immediately before this CCAD run: queue_depth
+# flat at 0 throughout, arrow allocation ~13.5MB (well under the 256MB
+# default), holder RSS flat ~1GB, natural completion (all 10 creatures dead)
+# in ~5 minutes wall-clock, exit code 0, 22/22 non-trivial .arrow files,
+# extraction + pandas analysis smoke all passed. 2 trials — a targeted
+# regression/validation check, not a fresh study.
+data_dir: ml/data_arrow_ipc_write_path_ccad_validation
+
+extract:
+  format: parquet
+  backup: true
+  tables: all
+
+upload:
+  enabled: true
+  repo: felipedreis/dl2l-experiments
+  prefix: arrow_ipc_write_path/ccad_validation

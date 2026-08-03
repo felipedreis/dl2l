@@ -118,11 +118,15 @@ public class Main {
     }
 
     private static ActorRef setupSimulationManager(ActorSystem system, Simulation settings) {
-        return system.actorOf(Props.create(SimulationManager.class, settings), "manager");
+        // cluster-dispatcher: see docs/plans/arrow-ipc-write-path.md, W5b - isolates the
+        // handshake/heartbeat/Finish protocol from creature-load fork-join contention.
+        return system.actorOf(Props.create(SimulationManager.class, settings)
+                .withDispatcher("cluster-dispatcher"), "manager");
     }
 
     private static ActorRef setupHolder(ActorSystem system, Simulation settings, String saveDir) {
-        return system.actorOf(Props.create(Holder.class, settings, saveDir), "holder");
+        return system.actorOf(Props.create(Holder.class, settings, saveDir)
+                .withDispatcher("cluster-dispatcher"), "holder");
     }
 
     static {

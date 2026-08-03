@@ -10,6 +10,9 @@ target/
 .DS_Store
 __pycache__/
 
+# maven-shade-plugin writes this at the project root (not under target/) on every `mvn package`.
+dependency-reduced-pom.xml
+
 # Training data, experiment outputs, and model checkpoints live on HuggingFace,
 # not in git. Only the small deployed TorchScript models (src/main/resources/models/)
 # stay in the repo since they are needed to build the JAR.

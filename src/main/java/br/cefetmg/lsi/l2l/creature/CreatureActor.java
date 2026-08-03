@@ -233,8 +233,10 @@ public class CreatureActor implements Creature {
         MLServiceExtension.of(TypedActor.context().system()).releaseAdapter(id.key);
         SimulationSettingsExtension.of(TypedActor.context().system()).releaseCreatureSettings(id.key);
 
-        // Same UUID as the birth write above - BDActor upserts (ON CONFLICT DO UPDATE), so
-        // this correctly overwrites deadtime rather than being dropped as a duplicate.
+        // Same UUID as the birth write above - no upsert semantics (see ArrowIpcBackend's
+        // javadoc): this lands as a second, duplicate creature_state row rather than
+        // overwriting deadtime in place. Deduped downstream at extraction time, not here -
+        // see docs/plans/arrow-ipc-write-path.md PR 2's creatures birth/death dedup.
         bd().tell(new PersistenceState[]{state});
 
         logger.info("Sending remove order to holder");

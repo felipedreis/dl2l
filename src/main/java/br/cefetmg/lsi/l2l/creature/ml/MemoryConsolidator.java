@@ -237,6 +237,11 @@ public class MemoryConsolidator extends UntypedActor {
     private void persistResult(ConsolidationResult result) {
         // Routes through the single per-JVM BDActor (see PersistenceExtension) instead of
         // opening its own connection - see docs/plans/remove-jpa-persistence-layer.md.
+        // Deliberately NOT buffered like CreatureComponent.persist() - this fires once per
+        // sleep episode (already a low, naturally-batched rate), so the producer-side
+        // buffering added for the ~300Hz cognitive-cycle path (see
+        // docs/plans/arrow-ipc-write-path.md, W4) would add latency here for no mailbox-
+        // pressure benefit.
         PersistenceState[] states = new PersistenceState[result.batches().size() + 1];
         states[0] = result.episode();
         for (int i = 0; i < result.batches().size(); i++) states[i + 1] = result.batches().get(i);

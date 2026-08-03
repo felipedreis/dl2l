@@ -101,6 +101,9 @@ public class MemoryTraceConsolidator extends UntypedActor {
     private void persist(MemoryTraceStat stat) {
         // Routes through the single per-JVM BDActor (see PersistenceExtension) instead of
         // opening its own connection - see docs/plans/remove-jpa-persistence-layer.md.
+        // Deliberately NOT buffered like CreatureComponent.persist() - same rationale as
+        // MemoryConsolidator.persistResult: per-sleep-episode rate, already low, see
+        // docs/plans/arrow-ipc-write-path.md, W4.
         bdActor.tell(new PersistenceState[]{stat}, self());
     }
 
