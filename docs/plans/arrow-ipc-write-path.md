@@ -69,6 +69,16 @@ Port the 22 column lists/getters verbatim from `ParquetBackend.java` (incl. two-
   - Pi `ansible/roles/trial_runner_pi/templates/dl2l_trial.sh.j2`: still passes removed `--container/--docker-cmd` flags and references the removed `dl2l-db` service — rewrite to current CLI (`--raw-dir`).
   - `CreatureActor.java:236`: stale "BDActor upserts (ON CONFLICT DO UPDATE)" comment — false since #81.
 
+### W5b. CPU accounting and dispatcher rescale (CCAD)
+
+Memory gets sized per environment in W5; CPU must be too — the CCAD OOM was CPU-headroom-dependent (G1 "Using 6 workers of 6", writer + GC starved). Decision: **trade trial parallelism for simulation performance/stability.**
+
+- **Raise the CCAD CPU slice**: `ccad_sim_cpus: 6 → 14` (`inventories/ccad/group_vars/all.yml`, feeds `#SBATCH --cpus-per-task` in `run_trial.sh.j2`). 14 packs exactly 4 trials on a 56-CPU node and gives the holder a ~10-core budget — the same headroom the local validation passed with. Stays a var (10–15 range acceptable); combined with W5's `--mem`, SLURM now accounts for both resources, so co-location density drops from up-to-9 to ≤4 trials/node — the accepted trade.
+- **Per-role CPU budgets via `-XX:ActiveProcessorCount`**: all four role JVMs share one cpuset today, and each sizes its G1 workers, fork-join pools (`parallelism-factor × availableProcessors`), JIT, netty, and libtorch intra-op threads as if it owned the whole slice — structural oversubscription that `parallelism-factor=1.0` only mitigated. Add `JAVA_CPUS` to `scripts/run-dl2l.sh` (`-XX:ActiveProcessorCount=$JAVA_CPUS` when set — one flag rescales every `availableProcessors`-derived pool at once). CCAD budgets on a 14-CPU slice: holder 10, collisionDetector 2, manager 1, idProvider 1, plumbed per-instance in `run_trial.sh.j2`. Unset elsewhere (local/pi behavior unchanged).
+- **Dedicated fixed pool for cluster/simulation actors**: fork-join's work-stealing suits many short CPU-bound tasks with idle cores to steal from; under a controlled cpuset it adds contention and gives zero isolation between cluster liveness and creature load. Add a `cluster-dispatcher` (`thread-pool-executor`, `fixed-pool-size = 2`) assigned to `SimulationManager`, `Holder`, and `CollisionDetectorActor`, so handshakes/heartbeats/the Finish protocol never queue behind creature work — directly targets the observed livelock symptom (manager 15s handshake timeout, `Up seen=false`) under CPU/GC pressure. Also give `collision-dispatcher` an explicit executor + size — today it configures only the priority mailbox and silently inherits default-dispatcher settings.
+- **Env-tunable parallelism without rebuilds**: HOCON `${?DL2L_...}` substitution for the fork-join sizes (`component-dispatcher`, `object-dispatcher`, `default-dispatcher`) in `config/docker-config.conf`/`config/ccad-config.conf`; defaults preserve today's values.
+- **Native torch threads**: `wm-dispatcher` pins DJL inference to one actor thread, but libtorch's own intra-op pool sizes off visible cores; set `OMP_NUM_THREADS` (holder instance, CCAD) alongside `JAVA_CPUS`. (`ActiveProcessorCount` covers the JVM side; this covers the native side.)
+
 ### W6. `extract.py` consumes Arrow (same PR as the writer)
 
 - `scripts/dl2l_data/extract.py`: delete `RAW_TABLES`; `_open_raw_views` globs `raw_dir/*.arrow` → `pa.ipc.open_stream(pa.memory_map(path)).read_all()` → `conn.register(...)` (DuckDB scans Arrow zero-copy) → `CREATE VIEW data.<t> AS ...`. Keep a missing-table warning against the tables the queries reference.
@@ -79,7 +89,7 @@ Port the 22 column lists/getters verbatim from `ParquetBackend.java` (incl. two-
 1. `mvn package && mvn test` + new tests: `TableSchemas` golden parity vs old column lists; `ArrowIpcBackend` round-trip (all-null rows, batch boundary N/N+1, post-finalize drop, allocator-limit breach); queue counter; component buffering (threshold, postStop flush, N=0 passthrough).
 2. Cross-language golden test: JUnit dumps fixed states per table → run `dl2l_data.extract` over it → assert the 15 Parquet outputs' columns/dtypes/values vs a checked-in expectation (the analysis-contract gate).
 3. Canonical load repro: `20260717_memory_vs_wm_dense_no_reposition_1_baseline.conf` (10 creatures) full local run — queue depth ~0, RSS flat, arrow allocation < limit, 22 non-trivial `.arrow` files, extraction + analysis smoke.
-4. Constrained rehearsal: same conf under docker `cpus: 6` + `JAVA_XMX=2g` (CCAD emulation) — expect clean pass or fast watchdog abort with marker, never livelock; repeat at 6g.
+4. Constrained rehearsal: same conf under docker `cpus: 6` + `JAVA_XMX=2g` (worst-case CCAD emulation) — expect clean pass or fast watchdog abort with marker, never livelock; repeat with the real target shape (`cpus: 14`, per-role `JAVA_CPUS` budgets, 6g).
 5. Delete `ParquetBackend`/`TunedParquetWriter`/parquet-floor; re-run 1–3.
 6. **Final gate**: CCAD `p79_ccad_baseline_validation` (2 trials) with new heap/`--mem` — both complete, data extracted and uploaded (submit / `-e rescue=true` collect pattern).
 
@@ -94,7 +104,8 @@ Port the 22 column lists/getters verbatim from `ParquetBackend.java` (incl. two-
 ## Risks
 
 - arrow-java 18.x on JDK 23 / old shade 2.4.1 (allocator init, resource merge) — mitigated by constructor self-check + package smoke; fallbacks: `arrow-memory-netty`, shade bump.
-- CCAD sizing (`6g`/`24G`) is a measured starting point — tune off the first job's numbers.
+- CCAD sizing (`6g`/`24G`/`14 CPUs` + per-role budgets) is a measured starting point — tune off the first job's numbers. Fewer trials per node (≤4 instead of up to 9) lengthens experiment wall-clock — explicitly accepted in favour of stability.
+- `ActiveProcessorCount=1` on manager/idProvider is tight (slower JIT warmup, single GC worker) — they're near-idle roles, but bump to 2 if startup handshakes get sluggish.
 - Watchdog false abort — 500k threshold vs 8k benign blips + hysteresis; worst case is a cheap loud abort of a trial that was invalid anyway.
 - Buffering delays last-moment states — postStop flush + late-write counter make the residual window observable, strictly smaller than the silent-dead-writer window it replaces.
 - Stream truncation on crash — readable to last complete batch by design; document the recovery one-liner.
