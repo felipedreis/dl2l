@@ -68,8 +68,10 @@
     dest: "{{ remote_work_dir }}/jobs/build_{{ item.name }}_image.sh"
     mode: "0755"
   loop:
+    # postgres removed (issue #79 — the holder JVM writes Parquet directly
+    # instead, see docs/plans/parquet-write-path.md) — dl2l is now the only
+    # image this pipeline needs on CCAD.
     - { name: dl2l, sif: dl2l.sif, ref: "{{ dl2l_image }}" }
-    - { name: postgres, sif: postgres.sif, ref: "postgres:16" }
   loop_control:
     label: "{{ item.name }}"
 
@@ -84,7 +86,6 @@
     executable: /bin/bash
   loop:
     - { name: dl2l }
-    - { name: postgres }
   loop_control:
     label: "{{ item.name }}"
   register: _launch
@@ -101,7 +102,6 @@
     argv: [cat, "{{ remote_work_dir }}/.{{ item.name }}_image_build.done"]
   loop:
     - { name: dl2l }
-    - { name: postgres }
   loop_control:
     label: "{{ item.name }}"
   register: _build_done

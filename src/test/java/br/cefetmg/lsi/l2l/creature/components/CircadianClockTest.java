@@ -7,6 +7,11 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class CircadianClockTest {
 
+    // Issue #79 Phase B: tick() now takes dtSeconds. Passing exactly one nominal cycle's
+    // worth of wall-clock time reproduces the pre-Phase-B per-call semantics these tests
+    // were written against (cycleEquivalent == 1.0 exactly).
+    private static final double NOMINAL_DT = 1.0 / Constants.TARGET_CYCLE_HZ;
+
     // --- ActiveCircadianClock ---
 
     @Test
@@ -22,7 +27,7 @@ class CircadianClockTest {
         for (int i = 0; i < Constants.CIRCADIAN_PERIOD_TICKS * 3; i++) {
             assertTrue(clock.driveRate() > 0,
                     "driveRate should always be positive at tick " + i);
-            clock.tick();
+            clock.tick(NOMINAL_DT);
         }
     }
 
@@ -34,7 +39,7 @@ class CircadianClockTest {
             double rate = clock.driveRate();
             if (rate < min) min = rate;
             if (rate > max) max = rate;
-            clock.tick();
+            clock.tick(NOMINAL_DT);
         }
         // After a full period the oscillator must have both a clear minimum and maximum
         double expected_min = Constants.BASE_SLEEP_DRIVE - Constants.CIRCADIAN_AMPLITUDE;
@@ -47,7 +52,7 @@ class CircadianClockTest {
     void activeClock_phaseWrapsAfterOnePeriod() {
         ActiveCircadianClock clock = new ActiveCircadianClock();
         double rateAtStart = clock.driveRate();
-        for (int i = 0; i < Constants.CIRCADIAN_PERIOD_TICKS; i++) clock.tick();
+        for (int i = 0; i < Constants.CIRCADIAN_PERIOD_TICKS; i++) clock.tick(NOMINAL_DT);
         assertEquals(rateAtStart, clock.driveRate(), 1e-10,
                 "driveRate should return to start value after one full period");
     }
@@ -59,7 +64,7 @@ class CircadianClockTest {
         DisabledCircadianClock clock = new DisabledCircadianClock();
         assertEquals(0.0, clock.driveRate());
         for (int i = 0; i < 100; i++) {
-            clock.tick();
+            clock.tick(NOMINAL_DT);
             assertEquals(0.0, clock.driveRate(),
                     "DisabledCircadianClock must always return 0.0");
         }
@@ -69,7 +74,7 @@ class CircadianClockTest {
     void disabledClock_tickIsNoOp() {
         DisabledCircadianClock clock = new DisabledCircadianClock();
         // tick() must not throw and must leave driveRate() at 0
-        assertDoesNotThrow(() -> { for (int i = 0; i < 1000; i++) clock.tick(); });
+        assertDoesNotThrow(() -> { for (int i = 0; i < 1000; i++) clock.tick(NOMINAL_DT); });
         assertEquals(0.0, clock.driveRate());
     }
 
@@ -78,14 +83,14 @@ class CircadianClockTest {
     @Test
     void circadianInterface_activeImplementationIsNonZero() {
         CircadianClock clock = new ActiveCircadianClock();
-        clock.tick();
+        clock.tick(NOMINAL_DT);
         assertTrue(clock.driveRate() > 0);
     }
 
     @Test
     void circadianInterface_disabledImplementationIsZero() {
         CircadianClock clock = new DisabledCircadianClock();
-        clock.tick();
+        clock.tick(NOMINAL_DT);
         assertEquals(0.0, clock.driveRate());
     }
 }

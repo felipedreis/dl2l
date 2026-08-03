@@ -1,0 +1,33 @@
+# Issue #79 Phase A validation: Constants.java's metabolic/circadian/sleep rates were
+# rescaled /= S (accrual/clearing) or *= S (cycle-denominated windows), S=4.286, to
+# compensate for the ~4.3x cognitive-cycle throughput increase since #76/#78 (see
+# docs/reports/p79_metabolic_clock_report.md for the measurement). This experiment checks
+# whether the cheap constant rescale alone restores realistic lifespan/rhythm and gives
+# creatures enough cognitive cycles per lifetime for behaviour to emerge, or whether the
+# more durable wall-clock-coupling fix (Phase B) is needed.
+name: p79_metabolic_rescale
+trials: 3
+
+conditions:
+  - key: 1_rescaled
+    simulation: simulations/p79_metabolic_rescale.conf
+    label: Phase A rescale
+    color: "#2e7d32"
+
+image:
+  source: build
+
+data_dir: ml/data_p79_metabolic_rescale
+
+extract:
+  format: parquet
+  backup: true
+  tables: all
+
+upload:
+  enabled: true
+  repo: felipedreis/dl2l-experiments
+  prefix: p79/
+
+analysis:
+  module: p79_metabolic_rescale

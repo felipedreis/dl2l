@@ -31,7 +31,12 @@ public class PartialAppraisal extends CreatureComponent {
     private EmotionalSystem emotionalSystem;
     // Accumulated circadian sleep-drive; flushed every HOMEO_BATCH_SIZE cycles (driveRate varies per phase).
     private double accumulatedSleepDrive = 0;
+    // Issue #79 Phase B: accumulated dt-weighted hunger drift, flushed alongside sleep drive
+    // every HOMEO_BATCH_SIZE cycles - see tickMetabolicPacemaker()'s javadoc.
+    private double accumulatedHungerDelta = 0;
     private int    metabolicBatchCycle   = 0;
+    // Issue #79 Phase B: wall-clock timestamp of the previous onReceive, for dt-weighting.
+    private long lastTickNanos;
 
     public PartialAppraisal(SequentialId id, LearningSettings learningSettings) {
         super(id);
@@ -43,6 +48,7 @@ public class PartialAppraisal extends CreatureComponent {
         super.preStart();
         circadian = learningSettings.isCircadianEnabled() ? new ActiveCircadianClock() : new DisabledCircadianClock();
         emotionalSystem = creature.emotions();
+        lastTickNanos = System.nanoTime();
     }
 
     @Override
@@ -106,16 +112,30 @@ public class PartialAppraisal extends CreatureComponent {
      * <p>Sending one stimulus per batch rather than per cycle reduces the message rate
      * from ≈134/s to ≈7/s, preventing the stale-backlog problem where thousands of
      * AdenosinergicStimuli built up ahead of CholinergicStimuli and drove sleep to MAX
-     * before clearing could happen. Since {@code DELTA} is constant, the batched delta
-     * ({@code DELTA × HOMEO_BATCH_SIZE}) is biologically identical to sending N individual ones.
-     * Sleep-drive rate is accumulated because it varies with circadian phase.
+     * before clearing could happen. Sleep-drive rate and hunger drift are both accumulated
+     * (rather than flushed as one flat {@code DELTA × HOMEO_BATCH_SIZE}) because - issue #79
+     * Phase B - each cycle's contribution is now weighted by {@code cycleEquivalent}: the
+     * actual wall-clock time elapsed since the last cycle, expressed in units of "how many
+     * nominal cycles' worth of time" (exactly 1.0 on-schedule, more if this cycle fired
+     * late, less if early - e.g. under GC-thrashing jitter, or because this cycle came from
+     * the heartbeat/perception dual path in {@code Creature.tick()}'s javadoc rather than a
+     * strict one-cycle-per-tick cadence). This makes the accumulated total depend on real
+     * elapsed time, not on how many {@code onReceive} calls happened to fire in that time -
+     * at exactly nominal timing the sum after {@code HOMEO_BATCH_SIZE} cycles is bit-for-bit
+     * {@code DELTA × HOMEO_BATCH_SIZE}, unchanged from before.
      *
      * @return the {@link AdrenergicStimulus} sent this cycle, or {@code null} if the batch is not yet full
      */
     private AdrenergicStimulus tickMetabolicPacemaker() {
-        circadian.tick();
+        long now = System.nanoTime();
+        double dtSeconds = (now - lastTickNanos) / 1e9;
+        lastTickNanos = now;
+        double cycleEquivalent = dtSeconds * Constants.TARGET_CYCLE_HZ;
+
+        circadian.tick(dtSeconds);
         double sleepDriveRate = circadian.driveRate();
-        if (sleepDriveRate > 0) accumulatedSleepDrive += sleepDriveRate;
+        if (sleepDriveRate > 0) accumulatedSleepDrive += sleepDriveRate * cycleEquivalent;
+        accumulatedHungerDelta += Constants.DELTA * cycleEquivalent;
 
         if (++metabolicBatchCycle >= Constants.HOMEO_BATCH_SIZE) {
             return flushMetabolicBatch();
@@ -244,8 +264,8 @@ public class PartialAppraisal extends CreatureComponent {
 
     private AdrenergicStimulus flushMetabolicBatch() {
         metabolicBatchCycle = 0;
-        AdrenergicStimulus adrenergic = new AdrenergicStimulus(this.id, nextStimulusId(),
-                Constants.DELTA * Constants.HOMEO_BATCH_SIZE);
+        AdrenergicStimulus adrenergic = new AdrenergicStimulus(this.id, nextStimulusId(), accumulatedHungerDelta);
+        accumulatedHungerDelta = 0;
         creature.homeostatic().tell(adrenergic);
         if (accumulatedSleepDrive > 0) {
             creature.homeostatic().tell(

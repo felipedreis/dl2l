@@ -178,6 +178,13 @@ public final class TestingCreature implements Creature {
         holder.tell(id);
     }
 
+    // No-op: this harness has no collision detector, so nothing drives perception off a
+    // real updatePositioningAttribute() send. Cognitive cycles are driven directly by
+    // TestingHarness.tick() (draining PartialAppraisal's dispatcher) - see its javadoc.
+    @Override
+    public void tick() {
+    }
+
     @Override
     public void setAlive(boolean alive) {
         this.alive = alive;

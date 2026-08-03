@@ -8,11 +8,22 @@
     _trial: "{{ trial_item.trial }}"
     _proj: "exp_{{ experiment_cfg.name }}_{{ trial_item.condition.key }}_t{{ trial_item.trial }}"
 
+- name: Set per-trial raw-data dir fact
+  ansible.builtin.set_fact:
+    _raw_dir: "{{ experiment_data_dir }}/{{ _cond.key }}/trial_{{ _trial }}/raw"
+
+- name: "[{{ _proj }}] Ensure the raw-data dir exists (bind-mounted into dl2l-holder as /dl2l/data)"
+  ansible.builtin.file:
+    path: "{{ _raw_dir }}"
+    state: directory
+    mode: "0755"
+
 - name: "[{{ _proj }}] Clean up any stale containers from a previous attempt"
   ansible.builtin.command:
     argv: [docker, compose, -p, "{{ _proj }}", -f, "{{ compose_file }}", down, -v, --remove-orphans]
   environment:
     SIMULATION: "{{ _cond.simulation }}"
+    DL2L_RAW_DATA_DIR: "{{ _raw_dir }}"
   changed_when: false
   failed_when: false
 
@@ -21,6 +32,7 @@
     argv: [docker, compose, -p, "{{ _proj }}", -f, "{{ compose_file }}", up, -d]
   environment:
     SIMULATION: "{{ _cond.simulation }}"
+    DL2L_RAW_DATA_DIR: "{{ _raw_dir }}"
   changed_when: true
 
 - name: "[{{ _proj }}] Resolve holder container id"
@@ -28,15 +40,8 @@
     argv: [docker, compose, -p, "{{ _proj }}", -f, "{{ compose_file }}", ps, -q, dl2l-holder]
   environment:
     SIMULATION: "{{ _cond.simulation }}"
+    DL2L_RAW_DATA_DIR: "{{ _raw_dir }}"
   register: _holder_id
-  changed_when: false
-
-- name: "[{{ _proj }}] Resolve db container id"
-  ansible.builtin.command:
-    argv: [docker, compose, -p, "{{ _proj }}", -f, "{{ compose_file }}", ps, -q, dl2l-db]
-  environment:
-    SIMULATION: "{{ _cond.simulation }}"
-  register: _db_id
   changed_when: false
 
 - name: "[{{ _proj }}] Wait for the simulation to finish (docker wait on the holder)"
@@ -55,7 +60,7 @@
         '--condition', _cond.key,
         '--trial', _trial | string,
         '--out', experiment_data_dir,
-        '--container', _db_id.stdout,
+        '--raw-dir', _raw_dir,
         '--format', experiment_cfg.extract.format,
       ] + ([] if experiment_cfg.extract.backup else ['--skip-backup']) }}
     chdir: "{{ repo_root }}"
@@ -68,4 +73,5 @@
     argv: [docker, compose, -p, "{{ _proj }}", -f, "{{ compose_file }}", down, -v]
   environment:
     SIMULATION: "{{ _cond.simulation }}"
+    DL2L_RAW_DATA_DIR: "{{ _raw_dir }}"
   changed_when: true

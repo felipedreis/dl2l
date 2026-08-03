@@ -1,0 +1,28 @@
+# Throwaway diagnostic, NOT a scientific experiment (same status as
+# 20260728_tick_rate_diagnostic.yml). Purpose: measure the CURRENT (post-#76/#78,
+# pre-fix) cognitive-cycle rate and lifespan under unscaled Constants.java, using
+# the exact same 3-creature/food-depleting setup as the pre-#76 p59 calibration
+# baseline (docs/reports/p59_batching_fix_report.md: ~150s lifespan, ~4600 cycles
+# to death). This gives the rescale factor S = current_rate / pre-#76_rate needed
+# for issue #79 Phase A.
+name: p79_tick_rate_measurement
+trials: 3
+
+conditions:
+  - key: 1_baseline
+    simulation: simulations/p79_tick_rate_measurement.conf
+    label: Baseline (unscaled)
+    color: "#9e9e9e"
+
+image:
+  source: build
+
+data_dir: ml/data_p79_tick_rate_measurement
+
+extract:
+  format: parquet
+  backup: true
+  tables: all
+
+upload:
+  enabled: false

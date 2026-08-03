@@ -7,17 +7,6 @@ psql_copy() rows (list-of-lists, first row = header) and must return rows
 in the same shape.
 """
 
-from .db import decode_type_hex
-
-
-def _decode_object_type(rows: list) -> list:
-    if len(rows) > 1:
-        idx = rows[0].index("object_type")
-        for row in rows[1:]:
-            row[idx] = decode_type_hex(row[idx])
-    return rows
-
-
 TABLES = {
     "creatures": (
         """
@@ -114,14 +103,14 @@ TABLES = {
         """
         SELECT css.key                    AS creature_key,
                css.time,
-               encode(oss.type, 'hex')   AS object_type,
+               oss.type                  AS object_type,
                oss.distance, oss.angle, oss.direction
         FROM data.object_seen_state oss
         JOIN data.change_stimulus_state css
           ON oss.changestimulusstate_id = css.id
         ORDER BY css.key, css.time
         """,
-        _decode_object_type,
+        None,
     ),
     "mouth_interactions": (
         """

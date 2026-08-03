@@ -3,31 +3,20 @@ package br.cefetmg.lsi.l2l.creature.bd;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
-import javax.persistence.*;
+import java.util.UUID;
 
-
-@Entity
-@Table(name="object_smelt_state", schema="data")
 public class ObjectSmeltState implements PersistenceState {
 
-	@Id 
-	@GeneratedValue
-	private int id;
+	private final UUID id = UUID.randomUUID();
 
-	@Embedded
 	private SequentialId component;
-	
-	@Column
-	@Lob
+
 	private WorldObjectType objectType;
 
-	@Enumerated(EnumType.STRING)
 	private SmellType smellType;
-	
-	@ManyToOne(cascade={CascadeType.ALL})
-	@JoinColumn
+
 	private ChangeStimulusState changeStimulusState;
-	
+
 	public ObjectSmeltState() {
 		super();
 	}
@@ -38,12 +27,8 @@ public class ObjectSmeltState implements PersistenceState {
 		this.objectType = type;
 	}
 
-	public int getId() {
+	public UUID getId() {
 		return id;
-	}
-
-	public void setId(int id) {
-		this.id = id;
 	}
 
 	public SequentialId getComponent() {
@@ -77,6 +62,6 @@ public class ObjectSmeltState implements PersistenceState {
 	public void setSmellType(SmellType smellType) {
 		this.smellType = smellType;
 	}
-	
-	
+
+
 }

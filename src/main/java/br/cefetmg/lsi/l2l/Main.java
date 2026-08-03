@@ -2,8 +2,6 @@ package br.cefetmg.lsi.l2l;
 
 import akka.actor.*;
 import akka.stream.Materializer;
-import br.cefetmg.lsi.l2l.analysis.DataAnalyser;
-import br.cefetmg.lsi.l2l.analysis.extractor.Extractor;
 import br.cefetmg.lsi.l2l.cluster.Holder;
 import br.cefetmg.lsi.l2l.cluster.SequentialIdProvider;
 import br.cefetmg.lsi.l2l.cluster.SimulationManager;
@@ -17,15 +15,9 @@ import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 import org.apache.commons.cli.*;
 
-import javax.persistence.EntityManager;
-import javax.persistence.Persistence;
 import java.io.File;
 import java.io.InputStream;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.logging.Level;
 import java.util.logging.LogManager;
 import java.util.logging.Logger;
 
@@ -50,12 +42,6 @@ public class Main {
             String host = commandLine.getOptionValue("host"),
                     port = commandLine.getOptionValue("port"),
                     saveDir =  commandLine.getOptionValue("save", "");
-
-            if (commandLine.hasOption("extractor")) {
-                logger.info("Running extractor in l2l database and exiting");
-                runExtractor(saveDir);
-                return;
-            }
 
             System.out.println("Save dir " + saveDir);
 
@@ -114,20 +100,6 @@ public class Main {
         }
     }
 
-    private static void runExtractor(String saveDir) {
-
-        Map<String, String> properties = new HashMap<>();
-        properties.put("eclipselink.ddl-generation", "none");
-        String dbUrl = System.getenv("DL2L_DB_URL");
-        if (dbUrl != null && !dbUrl.isEmpty()) {
-            properties.put("javax.persistence.jdbc.url", dbUrl);
-        }
-        EntityManager em = Persistence.createEntityManagerFactory("L2LPU", properties).createEntityManager();
-        DataAnalyser analyser = new DataAnalyser(em, saveDir);
-        CompletableFuture future = analyser.run();
-        future.join();
-    }
-
     private static ActorRef setupCollisionDetector(ActorSystem system, Simulation settings) {
         Materializer materializer = Materializer.matFromSystem(system);
         GeometrySourceProvider provider = new GeometrySourceProvider(materializer);
@@ -179,8 +151,6 @@ public class Main {
                 .hasArg()
                 .create("save");
 
-        Option extractor = OptionBuilder.create("extractor");
-
         options = new Options();
         options.addOption(help);
         options.addOption(host);
@@ -188,6 +158,5 @@ public class Main {
         options.addOption(roles);
         options.addOption(save);
         options.addOption(simulation);
-        options.addOption(extractor);
     }
 }
