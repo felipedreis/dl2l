@@ -14,6 +14,18 @@
 #
 # The aim is to observe the same behaviour, not to reproduce either paper's sample size.
 #
+# Pilot result (3 trials x 3 creatures, legacy_nomem vs legacy_mem, real post-pacemaker-fix
+# data): lifetime and mean interaction interval both came back at d~0 (-0.078, +0.037) —
+# no reasonable n resolves an effect that small, so P1/P4/P5 may legitimately come back
+# "no detectable effect" rather than significant, and that is treated as a real finding
+# per the recipe, not a reason to keep adding trials. A plausible mechanism: this pilot's
+# mean interval (~6s) and mean lifetime (~900s) mean creatures average only ~150
+# interactions in a full life — right at the threshold Campos himself reports for memory
+# to start dominating over random choice. The campaign's F1/M1 figures test this directly.
+# AFFORDANCE share had the one moderate, tractable effect (d=-0.577, ~19 trials at 80%
+# power); trials is set to comfortably cover that rather than to chase the near-zero
+# outcomes.
+#
 # Arms. The four mixed-world arms cross {legacy-minimal, current stack} x {memory, no
 # memory}: the legacy pair isolates the core architecture, the current pair says whether
 # the newer subsystems break the match. Parity claims are read WITHIN a pair.
@@ -25,7 +37,7 @@
 # than assume.
 
 name: p84_behaviour_parity
-trials: 5
+trials: 8
 
 conditions:
   - key: legacy_nomem

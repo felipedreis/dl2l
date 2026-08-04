@@ -146,6 +146,26 @@ the report**.
 An outcome whose effect is near zero will demand an impractical n. That is a finding about
 the effect, not a reason to keep adding trials.
 
+**Executed 2026-08-04**, 3 trials × 3 creatures, `legacy_nomem` vs `legacy_mem`, real
+post-pacemaker/OOM-fix data:
+
+| outcome | d | ICC | trials needed |
+|---|---|---|---|
+| lifetime (s) | −0.078 | 0.000 | 977 |
+| mean interaction interval (s) | +0.037 | 0.126 | 5483 |
+| RANDOM share of decisions | −4.854 | 0.000 | 1 |
+| AFFORDANCE share | −0.577 | 0.000 | 19 |
+| TARGET_DISTANCE share | n/a (always 0) | — | — |
+| RANDOM late/early ratio | +0.245 | 0.000 | 101 |
+
+Lifetime and interval effects are indistinguishable from zero at this design — no
+reasonable n resolves them, so P1/P4/P5 may legitimately come back *inconclusive* rather
+than *confirmed*, and that is a finding, not a sizing failure (§9 has a plausible
+mechanism: mean interval ≈ 6 s and mean lifetime ≈ 900 s here put creatures at only ~150
+interactions per life, the same threshold Campos reports for memory to start dominating).
+AFFORDANCE share is the one outcome with a tractable, moderate effect. **`trials` set to
+8** — comfortable margin over AFFORDANCE's requirement, without chasing the others.
+
 ### 4.4 Campaign
 
 ```bash
@@ -283,6 +303,30 @@ P3 may therefore be refuted for structural reasons rather than behavioural ones.
 report must distinguish the two, and should present P3 against the *recorded-attribution*
 semantics rather than silently treating our `TARGET_DISTANCE` count as equivalent to his
 Nearest count.
+
+**Lifetime and interval may be near-zero effects, not underpowered ones.** The sizing
+pilot's mean interval (~6 s) and mean lifetime (~900 s) put creatures at only ~150
+interactions per life on average — the same figure Campos cites as roughly when memory
+starts to dominate over random choice. If most creatures die before reaching that
+threshold, P1/P4/P5 would show no memory advantage not because the mechanism doesn't
+work, but because most creatures don't live long enough to benefit from it. F1 (interval
+vs k) and M1 (formation vs use, on a cycle axis) are the figures that test this directly;
+the report must check whether the campaign's creatures cross ~150 interactions before
+concluding P1/P4/P5 are refuted rather than not-yet-observable at this lifespan.
+
+**CCAD image provenance.** `image.source: registry` always resolves to whatever
+`ghcr.io/felipedreis/dl2l:latest` currently is, and CI only rebuilds that tag on push to
+`main` (`.github/workflows/cd.yml`). A feature branch's Java changes are therefore invisible
+to a CCAD run unless either (a) the branch is merged first, or (b) a distinctly-tagged
+image is built and pushed by hand and the run overrides `dl2l_image` via `-e`. This
+experiment's `ActionProbabilityState`/`MemoryDecisionState` persistence exists only on
+`claude/p84-behaviour-parity`, not `main`, at the time this recipe was executed — the
+campaign run used `-e dl2l_image=ghcr.io/felipedreis/dl2l:p84-behaviour-parity` (built
+`--platform linux/amd64`, matching CCAD's architecture, from commit `eb8d0d8`), not the
+default `:latest`. **`manifest.json` does not record the image tag or digest used** — this
+is a gap, not something to rely on. Until it's fixed, the only record of which image a run
+used is this note plus the ansible invocation itself; a follow-up should add the pulled
+`ref`/digest to the manifest so a dataset is self-describing about its own provenance.
 
 ---
 
