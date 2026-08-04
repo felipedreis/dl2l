@@ -98,6 +98,55 @@ def attach_elapsed_s(df: pd.DataFrame, creatures: pd.DataFrame, time_col: str = 
     return df
 
 
+def interaction_intervals(mouth: pd.DataFrame, creatures: pd.DataFrame,
+                          max_k: int | None = None,
+                          interaction_type: str = "EAT") -> pd.DataFrame:
+    """Time between successive object interactions, per creature.
+
+    This is the quantity Mapa (2009) Fig. 47 plots: "the interval spent to find an object
+    in the environment and interact with it". The k-th interval runs from interaction k-1
+    to interaction k, and the first runs from birth — the creature has to find its first
+    object too, so measuring from born_time rather than dropping k=1 is what makes the
+    series comparable to hers.
+
+    Only EAT interactions exist in our data (Mouth writes MouthInteractionState solely for
+    EnergeticStimulus), but `interaction_type` is exposed so this doesn't silently mislead
+    if PLAY/TOUCH persistence is ever added.
+
+    Returns long-form (condition, trial, creature_key, k, interval_s, cumulative_s), where
+    cumulative_s is time-since-birth at the k-th interaction — the axis Mapa Fig. 50 uses.
+    """
+    if mouth.empty:
+        return pd.DataFrame(
+            columns=["condition", "trial", "creature_key", "k", "interval_s", "cumulative_s"])
+
+    df = mouth[mouth["interaction_type"] == interaction_type].copy()
+    if df.empty:
+        return pd.DataFrame(
+            columns=["condition", "trial", "creature_key", "k", "interval_s", "cumulative_s"])
+
+    df["time"] = num(df["time"])
+    born = creatures[["creature_key", "condition", "trial", "born_time"]].drop_duplicates()
+    df = df.merge(born, on=["creature_key", "condition", "trial"], how="left")
+    df["born_time"] = num(df["born_time"])
+
+    keys = ["condition", "trial", "creature_key"]
+    df = df.sort_values(keys + ["time"]).reset_index(drop=True)
+    df["k"] = df.groupby(keys).cumcount() + 1
+
+    # Previous interaction's time, or birth for the first one.
+    prev = df.groupby(keys)["time"].shift(1)
+    prev = prev.fillna(df["born_time"])
+
+    df["interval_s"] = (df["time"] - prev) / 1000.0
+    df["cumulative_s"] = (df["time"] - df["born_time"]) / 1000.0
+
+    if max_k is not None:
+        df = df[df["k"] <= max_k]
+
+    return df[keys + ["k", "interval_s", "cumulative_s"]].reset_index(drop=True)
+
+
 def make_tick_rank_attacher(actions: pd.DataFrame):
     """Build an attach_tick_rank(df) closure bound to a given actions frame.
 
