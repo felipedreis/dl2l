@@ -111,6 +111,28 @@ This confirms the mechanism: with the dispatcher pinning removed, NEW is statist
 
 Kruskal-Wallis across all four arms: H=9.523, p=0.0231. Bonferroni threshold for the 4 pairwise comparisons against OLD: 0.0125. FIXED lands closest of any arm to OLD's mean, is not statistically distinguishable from it, and has the tightest per-trial variance of any arm tested (per-trial means 291.2/292.2/289.3 — remarkably consistent). The fix fully resolves the regression: performance is now indistinguishable from removing the dispatcher pinning altogether, while CCAD keeps the exact tight budget (pool=2) it was tuned for via the new env override.
 
+### CCAD re-verification with the dispatcher fix + PR2 (SLURM job 529, 2 trials)
+
+Re-ran the same experiment on CCAD after both the dispatcher-pool-size fix above and PR2 (read-path cleanup, including RP4's `creatures` dedup) landed, specifically to confirm two things live on the cluster rather than by inspection alone: (1) that `DL2L_CLUSTER_DISPATCHER_POOL_SIZE=2`/`DL2L_COLLISION_DISPATCHER_POOL_SIZE=2` actually reach the JVM and pin CCAD back to its tuned budget (not just present in the template), and (2) that RP4's dedup produces the correct creature count on real CCAD-extracted data.
+
+Confirmed the env vars render correctly in the actual generated `run_trial.sh` on the login node before submitting — `DL2L_CLUSTER_DISPATCHER_POOL_SIZE=2` on both the manager and holder `singularity instance start` invocations, `DL2L_COLLISION_DISPATCHER_POOL_SIZE=2` on the detector's.
+
+| Check | Trial 1 (`529_1`) | Trial 2 (`529_2`) |
+|---|---|---|
+| `sacct` State / ExitCode | COMPLETED, 0:0 | COMPLETED, 0:0 |
+| Elapsed | 5:33 | 5:19 |
+| Node | c10 | c10 |
+| Completion | natural (manager log fallback) | natural (manager log fallback) |
+| Extraction | clean, "Extraction complete." | clean, "Extraction complete." |
+| Creature count (post RP4 dedup) | **10** | **10** |
+| `DONE` sentinel | 0 | 0 |
+
+Both array tasks landed on the same node (`c10`). One transient, non-fatal finding surfaced in the detector's own per-role instance log (`dl2l-detector-529.out`, distinct from the authoritative SLURM job log, which shows no trace of it): a `java.net.BindException: Address already in use` on `GeometryWebService`'s HTTP bind, plus resulting `Broken pipe` warnings on the holder side. Root cause: `GeometryWebService.start("0.0.0.0", 8080)` (`Main.java:111`) is a hardcoded, unconditional port — unlike the Akka cluster ports, it is never parameterized by `$SLURM_JOB_ID`, so two array tasks sharing a node race for it. Confirmed via `git log -p` that this line predates both PR1 and PR2 (present since the geometry-viz feature's original introduction, only touched previously to change the bind address from `localhost` to `0.0.0.0` for Docker reachability) — not a regression introduced by this refactor. It is also inconsequential on CCAD specifically, which never sets `publish_ui` (the websocket viz endpoint has no consumer there); Akka logs the bind failure and the actor system continues unaffected, which is exactly why both trials still completed cleanly end-to-end. Filed here for visibility, not treated as a blocker.
+
+Data synced and uploaded to `felipedreis/dl2l-experiments` (prefix `arrow_ipc_write_path/ccad_validation`) via `-e rescue=true`; local manifest confirms `creature_count: 10` for both trials.
+
+**Conclusion:** both the dispatcher-pool-size regression fix and PR2's dedup fix are confirmed working on live CCAD hardware, not just locally. The only anomaly found (detector port collision) is pre-existing, unrelated to either PR, and non-blocking.
+
 ## Analysis
 
 **H1–H5 confirmed on both environments.** The write path itself is unambiguously healthy: queue depth never left 0, Arrow allocation never approached even 5% of its limit, and every table finalized with real, non-trivial, domain-correct data. The CCAD trial completed cleanly with the new sizing (14 CPUs, `--mem=24G`, per-role `JAVA_XMX`/`JAVA_CPUS`), no OOM, which was the actual motivating problem for this whole plan.
