@@ -2,8 +2,8 @@
 Analysis: p84_mapa_interaction_interval — Mapa (2009) §6.4/§6.5 replication (issue #84).
 
 Arms (see simulations/p84_mapa_*.conf):
-  L_nomem / L_mem   legacy-minimal stack, without / with the MEMORY filter
-  C_nomem / C_mem   current subsystem stack, without / with the MEMORY filter
+  legacy_nomem / legacy_mem   legacy-minimal stack, without / with the MEMORY filter
+  current_nomem / current_mem   current subsystem stack, without / with the MEMORY filter
 
 World: 12 RED_APPLE, 18 GREEN_APPLE, 25 GRAY_APPLE in 638x534, no replenishment, one
 creature. GRAY_APPLE stands in for her 25 balls; the world size is density-matched to
@@ -51,7 +51,7 @@ MAPA_LEVELS = {                  # her Tabela 6 initial APPROACH probabilities
     "medium": 0.40,
     "high": 0.70,
 }
-ARM_PAIRS = [("L_nomem", "L_mem"), ("C_nomem", "C_mem")]
+ARM_PAIRS = [("legacy_nomem", "legacy_mem"), ("current_nomem", "current_mem")]
 
 
 # ---------------------------------------------------------------------------
@@ -251,9 +251,7 @@ def run(cfg) -> None:
     if not decisions.empty:
         decisions = decisions.rename(columns={"time_ms": "time"})
         decisions = attach_tick_rank(decisions, creatures)
-    if not engrams.empty:
-        engrams["time"] = num(engrams["reinforced_cycle"])
-        engrams = attach_tick_rank(engrams, creatures)
+    engrams = p84_memory_common.attach_engram_life_decile(engrams, creatures)
 
     intervals = interaction_intervals(mouth, creatures, max_k=MAX_K)
     if intervals.empty:

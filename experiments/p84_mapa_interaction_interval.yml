@@ -12,20 +12,20 @@ name: p84_mapa_interaction_interval
 trials: 20
 
 conditions:
-  - key: L_nomem
-    simulation: simulations/p84_mapa_L_nomem.conf
+  - key: legacy_nomem
+    simulation: simulations/p84_mapa_legacy_nomem.conf
     label: Legacy
     color: "#bdbdbd"
-  - key: L_mem
-    simulation: simulations/p84_mapa_L_mem.conf
+  - key: legacy_mem
+    simulation: simulations/p84_mapa_legacy_mem.conf
     label: Legacy+Mem
     color: "#5c85d6"
-  - key: C_nomem
-    simulation: simulations/p84_mapa_C_nomem.conf
+  - key: current_nomem
+    simulation: simulations/p84_mapa_current_nomem.conf
     label: Current
     color: "#9e9e9e"
-  - key: C_mem
-    simulation: simulations/p84_mapa_C_mem.conf
+  - key: current_mem
+    simulation: simulations/p84_mapa_current_mem.conf
     label: Current+Mem
     color: "#2b5eb8"
 
