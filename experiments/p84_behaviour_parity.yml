@@ -1,0 +1,73 @@
+# Behaviour parity with Mapa (2009) and Campos (2015) — issue #84.
+#
+# ONE experiment. Mapa's interaction-interval and survival curves and Campos's
+# selection-criteria curves are different measurements of the same runs, not different
+# worlds: replenishment does not distort a foraging latency, so there is no reason to
+# split them. Replenishment on also means several creatures can share a world without
+# competing over a draining food supply, and creatures cannot perceive each other yet.
+#
+# The creature, not the trial, is the replication unit — 5 creatures x `trials`. World
+# area and object count scale with creature count so Campos's densities (6192 px^2 per
+# object, 619,200 px^2 per creature) hold regardless. `trials` is set from
+# experiments/p84_pilot.yml's variance and ICC estimates: creatures inside a trial are
+# clustered, so the effective sample is creatures / (1 + (m-1)*ICC), not creatures.
+#
+# The aim is to observe the same behaviour, not to reproduce either paper's sample size.
+#
+# Arms. The four mixed-world arms cross {legacy-minimal, current stack} x {memory, no
+# memory}: the legacy pair isolates the core architecture, the current pair says whether
+# the newer subsystems break the match. Parity claims are read WITHIN a pair.
+#
+# The two *_simple arms drop GRAY_APPLE (caloricValue 0) so every interaction is
+# rewarding. Mapa attributes Silva's (2008) monotonically decreasing interval curve to
+# precisely that, and her own oscillating curve to the presence of unrewarding
+# interactions — so this pair turns her explanation into something we can test rather
+# than assume.
+
+name: p84_behaviour_parity
+trials: 5
+
+conditions:
+  - key: legacy_nomem
+    simulation: simulations/p84_legacy_nomem.conf
+    label: Legacy
+    color: "#bdbdbd"
+  - key: legacy_mem
+    simulation: simulations/p84_legacy_mem.conf
+    label: Legacy+Mem
+    color: "#5c85d6"
+  - key: current_nomem
+    simulation: simulations/p84_current_nomem.conf
+    label: Current
+    color: "#9e9e9e"
+  - key: current_mem
+    simulation: simulations/p84_current_mem.conf
+    label: Current+Mem
+    color: "#2b5eb8"
+  - key: legacy_nomem_simple
+    simulation: simulations/p84_legacy_nomem_simple.conf
+    label: Legacy (simple world)
+    color: "#e0b23c"
+  - key: legacy_mem_simple
+    simulation: simulations/p84_legacy_mem_simple.conf
+    label: Legacy+Mem (simple world)
+    color: "#c4622d"
+
+# CCAD has no local docker daemon — images come from GHCR only.
+image:
+  source: registry
+
+data_dir: ml/data_p84_behaviour_parity
+
+extract:
+  format: parquet
+  backup: true
+  tables: all
+
+upload:
+  enabled: true
+  repo: felipedreis/dl2l-experiments
+  prefix: p84
+
+analysis:
+  module: p84_behaviour_parity
