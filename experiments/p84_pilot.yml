@@ -1,0 +1,49 @@
+# Power-sizing pilot for p84_behaviour_parity — issue #84.
+#
+# Two arms, 3 creatures x 3 trials = 9 creature-observations each. Only the memory
+# contrast, and only on the legacy stack: every primary test in the campaign measures
+# memory vs no-memory, so that is where the variance worth estimating lives.
+#
+# What this pilot is for:
+#   1. Effect size (Cliff's delta / Cohen's d) and spread for the three campaign outcomes
+#      — lifetime, mean interaction interval, and RANDOM's share of selections.
+#   2. The intra-class correlation across trials. Creatures inside one trial share a
+#      world, a food supply and an RNG stream, so they are clustered rather than
+#      independent; the campaign's creature count follows from
+#      design effect = 1 + (m-1)*ICC, not from the raw creature total.
+#   3. Wall-clock per trial, to confirm the campaign is affordable.
+#   4. That conditioning.parquet and memory_decisions.parquet arrive populated, that
+#      conditioning rows appear in the LEGACY arm (expectancy is off there, so nothing
+#      else records reinforcement), and that memory_decisions is empty in the nomem arm.
+#
+# upload.enabled is false because this is a throwaway sizing run — the documented
+# exception in this directory's README. image.source is build so it exercises local Java.
+
+name: p84_pilot
+trials: 3
+
+conditions:
+  - key: legacy_nomem
+    simulation: simulations/p84_pilot_legacy_nomem.conf
+    label: Legacy
+    color: "#bdbdbd"
+  - key: legacy_mem
+    simulation: simulations/p84_pilot_legacy_mem.conf
+    label: Legacy+Mem
+    color: "#5c85d6"
+
+image:
+  source: build
+
+data_dir: ml/data_p84_pilot
+
+extract:
+  format: parquet
+  backup: false
+  tables: all
+
+upload:
+  enabled: false
+
+analysis:
+  module: p84_behaviour_parity
