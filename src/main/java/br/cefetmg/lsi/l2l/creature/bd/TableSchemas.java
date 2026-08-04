@@ -289,6 +289,39 @@ public final class TableSchemas {
                 col("seq", ColType.INT64, EndocrineStateLog::getSeq),
                 col("stress_level", ColType.DOUBLE, EndocrineStateLog::getStressLevel))));
 
+        // --- Added after the ParquetBackend port (issue #84). Appended rather than slotted in
+        // next to their thematic neighbours so the 22 ported tables above stay a contiguous,
+        // verbatim block - see TableSchemasTest, which golden-checks them separately.
+
+        all.add(table("action_probability_state", ActionProbabilityState.class, ActionProbabilityState::getId, List.of(
+                col("action", ColType.STRING, (ActionProbabilityState ap) ->
+                        ap.getAction() != null ? ap.getAction().name() : null),
+                col("creature_key", ColType.INT64, ActionProbabilityState::getCreatureKey),
+                col("cycle", ColType.INT64, ActionProbabilityState::getCycle),
+                col("delta", ColType.DOUBLE, ActionProbabilityState::getDelta),
+                col("probability", ColType.DOUBLE, ActionProbabilityState::getProbability),
+                col("reinforced_action", ColType.STRING, (ActionProbabilityState ap) ->
+                        ap.getReinforcedAction() != null ? ap.getReinforcedAction().name() : null),
+                col("seq", ColType.INT64, ActionProbabilityState::getSeq),
+                col("target", ColType.STRING, ActionProbabilityState::getTarget),
+                col("time_ms", ColType.INT64, ActionProbabilityState::getTimeMs))));
+
+        all.add(table("memory_decision_state", MemoryDecisionState.class, MemoryDecisionState::getId, concat(
+                List.of(
+                        col("action", ColType.STRING, (MemoryDecisionState md) ->
+                                md.getAction() != null ? md.getAction().name() : null),
+                        col("candidates", ColType.INT32, MemoryDecisionState::getCandidates),
+                        col("creature_key", ColType.INT64, MemoryDecisionState::getCreatureKey),
+                        col("cycle", ColType.INT64, MemoryDecisionState::getCycle),
+                        col("decided", ColType.BOOLEAN, MemoryDecisionState::isDecided),
+                        col("engram_window", ColType.INT32, MemoryDecisionState::getEngramWindow),
+                        col("runnerup_score", ColType.DOUBLE, MemoryDecisionState::getRunnerUpScore),
+                        col("scored", ColType.INT32, MemoryDecisionState::getScored),
+                        col("seq", ColType.INT64, MemoryDecisionState::getSeq),
+                        col("time_ms", ColType.INT64, MemoryDecisionState::getTimeMs),
+                        col("winning_score", ColType.DOUBLE, MemoryDecisionState::getWinningScore)),
+                seqCols("key", "sequential", MemoryDecisionState::getTarget))));
+
         return List.copyOf(all);
     }
 

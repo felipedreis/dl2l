@@ -9,12 +9,15 @@ import br.cefetmg.lsi.l2l.creature.memory.Engram;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
+import br.cefetmg.lsi.l2l.common.SequentialId;
+
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Symbolic action filter based on Suelen Mapa's long-term memory system (2009).
@@ -49,12 +52,18 @@ public class MemoryFilter implements ActionFilter {
     @Override
     public List<Action> filter(List<Action> actions, Emotion toRegulate) {
         // Gate 1 — nothing to score
-        if (actions.size() <= 1) return actions;
+        if (actions.size() <= 1) {
+            record(0, actions.size(), 0, null, null);
+            return actions;
+        }
 
         List<Engram> engrams = memory.getRecentEngrams(Constants.MEMORY_FILTER_WINDOW);
 
         // Gate 2 — no experience yet
-        if (engrams.isEmpty()) return actions;
+        if (engrams.isEmpty()) {
+            record(0, actions.size(), 0, null, null);
+            return actions;
+        }
 
         // Accumulate score per (ActionType, WorldObjectType) key from engrams.
         // Score = MEAN of -emotionDelta × eligibility; higher = better expected outcome.
@@ -96,10 +105,50 @@ public class MemoryFilter implements ActionFilter {
             }
         }
 
-        if (scored.isEmpty()) return actions;
+        if (scored.isEmpty()) {
+            record(engrams.size(), actions.size(), 0, null, null);
+            return actions;
+        }
 
         scored.sort(Comparator.comparingDouble(sa -> -sa.score));
-        return List.of(scored.get(0).action);
+        ScoredAction winner = scored.get(0);
+        record(engrams.size(), actions.size(), scored.size(), winner,
+                scored.size() > 1 ? scored.get(1) : null);
+        return List.of(winner.action);
+    }
+
+    /**
+     * What the filter had to go on the last time it was consulted, for
+     * {@code MemoryDecisionState}. {@code winningScore}/{@code runnerUpScore} are NaN when there
+     * was no winner / no runner-up, and {@code action}/{@code target} are null unless memory
+     * actually decided.
+     */
+    public record Decision(int engramWindow, int candidates, int scored,
+                           double winningScore, double runnerUpScore, boolean decided,
+                           ActionType action, SequentialId target) {}
+
+    private Decision lastDecision;
+
+    private void record(int engramWindow, int candidates, int scoredCount,
+                        ScoredAction winner, ScoredAction runnerUp) {
+        lastDecision = new Decision(
+                engramWindow, candidates, scoredCount,
+                winner != null ? winner.score : Double.NaN,
+                runnerUp != null ? runnerUp.score : Double.NaN,
+                winner != null,
+                winner != null ? winner.action.type : null,
+                winner != null ? winner.action.perception.id : null);
+    }
+
+    /**
+     * Returns the last consultation's record and clears it, so a caller polling once per cognitive
+     * cycle cannot persist the same decision twice on a cycle where this filter was never reached
+     * ({@code ActionSelection.selectOne} stops early once a filter narrows to one candidate).
+     */
+    public Optional<Decision> takeLastDecision() {
+        Decision d = lastDecision;
+        lastDecision = null;
+        return Optional.ofNullable(d);
     }
 
     @Override

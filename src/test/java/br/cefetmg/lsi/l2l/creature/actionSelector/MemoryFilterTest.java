@@ -196,6 +196,72 @@ public class MemoryFilterTest {
     }
 
     // -----------------------------------------------------------------------
+    // Decision diagnostics (MemoryDecisionState source — issue #84)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void no_decision_recorded_before_the_filter_ever_runs() {
+        assertTrue(new MemoryFilter(memory).takeLastDecision().isEmpty());
+    }
+
+    @Test
+    void pass_through_is_recorded_as_an_undecided_consultation() {
+        MemoryFilter filter = new MemoryFilter(memory);
+
+        filter.filter(new ArrayList<>(List.of(approach(RED_NEAR), approach(GREEN_NEAR))), HUNGER);
+
+        MemoryFilter.Decision d = filter.takeLastDecision().orElseThrow();
+        assertFalse(d.decided(), "no engrams — memory had no opinion");
+        assertEquals(2, d.candidates());
+        assertEquals(0, d.scored());
+        assertNull(d.action());
+        assertTrue(Double.isNaN(d.winningScore()));
+    }
+
+    @Test
+    void a_win_records_the_margin_over_the_runner_up() {
+        // APPROACH RED scores -(-2.0 x 0.8) = 1.6; APPROACH GREEN scores -(-1.0 x 0.5) = 0.5.
+        memory.add(engram(ActionType.APPROACH, FruitType.RED_APPLE, -2.0, 0.8));
+        memory.add(engram(ActionType.APPROACH, FruitType.GREEN_APPLE, -1.0, 0.5));
+        MemoryFilter filter = new MemoryFilter(memory);
+
+        filter.filter(new ArrayList<>(List.of(approach(RED_NEAR), approach(GREEN_NEAR))), HUNGER);
+
+        MemoryFilter.Decision d = filter.takeLastDecision().orElseThrow();
+        assertTrue(d.decided());
+        assertEquals(2, d.engramWindow());
+        assertEquals(2, d.candidates());
+        assertEquals(2, d.scored());
+        assertEquals(ActionType.APPROACH, d.action());
+        assertEquals(RED_ID, d.target(), "the higher-scoring engram's target won");
+        assertEquals(1.6, d.winningScore(), 1e-9);
+        assertEquals(0.5, d.runnerUpScore(), 1e-9);
+    }
+
+    @Test
+    void a_lone_scored_candidate_has_no_runner_up() {
+        memory.add(engram(ActionType.APPROACH, FruitType.RED_APPLE, -2.0, 0.8));
+        MemoryFilter filter = new MemoryFilter(memory);
+
+        filter.filter(new ArrayList<>(List.of(approach(RED_NEAR), approach(GREEN_NEAR))), HUNGER);
+
+        MemoryFilter.Decision d = filter.takeLastDecision().orElseThrow();
+        assertTrue(d.decided());
+        assertEquals(1, d.scored(), "only RED matched an engram");
+        assertTrue(Double.isNaN(d.runnerUpScore()));
+    }
+
+    @Test
+    void taking_a_decision_clears_it_so_a_stale_one_cannot_be_logged_twice() {
+        MemoryFilter filter = new MemoryFilter(memory);
+        filter.filter(new ArrayList<>(List.of(approach(RED_NEAR), approach(GREEN_NEAR))), HUNGER);
+
+        assertTrue(filter.takeLastDecision().isPresent());
+        assertTrue(filter.takeLastDecision().isEmpty(),
+                "a cycle where the filter was never reached must not re-log the previous decision");
+    }
+
+    // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
 
