@@ -16,6 +16,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jdk.version>23</jdk.version>
         <scala.version>2.11</scala.version>
+        <arrow.version>18.3.0</arrow.version>
 
     </properties>
 
@@ -69,14 +70,39 @@
             </exclusions>
         </dependency>
 
-        <!-- ParquetBackend (see PersistenceBackend) - the sole persistence write path, no
-             SQL/DB layer. Hadoop-free wrapper around the standard parquet-column/parquet-hadoop
-             libraries (bundles minimal Hadoop API-compatible shim classes, not a real Hadoop
-             dependency/runtime). -->
+        <!-- ArrowIpcBackend (see PersistenceBackend) - the sole persistence write path, no
+             SQL/DB layer. Off-heap Arrow IPC stream writer - see docs/plans/arrow-ipc-write-path.md
+             for why this replaced the earlier direct-Parquet ParquetBackend (still in git history).
+             arrow-memory-unsafe (not -netty) is the allocator backend: no extra netty jars in the
+             fat jar (Akka 2.5 already ships netty 3, a different package but still a duplicate-class
+             shading risk to avoid) and per-allocation overhead is irrelevant to this reuse-heavy
+             pattern (buffers allocated once per table, hot path is setSafe into existing memory).
+             Requires the JVM flag add-opens=java.base/java.nio=ALL-UNNAMED (see
+             scripts/run-dl2l.sh) - arrow-memory-core's MemoryUtil needs it on JDK 16+; target is
+             ALL-UNNAMED only since this project has no module-info.java (classpath, not
+             module-path). -->
         <dependency>
-            <groupId>blue.strategic.parquet</groupId>
-            <artifactId>parquet-floor</artifactId>
-            <version>1.51</version>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-vector</artifactId>
+            <version>${arrow.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-memory-core</artifactId>
+            <version>${arrow.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-memory-unsafe</artifactId>
+            <version>${arrow.version}</version>
+        </dependency>
+        <!-- Only exercised when DL2L_ARROW_COMPRESSION=lz4|zstd (default: none/off - see
+             ArrowIpcBackend). Declared unconditionally since Maven dependencies aren't
+             runtime-conditional; the LZ4/ZSTD codepath is otherwise dead code. -->
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-compression</artifactId>
+            <version>${arrow.version}</version>
         </dependency>
 
         <dependency>
@@ -192,8 +218,25 @@
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+                <configuration>
+                    <!-- ArrowIpcBackendTest (and anything else touching arrow-memory-unsafe's
+                         RootAllocator) needs the same add-opens flag the JVM launch script
+                         grants in production - see scripts/run-dl2l.sh and ArrowIpcBackend's
+                         javadoc. -->
+                    <argLine>--add-opens=java.base/java.nio=ALL-UNNAMED</argLine>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <version>2.4.1</version>
+                <!-- Bumped proactively from 2.4.1 for Arrow 18.x (see docs/plans/arrow-ipc-write-path.md,
+                     W2): Arrow's jars carry module-info.class and multi-release sections that
+                     pre-2015 2.4.1 mishandles. Not gated behind a failure - the fallback
+                     (arrow-memory-netty) needing this too is unlikely enough not to wait for. -->
+                <version>3.6.2</version>
                 <executions>
                     <execution>
                         <phase>package</phase>
@@ -210,6 +253,19 @@
                             <include>*:*</include>
                         </includes>
                     </artifactSet>
+                    <filters>
+                        <filter>
+                            <artifact>*:*</artifact>
+                            <excludes>
+                                <!-- module-info.class from Arrow's (and other) JPMS-aware jars -
+                                     shading multiple modules' descriptors into one jar is invalid
+                                     and unnecessary (the fat jar is a plain classpath jar, not a
+                                     module). -->
+                                <exclude>module-info.class</exclude>
+                                <exclude>META-INF/versions/*/module-info.class</exclude>
+                            </excludes>
+                        </filter>
+                    </filters>
                     <transformers>
                         <transformer
                                 implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">

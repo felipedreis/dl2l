@@ -28,11 +28,11 @@ import java.util.logging.Logger;
  * connection, avoiding any repeat of the "~70-100 separate connections" incident documented
  * on {@link PersistenceExtension}.
  *
- * <p>The actual write mechanics live behind {@link PersistenceBackend} ({@link ParquetBackend},
+ * <p>The actual write mechanics live behind {@link PersistenceBackend} ({@link ArrowIpcBackend},
  * constructed by {@link PersistenceExtension}) - this class only owns the actor protocol
  * (batching, {@link Flush}/{@link DumpParquet} handling) and the backend-agnostic object-graph
- * expansion/table-grouping ({@link #expand}/{@link #tableFor}). See
- * docs/plans/parquet-write-path.md.
+ * expansion/table-grouping ({@link #expand}/{@link #tableFor}, the latter delegating to
+ * {@link TableSchemas}). See docs/plans/arrow-ipc-write-path.md.
  *
  * <p>Every entity's surrogate id is a client-assigned {@link java.util.UUID} (see each
  * entity class), so insert order never matters and no generated-id round trip is needed.
@@ -64,12 +64,22 @@ public class BDActor extends UntypedActor {
                 // type, e.g. Flush, into an in-progress Stimulus/PersistenceState batch) - so
                 // backend.flush() only needs to make already-written data durable/visible, not
                 // process anything new.
-                backend.flush();
+                try {
+                    backend.flush();
+                } catch (Exception e) {
+                    logFatalWriteError("flush()", e);
+                    throw e;
+                }
                 sender().tell(new FlushAck(), self());
                 return;
             }
             if (batch.size() == 1 && batch.get(0) instanceof DumpParquet) {
-                backend.dumpToParquet();
+                try {
+                    backend.dumpToParquet();
+                } catch (Exception e) {
+                    logFatalWriteError("dumpToParquet()", e);
+                    throw e;
+                }
                 sender().tell(new DumpParquetAck(), self());
                 return;
             }
@@ -81,12 +91,18 @@ public class BDActor extends UntypedActor {
             // above (what THIS transaction is about to commit). Sustained, non-decreasing
             // growth here is the signal docs/plans/bdactor-async-persistence-with-drain.md §5
             // named as the trigger to revisit backpressure - see
-            // docs/plans/issue-77-bdactor-oom-fix.md.
+            // docs/plans/issue-77-bdactor-oom-fix.md. Also the depth the queue-depth watchdog
+            // polls independently (see docs/plans/arrow-ipc-write-path.md, W3).
             metricsExt.setGauge("dl2l_bdactor_queue_depth",
                     ((ActorRefWithCell) getSelf()).underlying().numberOfMessages());
 
             long startNanos = System.nanoTime();
-            persistBatch(batch);
+            try {
+                persistBatch(batch);
+            } catch (Exception e) {
+                logFatalWriteError("persistBatch(" + batch.size() + " message(s))", e);
+                throw e;
+            }
             metricsExt.setGauge("dl2l_bdactor_persist_duration_seconds",
                     (System.nanoTime() - startNanos) / 1_000_000_000.0);
 
@@ -95,6 +111,18 @@ public class BDActor extends UntypedActor {
             logger.info("BDActor gonna stop");
         } else
             unhandled(message);
+    }
+
+    /**
+     * Logs {@code DL2L-FATAL-PERSISTENCE-WRITE-ERROR} right next to the stack trace before the
+     * caller rethrows - this project's {@code StoppingSupervisorStrategy} stops (never
+     * restarts) an actor on an uncaught exception, so BDActor dies here regardless; the marker
+     * exists so that death is unambiguous in the log rather than inferred from
+     * {@link PersistenceExtension.BdActorDeathWatch}'s later, less specific
+     * {@code DL2L-FATAL-PERSISTENCE-DEAD}. See docs/plans/arrow-ipc-write-path.md, W3.
+     */
+    private void logFatalWriteError(String op, Exception e) {
+        logger.severe("DL2L-FATAL-PERSISTENCE-WRITE-ERROR op=" + op + " error=" + e);
     }
 
     /**
@@ -148,32 +176,9 @@ public class BDActor extends UntypedActor {
         }
     }
 
+    /** Delegates to the single declarative schema - see {@link TableSchemas}. */
     private String tableFor(PersistenceState ps) {
-        return switch (ps) {
-            case ChangeStimulusState ignored -> "change_stimulus_state";
-            case StimulusState ignored -> "stimulus_state";
-            case CreatureState ignored -> "creature_state";
-            case EmotionalState ignored -> "emotional_state";
-            case InternalDynamicState ignored -> "internal_dynamic_state";
-            case EyeState ignored -> "eye_state";
-            case ObjectSeenState ignored -> "object_seen_state";
-            case MouthInteractionState ignored -> "mouth_interactions_state";
-            case NoseState ignored -> "nose_state";
-            case ObjectSmeltState ignored -> "object_smelt_state";
-            case ChosenActionState ignored -> "chosen_action_state";
-            case BodyState ignored -> "body_state";
-            case BehaviouralEfficiencyState ignored -> "behavioural_efficiency_state";
-            case RegulationBatchStat ignored -> "regulation_batch_stat";
-            case EngramState ignored -> "engram_state";
-            case SleepEpisodeState ignored -> "sleep_episode_state";
-            case ConsolidationEpisodeStat ignored -> "consolidation_episode_stat";
-            case ConsolidationBatchStat ignored -> "consolidation_batch_stat";
-            case MemoryTraceStat ignored -> "memory_trace_stat";
-            case ExpectancyState ignored -> "expectancy_state";
-            case NeuromodulatorStateLog ignored -> "neuromodulator_state_log";
-            case EndocrineStateLog ignored -> "endocrine_state_log";
-            default -> throw new IllegalArgumentException("Unknown PersistenceState type: " + ps.getClass());
-        };
+        return TableSchemas.forState(ps).table();
     }
 
     @Override

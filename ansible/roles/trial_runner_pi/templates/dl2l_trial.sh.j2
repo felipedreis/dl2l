@@ -9,7 +9,7 @@
 # Mirrors scripts/run_exp_p7_pi.sh's per-trial semantics (down -> up -> wait
 # -> extract -> down) but runs node-side under SLURM instead of over SSH from
 # the Mac, and delegates the backup/extract step entirely to
-# dl2l_data.extract (Phase 1) instead of a separate manual pg_dump.
+# dl2l_data.extract instead of a separate manual pg_dump.
 #SBATCH --nodes=1
 #SBATCH --exclusive
 set -euo pipefail
@@ -21,20 +21,28 @@ TRIAL="${SLURM_ARRAY_TASK_ID:?dl2l_trial.sh must be run as a SLURM array task}"
 PROJ="exp_${EXPERIMENT}_${CONDITION}_t${TRIAL}"
 COMPOSE="{{ shared_fs }}/config/docker-compose.{{ experiment_cfg.name }}.yml"
 OUT="${SHARED_FS}/data/${EXPERIMENT}"
+# Bind-mounted into dl2l-holder as /dl2l/data (see docker-compose.yml.j2). The JVM
+# (DATA_DIR=/dl2l/data) appends its OWN "raw" subdir on top of this
+# (PersistenceExtension.configure) - see docs/plans/arrow-ipc-write-path.md, W5 - so
+# DL2L_RAW_DATA_DIR must be the trial dir itself, not .../raw, or the JVM's raw-table
+# Arrow dump lands one directory deeper than extraction below looks.
+TRIAL_DIR="${OUT}/${CONDITION}/trial_${TRIAL}"
+RAW_DIR="${TRIAL_DIR}/raw"
 export SIMULATION
+export DL2L_RAW_DATA_DIR="$TRIAL_DIR"
 
 dc() { sudo -E docker compose -p "$PROJ" -f "$COMPOSE" "$@"; }
 
 # Backstop teardown in case anything below fails; the happy path tears down
-# explicitly at the end, after extraction (which includes its own pg_dump
+# explicitly at the end, after extraction (which includes its own raw-table
 # backup) has already completed.
 trap 'dc down -v --remove-orphans >/dev/null 2>&1 || true' EXIT
 
+mkdir -p "$TRIAL_DIR"
 dc down -v --remove-orphans >/dev/null 2>&1 || true
 dc up -d
 
 HOLDER_ID=$(dc ps -q dl2l-holder)
-DB_ID=$(dc ps -q dl2l-db)
 
 sudo docker wait "$HOLDER_ID"
 
@@ -44,8 +52,7 @@ PYTHONPATH="${SHARED_FS}/scripts" python3 -m dl2l_data.extract \
     --condition "$CONDITION" \
     --trial "$TRIAL" \
     --out "$OUT" \
-    --container "$DB_ID" \
-    --docker-cmd "sudo docker" \
+    --raw-dir "$RAW_DIR" \
     --format {{ experiment_cfg.extract.format }}{% if not experiment_cfg.extract.backup %} \
     --skip-backup{% endif %}
 

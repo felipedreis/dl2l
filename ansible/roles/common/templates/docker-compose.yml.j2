@@ -42,6 +42,9 @@ services:
       SIMULATION: "${SIMULATION:?SIMULATION must be exported before running docker compose}"
       HOST: "dl2l-holder"
       PORT: "2551"
+      # See scripts/run-dl2l.sh and docs/plans/arrow-ipc-write-path.md, W5.
+      JAVA_XMX: "${DL2L_JAVA_XMX:-2g}"
+      TARGET_CYCLE_HZ: "${TARGET_CYCLE_HZ:-30}"
     networks:
       - dl2l-network
 {% if publish_ui | default(false) %}
@@ -87,6 +90,9 @@ services:
       SIMULATION: "${SIMULATION:?SIMULATION must be exported before running docker compose}"
       HOST: "dl2l-holder"
       PORT: "2551"
+      # See scripts/run-dl2l.sh and docs/plans/arrow-ipc-write-path.md, W5.
+      JAVA_XMX: "${DL2L_JAVA_XMX:-2g}"
+      TARGET_CYCLE_HZ: "${TARGET_CYCLE_HZ:-30}"
     networks:
       - dl2l-network
 {% if publish_ui | default(false) %}

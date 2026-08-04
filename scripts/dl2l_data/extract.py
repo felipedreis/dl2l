@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Comprehensive extractor for one DL2L simulation condition.
-Writes Parquet (default) or CSV files + preserves the raw-table Parquet dump
+Writes Parquet (default) or CSV files + preserves the raw-table Arrow IPC dump
 (the backup, see below) to <out>/<condition>/[trial_N/].
 
 Usage:
@@ -10,7 +10,7 @@ Usage:
         --condition  1_baseline \
         --trial      1 \
         --out        ml/data_20260709_memory_vs_wm_v1 \
-        --raw-dir    /path/to/trial's/raw/parquet/dir \
+        --raw-dir    /path/to/trial's/raw/arrow/dir \
         [--format parquet|csv] \
         [--skip-backup]
 
@@ -22,15 +22,18 @@ Issue #79 (see docs/plans/parquet-write-path.md): this used to run each of
 `tables.py`'s SQL queries via `psql` against a live Postgres container/
 instance (`docker exec`/`singularity exec`). Postgres itself turned out to be
 the bottleneck for BDActor's write path (an append-only telemetry workload,
-never queried mid-run) and the JVM now writes one raw Parquet file per table
-directly at trial shutdown instead (`ParquetBackend`, `--raw-dir`) - no DB
-layer on the write side at all. Extraction runs the *exact same* `tables.py`
-SQL (unchanged) via its own in-process embedded DuckDB - used purely as a
-query engine over those Parquet files, unrelated to the (DuckDB-free) write
-path - instead of a live database: no psql, no container/instance, no
-network. The raw dump itself *is* the backup now (already columnar, no
-restore step needed) - `--skip-backup` controls whether it's kept alongside
-the final output or deleted once extraction succeeds.
+never queried mid-run), so the JVM started writing raw Parquet directly at
+trial shutdown instead - no DB layer on the write side at all. That direct-
+Parquet write path (`ParquetBackend`) in turn got replaced by an off-heap
+Arrow IPC stream writer (`ArrowIpcBackend`, see docs/plans/arrow-ipc-write-path.md)
+once Parquet's on-heap row-group buffers + CPU-expensive encoding proved to be
+a second, independent OOM contributor on CCAD. Extraction runs the *exact
+same* `tables.py` SQL (unchanged, and untouched by that write-path swap) via
+its own in-process embedded DuckDB - used purely as a query engine, unrelated
+to whichever write path produced the raw files - instead of a live database:
+no psql, no container/instance, no network. The raw dump itself *is* the
+backup now (no restore step needed) - `--skip-backup` controls whether it's
+kept alongside the final output or deleted once extraction succeeds.
 """
 
 import argparse
@@ -47,35 +50,53 @@ except ImportError:  # running as a standalone script, not `-m dl2l_data.extract
     from dl2l_data.manifest import update_manifest
     from dl2l_data.tables import TABLE_ORDER, TABLES
 
-# Every raw table BDActor dumps - must match PersistenceExtension.Impl.TABLES
-# (src/main/java/br/cefetmg/lsi/l2l/creature/bd/PersistenceExtension.java).
-RAW_TABLES = [
-    "change_stimulus_state", "stimulus_state", "creature_state", "emotional_state",
-    "internal_dynamic_state", "eye_state", "object_seen_state", "mouth_interactions_state",
-    "nose_state", "object_smelt_state", "chosen_action_state", "body_state",
-    "behavioural_efficiency_state", "regulation_batch_stat", "engram_state",
-    "sleep_episode_state", "consolidation_episode_stat", "consolidation_batch_stat",
-    "memory_trace_stat", "expectancy_state", "neuromodulator_state_log", "endocrine_state_log",
-]
-
 
 def _open_raw_views(raw_dir: Path):
-    """Opens an embedded DuckDB and registers each raw Parquet file as a view under the
-    same `data.<table>` schema-qualified name tables.py's SQL already references - so
-    that SQL runs completely unchanged against files instead of a live database."""
+    """Opens an embedded DuckDB and registers each raw Arrow IPC stream file (one per
+    table, written by ArrowIpcBackend - see docs/plans/arrow-ipc-write-path.md) as a view
+    under the same `data.<table>` schema-qualified name tables.py's SQL already
+    references - so that SQL runs completely unchanged against files instead of a live
+    database.
+
+    Unlike the direct-Parquet era's fixed `RAW_TABLES` list (which had to be hand-kept in
+    sync with the Java write path), this just globs whatever `*.arrow` files are actually
+    present - Arrow IPC files are self-describing, so no schema copy is needed here at
+    all. Missing tables still warn (a query referencing one will simply fail loudly)."""
     import duckdb
+    import pyarrow as pa
 
     conn = duckdb.connect()
     conn.execute("CREATE SCHEMA data")
-    for table in RAW_TABLES:
-        path = raw_dir / f"{table}.parquet"
-        if not path.exists():
-            print(f"  WARNING: {path.name} missing from raw dir - "
-                  f"queries referencing data.{table} will fail", file=sys.stderr)
+
+    arrow_files = sorted(raw_dir.glob("*.arrow"))
+    if not arrow_files:
+        print(f"  WARNING: no *.arrow files found in raw dir {raw_dir} - "
+              f"every query will fail", file=sys.stderr)
+
+    for path in arrow_files:
+        table = path.stem
+        try:
+            # RecordBatchStreamReader.read_all() deserializes into owned buffers (unlike
+            # the random-access File format's zero-copy reads), so the memory map need not
+            # outlive this call.
+            with pa.memory_map(str(path), "r") as source:
+                arrow_table = pa.ipc.open_stream(source).read_all()
+        except pa.lib.ArrowInvalid as e:
+            # A trial killed mid-batch (watchdog halt, OOM, SIGKILL) truncates the stream
+            # after its last complete record batch by design (ArrowStreamWriter never
+            # seeks back to patch a footer) - pyarrow.ipc.open_stream still reads every
+            # complete batch before the truncation point, so this only fires for a file
+            # with literally zero valid batches (e.g. killed before the schema message
+            # itself was flushed). Treat as an empty/missing table, not a hard failure.
+            print(f"  WARNING: {path.name} unreadable ({e}) - "
+                  f"treating data.{table} as missing", file=sys.stderr)
             continue
-        # read_parquet's path argument is a SQL string literal - escape embedded quotes.
-        escaped = str(path).replace("'", "''")
-        conn.execute(f"CREATE VIEW data.{table} AS SELECT * FROM read_parquet('{escaped}')")
+        # DuckDB scans a registered Arrow object zero-copy (no data duplicated into
+        # DuckDB's own storage) and keeps its own reference for the registration's
+        # lifetime - no extra keep-alive bookkeeping needed here.
+        conn.register(f"_raw_{table}", arrow_table)
+        conn.execute(f"CREATE VIEW data.{table} AS SELECT * FROM _raw_{table}")
+
     return conn
 
 
@@ -105,14 +126,14 @@ def main():
     p.add_argument("--out", required=True,
                    help="Base output dir; condition subdir created inside it")
     p.add_argument("--raw-dir", required=True,
-                   help="Directory containing the raw per-table Parquet files "
+                   help="Directory containing the raw per-table Arrow IPC (.arrow) files "
                         "BDActor dumped at trial shutdown (saveDir/raw)")
     p.add_argument("--trial", type=int, default=None,
                    help="Trial number; output placed in <out>/<cond>/trial_N/")
     p.add_argument("--format", choices=["parquet", "csv"], default="parquet",
                    help="Output file format for the per-table extracts")
     p.add_argument("--skip-backup", action="store_true",
-                   help="Delete the raw-table Parquet dump after a successful "
+                   help="Delete the raw-table Arrow IPC dump after a successful "
                         "extraction instead of keeping it alongside the output")
     args = p.parse_args()
 
@@ -156,7 +177,7 @@ def main():
         shutil.rmtree(raw_dir, ignore_errors=True)
         print("  raw-table backup discarded (--skip-backup)", file=sys.stderr)
     else:
-        raw_mb = sum(f.stat().st_size for f in raw_dir.glob("*.parquet")) / 1024 / 1024
+        raw_mb = sum(f.stat().st_size for f in raw_dir.glob("*.arrow")) / 1024 / 1024
         print(f"  raw-table backup kept: {raw_dir} ({raw_mb:.1f} MB)", file=sys.stderr)
 
     manifest_path = update_manifest(

@@ -30,8 +30,31 @@ ccad_sim_qos: short_qos
 # alongside maxRuntimeMinutes going 40->60 in
 # simulations/20260714_memory_vs_wm_dense_reposition_*.conf, to keep the
 # same proportional margin over run_trial.sh.j2's ~90 min wait-loop ceiling.
-ccad_sim_cpus: 6
+#
+# docs/plans/arrow-ipc-write-path.md, W5b: 6 -> 14 — the CCAD OOM (issue that
+# motivated the Arrow write path) was CPU-headroom-dependent as much as
+# memory-dependent (G1 "Using 6 workers of 6", writer + GC starved). 14 packs
+# exactly 4 trials on a 56-CPU node (down from up-to-9 under the old 6-CPU
+# request) and gives the holder JVM a ~10-core budget — the same headroom
+# the local validation run passed with. Explicitly trading trial-parallelism
+# for simulation stability; tune off the first job's real numbers.
+ccad_sim_cpus: 14
 ccad_sim_time: "03:00:00"
+
+# --mem finally makes SLURM account for memory too (previously unset, so up
+# to 9 trials could co-locate on one node purely on CPU accounting, each
+# assuming it had the whole node's RAM). ccad_holder_xmx feeds the holder
+# JVM's -Xmx (see scripts/run-dl2l.sh's JAVA_XMX); manager/detector stay at
+# run-dl2l.sh's 2g default (they don't run BDActor, no Arrow buffers).
+# Per-role CPU budgets (-XX:ActiveProcessorCount, see scripts/run-dl2l.sh's
+# JAVA_CPUS) sum to 13 of ccad_sim_cpus' 14, leaving a CPU of headroom for
+# Singularity/OS overhead. Starting points, not tuned optima — see the
+# Risks section of docs/plans/arrow-ipc-write-path.md.
+ccad_sim_mem: "24G"
+ccad_holder_xmx: "6g"
+ccad_holder_cpus: 10
+ccad_detector_cpus: 2
+ccad_manager_cpus: 1
 
 # CONFIRMED LIVE (2026-07-16): a batch of trials started returning "Failed
 # to enter in mount namespace: Stale file handle" from `singularity exec`

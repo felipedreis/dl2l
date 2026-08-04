@@ -127,7 +127,10 @@ public interface Constants {
     // broadcast - see CreatureActor.java), just not tightly equal to TARGET_CYCLE_HZ. DELTA
     // and the circadian constants below are dt-weighted specifically so their real-world
     // effect stays correct regardless of this - see DELTA's comment.
-    int TARGET_CYCLE_HZ = 30;
+    // docs/plans/arrow-ipc-write-path.md, W5: env-overridable so a mini-experiment/rehearsal
+    // can dial cognitive-cycle throughput without a rebuild - e.g. the constrained-rehearsal
+    // step of PR 1's verification plan. Unset (the default everywhere else) keeps 30 unchanged.
+    int TARGET_CYCLE_HZ = Integer.parseInt(System.getenv().getOrDefault("TARGET_CYCLE_HZ", "30"));
 
     // --- Expectancy predictor (symbolic reward-prediction) ---
     // Rescorla-Wagner learning rate for the running-mean expected-reward update.
