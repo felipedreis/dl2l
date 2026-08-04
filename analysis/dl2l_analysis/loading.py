@@ -15,8 +15,18 @@ import pandas as pd
 
 def num(s):
     """pd.to_numeric with coercion — used everywhere a parquet column needs
-    to be forced numeric (object dtype survives the parquet round-trip for
-    some columns)."""
+    to be forced numeric.
+
+    NOT dead code post-Arrow-write-path (docs/plans/arrow-ipc-read-path.md
+    tried removing this and reverted): object/string dtype survives the
+    parquet round-trip for columns extracted from pre-Arrow (and pre-DuckDB-
+    extractor) raw dumps, e.g. `data_rotten_fruit_v1` — one of the two
+    datasets this module's docstring cites as its own source — still has
+    `actions.time` as `str`. Freshly Arrow-extracted data no longer needs
+    this (confirmed on `ml/data_arrow_ipc_write_path_ccad_validation/`), but
+    `dl2l_analysis` has to keep working against whatever mix of old and new
+    `ml/data_*/` directories a given experiment's report draws from - keep
+    this until every dataset it might load has been re-extracted."""
     return pd.to_numeric(s, errors="coerce")
 
 

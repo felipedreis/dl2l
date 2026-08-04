@@ -100,6 +100,28 @@ def _open_raw_views(raw_dir: Path):
     return conn
 
 
+def _dedup_creatures(creatures_df):
+    """Collapses TABLES["creatures"]'s birth+death row pair for each creature into
+    one row - deferred from #81, still true under the Arrow write path (see
+    ArrowIpcBackend's javadoc: no upsert semantics either way). CreatureState is
+    written twice per creature with the same (creature_key, creature_sequential):
+    once at birth (dead_time=0, lifetime_s=NULL) and again at death (real
+    dead_time/lifetime_s) if it died before the trial ended. TABLES["creatures"]'s
+    query stays verbatim (untouched here) and returns both rows, which otherwise
+    doubles `n_creatures`/manifest.json (confirmed live: "Found 20 creatures" for
+    a 10-creature trial). Sorting ascending by dead_time and keeping the last row
+    per creature keeps the death row when one exists, or the sole birth row
+    unchanged when the creature was still alive at trial end - correct either way,
+    no special-casing needed."""
+    return (
+        creatures_df.sort_values(["creature_key", "dead_time"])
+        .groupby(["creature_key", "creature_sequential"], as_index=False)
+        .tail(1)
+        .sort_values("creature_key")
+        .reset_index(drop=True)
+    )
+
+
 def save(df, out_dir: Path, table: str, fmt: str, condition: str, trial) -> None:
     if df.empty:
         print(f"  (empty) {table}", file=sys.stderr)
@@ -157,6 +179,7 @@ def main():
     if len(creatures_df) == 0:
         print("No creatures found — aborting.", file=sys.stderr)
         sys.exit(1)
+    creatures_df = _dedup_creatures(creatures_df)
     n_creatures = len(creatures_df)
     print(f"Found {n_creatures} creatures", file=sys.stderr)
     save(creatures_df, out_dir, "creatures", args.format, cond, trial)
