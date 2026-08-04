@@ -99,11 +99,17 @@ TABLES = {
         """,
         None,
     ),
+    # object_key/object_sequential identify *which* object was seen/eaten, not just its
+    # type. Both are already in the raw Arrow schema (TableSchemas' seqCols expansion) and
+    # were simply not selected here; they let an analysis pair a first sighting of object X
+    # with the later interaction with that same X (issue #84).
     "perceptions": (
         """
         SELECT css.key                    AS creature_key,
                css.time,
                oss.type                  AS object_type,
+               oss.key                   AS object_key,
+               oss.sequential            AS object_sequential,
                oss.distance, oss.angle, oss.direction
         FROM data.object_seen_state oss
         JOIN data.change_stimulus_state css
@@ -117,7 +123,9 @@ TABLES = {
         SELECT css.key            AS creature_key,
                css.time,
                mis.type          AS interaction_type,
-               mis.objecttype    AS object_type
+               mis.objecttype    AS object_type,
+               mis.key           AS object_key,
+               mis.sequential    AS object_sequential
         FROM data.mouth_interactions_state mis
         JOIN data.change_stimulus_state css
           ON mis.changestimulusstate_id = css.id
@@ -194,6 +202,42 @@ TABLES = {
         """,
         None,
     ),
+    # The operant conditioning table as it changed over the run (issue #84). Six rows per
+    # reinforcement — one per action of the evaluated target; untouched targets are not
+    # rewritten, so readers forward-fill per (creature_key, target).
+    #
+    # `probability` is the RAW stored value and its per-target sum is NOT conserved:
+    # ActionProbability.varyProbability clamps at 0 while OperantConditioningActor applies
+    # the compensating -delta/(n-1) to the others unconditionally. ActionProbabilityFilter
+    # normalises at selection time, so analysis must plot p / sum(p) per (target, seq),
+    # never this column directly.
+    "conditioning": (
+        """
+        SELECT creature_key, seq, time_ms, cycle, target, action,
+               probability, reinforced_action, delta
+        FROM data.action_probability_state
+        ORDER BY creature_key, seq, action
+        """,
+        None,
+    ),
+    # One row per consultation of the episodic-memory action filter (issue #84).
+    # A row means memory was actually reached: ActionSelection stops as soon as a filter
+    # narrows the candidates to one, so an earlier filter deciding alone writes nothing.
+    # `decided` false = memory had no opinion and passed the candidates through, in which
+    # case action/target are null and the scores NaN.
+    "memory_decisions": (
+        """
+        SELECT creature_key, seq, time_ms, cycle,
+               engram_window, candidates, scored,
+               winning_score, runnerup_score, decided,
+               action,
+               key        AS target_key,
+               sequential AS target_sequential
+        FROM data.memory_decision_state
+        ORDER BY creature_key, seq
+        """,
+        None,
+    ),
 }
 
 # Tables written before pg_dump/manifest bookkeeping, in the order exp_extract.py
@@ -202,7 +246,7 @@ TABLE_ORDER = [
     "creatures", "actions", "drives", "behavioural_efficiency", "body_states",
     "perceptions", "mouth_interactions", "sleep_episodes", "neuromodulators",
     "endocrine", "expectancy", "engrams", "consolidation_episodes",
-    "consolidation_batches", "memory_traces",
+    "consolidation_batches", "memory_traces", "conditioning", "memory_decisions",
 ]
 
 assert set(TABLE_ORDER) == set(TABLES)

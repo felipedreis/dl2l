@@ -1,0 +1,49 @@
+# Mapa (2009) §6.4 / Fig. 47 replication — issue #84.
+#
+# Mean interval to find and interact with an object, for interactions k = 1..10, with and
+# without the episodic memory filter. 20 trials matches her 20 sessions.
+#
+# The four arms cross {legacy-minimal, current stack} x {memory, no memory}. The legacy
+# arms isolate the core architecture; the current arms say whether the newer subsystems
+# break the match. See simulations/p84_mapa_*.conf for the world and the deviations from
+# her setup (GRAY_APPLE standing in for her balls; density-matched world size).
+
+name: p84_mapa_interaction_interval
+trials: 20
+
+conditions:
+  - key: L_nomem
+    simulation: simulations/p84_mapa_L_nomem.conf
+    label: Legacy
+    color: "#bdbdbd"
+  - key: L_mem
+    simulation: simulations/p84_mapa_L_mem.conf
+    label: Legacy+Mem
+    color: "#5c85d6"
+  - key: C_nomem
+    simulation: simulations/p84_mapa_C_nomem.conf
+    label: Current
+    color: "#9e9e9e"
+  - key: C_mem
+    simulation: simulations/p84_mapa_C_mem.conf
+    label: Current+Mem
+    color: "#2b5eb8"
+
+# CCAD has no local docker daemon — images come from GHCR only.
+image:
+  source: registry
+
+data_dir: ml/data_p84_mapa_interaction_interval
+
+extract:
+  format: parquet
+  backup: true
+  tables: all
+
+upload:
+  enabled: true
+  repo: felipedreis/dl2l-experiments
+  prefix: p84
+
+analysis:
+  module: p84_mapa_interaction_interval
