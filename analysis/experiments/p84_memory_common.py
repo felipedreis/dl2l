@@ -30,12 +30,35 @@ from scipy import stats as scipy_stats
 from analysis.dl2l_analysis.figures import DECILE_LABELS, plt, save
 from analysis.dl2l_analysis.loading import num
 
-MEM_ARMS_HINT = ("_mem",)
-
-
 def _mem_arms(cfg) -> list:
-    """Arms that actually have the MEMORY filter — the only ones with memory_decisions."""
-    return [c for c in cfg.conditions if "_mem" in c.key]
+    """Arms that have the MEMORY filter — the only ones that can emit memory_decisions.
+
+    Keyed off the "nomem" marker rather than a "_mem" substring: every p84 arm is named
+    <stack>_(no)mem[_extra], and testing for absence is the reading that does not quietly
+    break if an arm gains a suffix.
+    """
+    return [c for c in cfg.conditions if "nomem" not in c.key]
+
+
+def attach_engram_life_decile(engrams: pd.DataFrame, creatures: pd.DataFrame) -> pd.DataFrame:
+    """Bucket engrams into life deciles by cycle rather than by wall-clock.
+
+    The other timed tables get their life_decile from make_tick_rank_attacher, which
+    nearest-joins on `time`. engrams has no wall-clock column at all — only lay_cycle and
+    reinforced_cycle — so feeding it through that path would compare a cycle counter
+    against epoch milliseconds and silently drop every engram into decile 0. Dividing
+    reinforced_cycle by the creature's total decision count is the equivalent measure:
+    both count cognitive cycles.
+    """
+    if engrams.empty:
+        return engrams
+    df = engrams.copy()
+    df["reinforced_cycle"] = num(df["reinforced_cycle"])
+    counts = creatures[["creature_key", "condition", "trial", "tick_count"]].drop_duplicates()
+    df = df.merge(counts, on=["creature_key", "condition", "trial"], how="left")
+    df["life_frac"] = df["reinforced_cycle"] / df["tick_count"].clip(lower=1)
+    df["life_decile"] = (df["life_frac"].fillna(0) * 10).clip(0, 9).astype(int)
+    return df
 
 
 # ---------------------------------------------------------------------------
@@ -247,7 +270,7 @@ def consolidation(episodes: pd.DataFrame, traces: pd.DataFrame, creatures: pd.Da
                   cfg) -> None:
     """Consolidation activity, for whichever arm has consolidationEnabled.
 
-    Only the C_mem_consol arm can produce these rows; the figure is skipped entirely
+    Only the current_mem_consol arm can produce these rows; the figure is skipped entirely
     otherwise rather than drawn empty.
     """
     have = [df for df in (episodes, traces) if df is not None and not df.empty]

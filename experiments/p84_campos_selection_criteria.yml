@@ -11,32 +11,32 @@
 # reducing n is preferred over capping runtime, since a censored lifetime would corrupt
 # the survival comparison.
 #
-# C_mem_consol is an extension arm, not part of any parity claim — neither source
+# current_mem_consol is an extension arm, not part of any parity claim — neither source
 # architecture had sleep consolidation. It sits outside the within-pair comparisons
-# (L_mem vs L_nomem, C_mem vs C_nomem) so it cannot confound them.
+# (legacy_mem vs legacy_nomem, current_mem vs current_nomem) so it cannot confound them.
 
 name: p84_campos_selection_criteria
 trials: 50
 
 conditions:
-  - key: L_nomem
-    simulation: simulations/p84_campos_L_nomem.conf
+  - key: legacy_nomem
+    simulation: simulations/p84_campos_legacy_nomem.conf
     label: Legacy
     color: "#bdbdbd"
-  - key: L_mem
-    simulation: simulations/p84_campos_L_mem.conf
+  - key: legacy_mem
+    simulation: simulations/p84_campos_legacy_mem.conf
     label: Legacy+Mem
     color: "#5c85d6"
-  - key: C_nomem
-    simulation: simulations/p84_campos_C_nomem.conf
+  - key: current_nomem
+    simulation: simulations/p84_campos_current_nomem.conf
     label: Current
     color: "#9e9e9e"
-  - key: C_mem
-    simulation: simulations/p84_campos_C_mem.conf
+  - key: current_mem
+    simulation: simulations/p84_campos_current_mem.conf
     label: Current+Mem
     color: "#2b5eb8"
-  - key: C_mem_consol
-    simulation: simulations/p84_campos_C_mem_consol.conf
+  - key: current_mem_consol
+    simulation: simulations/p84_campos_current_mem_consol.conf
     label: Current+Mem+Consol
     color: "#7b2d8b"
 

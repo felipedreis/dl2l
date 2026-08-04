@@ -2,9 +2,9 @@
 Analysis: p84_campos_selection_criteria — Campos et al. (2015) replication (issue #84).
 
 Arms (see simulations/p84_campos_*.conf):
-  L_nomem / L_mem       legacy-minimal stack, without / with the MEMORY filter
-  C_nomem / C_mem       current subsystem stack, without / with the MEMORY filter
-  C_mem_consol          C_mem plus sleep consolidation — an extension arm, outside every
+  legacy_nomem / legacy_mem       legacy-minimal stack, without / with the MEMORY filter
+  current_nomem / current_mem       current subsystem stack, without / with the MEMORY filter
+  current_mem_consol          current_mem plus sleep consolidation — an extension arm, outside every
                         parity claim, since neither source architecture had consolidation
 
 World: his verbatim setup — 20 RED_APPLE, 20 GREEN_APPLE, 60 GRAY_APPLE in 860x720, each
@@ -56,7 +56,7 @@ CRITERION_COLOR = {
 }
 ZOOM_N = 1000                    # Campos Fig. 6's window
 CAMPOS_LIFETIME_RATIO = 6.7      # 1.4e4 s with memory / 2.1e3 s without
-ARM_PAIRS = [("L_nomem", "L_mem"), ("C_nomem", "C_mem")]
+ARM_PAIRS = [("legacy_nomem", "legacy_mem"), ("current_nomem", "current_mem")]
 
 
 # ---------------------------------------------------------------------------
@@ -266,9 +266,7 @@ def run(cfg) -> None:
     if not decisions.empty:
         decisions = decisions.rename(columns={"time_ms": "time"})
         decisions = attach_tick_rank(decisions, creatures)
-    if not engrams.empty:
-        engrams["time"] = num(engrams["reinforced_cycle"])
-        engrams = attach_tick_rank(engrams, creatures)
+    engrams = p84_memory_common.attach_engram_life_decile(engrams, creatures)
 
     cumulative_figure(actions, cfg, None,
                       "p2_cumulative_lifetime.png",
