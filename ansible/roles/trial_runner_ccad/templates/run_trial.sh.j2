@@ -218,6 +218,7 @@ singularity instance start $WRITABLE \
   --env HOST=localhost --env PORT="$MANAGER_PORT" --env SEED_PORT="$MANAGER_PORT" \
   --env METRICS_PORT="$METRICS_MANAGER_PORT" --env TRIAL_ID="$TRIAL" \
   --env JAVA_CPUS={{ ccad_manager_cpus }} \
+  --env DL2L_CLUSTER_DISPATCHER_POOL_SIZE=2 \
   {{ remote_work_dir }}/dl2l_sandbox "$MANAGER_NAME"
 
 echo "Waiting for manager..."
@@ -235,6 +236,7 @@ singularity instance start $WRITABLE \
   --env HOST=localhost --env PORT="$DETECTOR_PORT" --env SEED_PORT="$MANAGER_PORT" \
   --env METRICS_PORT="$METRICS_DETECTOR_PORT" --env TRIAL_ID="$TRIAL" \
   --env JAVA_CPUS={{ ccad_detector_cpus }} \
+  --env DL2L_COLLISION_DISPATCHER_POOL_SIZE=2 \
   {{ remote_work_dir }}/dl2l_sandbox "$DETECTOR_NAME"
 
 # --- holder -------------------------------------------------------------------
@@ -252,6 +254,7 @@ singularity instance start $WRITABLE \
   --env METRICS_PORT="$METRICS_HOLDER_PORT" --env TRIAL_ID="$TRIAL" \
   --env JAVA_XMX={{ ccad_holder_xmx }} --env JAVA_CPUS={{ ccad_holder_cpus }} \
   --env OMP_NUM_THREADS={{ ccad_holder_cpus }} \
+  --env DL2L_CLUSTER_DISPATCHER_POOL_SIZE=2 \
   {{ remote_work_dir }}/dl2l_sandbox "$HOLDER_NAME"
 
 # A holder that crashes on startup disappears from `instance list` almost
