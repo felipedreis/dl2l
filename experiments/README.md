@@ -9,6 +9,23 @@ Validate with:
 python3 scripts/validate_experiment.py experiments/<name>.yml
 ```
 
+## Local prerequisites
+
+Extraction (`scripts/dl2l_data/extract.py`) reads the raw Arrow IPC dump through
+DuckDB, so `python3` needs pandas, pyarrow **and duckdb**. `ansible/provision-ccad.yml`
+installs all three on the cluster; there is no equivalent playbook for a dev machine,
+so install them yourself once:
+
+```bash
+python3 -m pip install --break-system-packages pandas pyarrow duckdb
+```
+
+(`--break-system-packages` is needed on a Homebrew python3, which is marked
+externally-managed under PEP 668. It is not macOS's system python.) Without duckdb
+every trial runs to completion and then dies in the extract step with
+`ModuleNotFoundError: No module named 'duckdb'`, after the simulation time has
+already been spent.
+
 ## Schema
 
 ```yaml
