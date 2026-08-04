@@ -14,7 +14,8 @@ This is sound because tonic neuromodulator values change slowly.
 
 Writes train.parquet, val.parquet (world-only, for --variant single),
 train_dual.parquet, val_dual.parquet (world+internal, for the dual variants),
-and stats.json to --out.
+and stats.json to --out. With --emit-arrow, also writes a .arrow (Feather v2)
+sibling next to each .parquet output, for ml/jepa/dataset.py's zero-copy fast path.
 Trials 1–13 → train; trials 14–15 → val (configurable via TRAIN_TRIALS / VAL_TRIALS).
 
 Usage:
@@ -80,7 +81,15 @@ def load_all(data_dir: Path, filename: str) -> pd.DataFrame:
 
 
 def _cast_numeric(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
-    """Cast listed columns to float64, coercing unparseable strings to NaN."""
+    """Cast listed columns to float64, coercing unparseable strings to NaN.
+
+    NOT dead code post-Arrow-write-path (docs/plans/arrow-ipc-read-path.md
+    tried removing this and reverted): --data can point at any pre-existing
+    ml/data_*/ tree, including ones extracted before the DuckDB/Arrow-based
+    extractor - confirmed live, `data_datacollect_v2` still has `actions.time`
+    as `str` and fails merge_asof outright without this. Freshly
+    Arrow-extracted data no longer needs it, but this script has no way to
+    know which era --data points at."""
     for col in cols:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -130,6 +139,19 @@ def one_hot(series: pd.Series, categories: list[str]) -> pd.DataFrame:
     ).astype(np.float32)
 
 
+def _write_output(df: pd.DataFrame, path: Path, emit_arrow: bool) -> None:
+    """Writes `path` (.parquet, always) and, if emit_arrow, a same-named .arrow
+    sibling (Feather v2 - the Arrow IPC *file* format, zero-copy-mmappable,
+    unlike the write path's stream format which is sequential-only - appropriate
+    here since this is a finished, static training set read many times, not an
+    append-only log). See ml/jepa/dataset.py's TrajectoryDataset, which prefers
+    the .arrow sibling when present."""
+    df.to_parquet(path, index=False)
+    if emit_arrow:
+        import pyarrow.feather as feather
+        feather.write_feather(df, path.with_suffix(".arrow"), version=2)
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -139,6 +161,9 @@ def main():
     p.add_argument("--out",  default="data_prepared",
                    help="Output directory for train.parquet, val.parquet, "
                         "train_dual.parquet, val_dual.parquet, stats.json")
+    p.add_argument("--emit-arrow", action="store_true",
+                   help="Also write a .arrow (Feather v2) sibling next to each .parquet "
+                        "output, for ml/jepa/dataset.py's zero-copy fast path")
     args = p.parse_args()
 
     data_dir = Path(args.data)
@@ -158,7 +183,8 @@ def main():
     if drives.empty:
         sys.exit("No drives.parquet found — run exp_extract.py first.")
 
-    # Cast numeric columns (extractor writes all non-trial columns as strings).
+    # Cast numeric columns - not every ml/data_*/ tree --data might point at was
+    # extracted via the current DuckDB/Arrow-based extractor (see _cast_numeric).
     actions  = _cast_numeric(actions,  ["time"])
     drives   = _cast_numeric(drives,   ["time"] + [f"init_{e}" for e in EMOTION_INDEX_ORDER]
                                                + [f"final_{e}" for e in EMOTION_INDEX_ORDER])
@@ -331,18 +357,18 @@ def main():
     df_val   = _normalise_h(df_val)
 
     drop_meta = ["creature_key", "trial", "time"]
-    df_train.drop(columns=drop_meta, errors="ignore").to_parquet(
-        out_dir / "train_dual.parquet", index=False)
-    df_val.drop(columns=drop_meta, errors="ignore").to_parquet(
-        out_dir / "val_dual.parquet", index=False)
+    _write_output(df_train.drop(columns=drop_meta, errors="ignore"),
+                  out_dir / "train_dual.parquet", args.emit_arrow)
+    _write_output(df_val.drop(columns=drop_meta, errors="ignore"),
+                  out_dir / "val_dual.parquet", args.emit_arrow)
 
     # Plain (world-only) variants for --variant single: same rows, minus the
     # internal-state (h_t) columns, which TrajectoryDataset(dual=False) never reads.
     drop_plain = drop_meta + INTERNAL_STATE_FEATURE_ORDER
-    df_train.drop(columns=drop_plain, errors="ignore").to_parquet(
-        out_dir / "train.parquet", index=False)
-    df_val.drop(columns=drop_plain, errors="ignore").to_parquet(
-        out_dir / "val.parquet", index=False)
+    _write_output(df_train.drop(columns=drop_plain, errors="ignore"),
+                  out_dir / "train.parquet", args.emit_arrow)
+    _write_output(df_val.drop(columns=drop_plain, errors="ignore"),
+                  out_dir / "val.parquet", args.emit_arrow)
 
     print(f"  train: {len(df_train):,} samples ({df_train['trial'].nunique()} trials)")
     print(f"  val:   {len(df_val):,} samples ({df_val['trial'].nunique()} trials)")
