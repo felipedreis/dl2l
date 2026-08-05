@@ -291,9 +291,50 @@ Each is reported *confirmed* / *refuted* / *inconclusive*, separately per arm pa
 
 ---
 
-## 9. Known limitation found during piloting
+## 9. Known limitations found during piloting and the CCAD campaign
 
-In the first real trial the selection types recorded were `RANDOM` (65,936) and
+**CCAD ran out of disk quota partway through the campaign (2026-08-05).** `engrams.parquet`
+alone is 100–563 MB per trial at this experiment's scale (5 creatures, up to 90 min) —
+legacy-minimal trials produce far more than current-stack ones (~550 MB/trial vs
+~100 MB/trial; the current stack's creatures apparently accumulate proportionally fewer
+engram rows, itself a finding worth carrying into the report). The shared CCAD submit/rescue
+framework (`ansible/roles/trial_runner_ccad/`) syncs each trial's parquet back to the local
+Mac on `rescue=true` but never deletes the remote copy afterward — every successfully
+extracted trial's full output sits on CCAD's quota-limited `$HOME` forever. With 6 conditions
+× 8 trials at this table size, the account's quota was exhausted well before the campaign
+finished; jobs submitted afterward failed near-instantly (SLURM couldn't even open their
+`--output` log file).
+
+Two consequences, both handled but worth carrying forward to the shared framework itself:
+
+1. **A `DONE` sentinel does not mean a trial succeeded** — it's written unconditionally by
+   the script's `EXIT` trap, so a trial that died mid-extraction from quota exhaustion still
+   marks itself "done," with only some of its tables ever written (confirmed live: two
+   `current_nomem` trials had `creatures.parquet`/`actions.parquet`/`drives.parquet` but were
+   missing `engrams.parquet`, `mouth_interactions.parquet`, `conditioning.parquet`, and five
+   others — individually valid, parseable parquet files, just an incomplete set). Trusting
+   the ansible role's own "N/8 done" count is not sufficient; every trial must be checked for
+   the *full expected table set*, not just that the files present are readable. See the
+   validator pattern in the loop script referenced below.
+2. **The fix used here** (not yet folded into the shared role) was a polling wrapper that,
+   after each `rescue=true` sync, validates every locally-synced trial against the union of
+   tables its own condition's other trials produced, and for each now-valid trial, deletes
+   the remote copy over a direct SSH `rm -rf`. This bounds CCAD's remote footprint to
+   "trials currently in flight" rather than "every trial ever run." A proper fix would add
+   this cleanup (and the stricter completeness check) directly to `rescue_condition.yml` —
+   filed as a follow-up, not done here to limit the blast radius of an unattended overnight
+   change to shared infra.
+
+**A related, purely operator-side bug**: when manually resubmitting the missing/broken
+trials' array indices (`sbatch --array=X-Y <script>` reusing the rendered job script),
+running it from inside `~/l2l` (i.e. `cd l2l && sbatch ...`) breaks every job instantly —
+`remote_work_dir` is a *relative* path (`"l2l"`, resolved against `$HOME`) baked into the
+script's `#SBATCH --output` directive, so submitting from inside that directory doubles it
+to `~/l2l/l2l/logs/...`, which doesn't exist; SLURM can't open the output file and every
+task fails in under a second with no log at all. Submit `sbatch --array=X-Y l2l/jobs/<script>`
+from `$HOME`, exactly as ansible itself does — never `cd` into `remote_work_dir` first.
+
+In the first real pilot trial the selection types recorded were `RANDOM` (65,936) and
 `AFFORDANCE` (11,284) — **`TARGET_DISTANCE` won zero decisions.**
 `ActionSelection.selectOne` attributes a decision to a filter only when that filter alone
 narrows the candidate set to one, and TargetDistance rarely does. Campos reports "Nearest"
