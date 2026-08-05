@@ -22,7 +22,7 @@ from analysis.dl2l_analysis.config import ExperimentAnalysis
 from analysis.dl2l_analysis.figures import DECILE_LABELS, plt, save
 from analysis.dl2l_analysis.loading import attach_born_time_and_ticks, load_all, make_tick_rank_attacher, num
 
-# Pre-#76 baseline (docs/reports/p59_batching_fix_report.md, empirical from
+# Pre-#76 baseline (docs/reports/20260709_p59_batching_fix_report.md, empirical from
 # ml/data_p59_calibration): 3 creatures, same world/food sizing as this experiment's sim.
 PRE_76_LIFETIMES_S = [151.285, 148.447, 153.822]
 PRE_76_CYCLES = [23541, 22890, 24021]

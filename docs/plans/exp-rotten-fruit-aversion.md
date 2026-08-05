@@ -94,7 +94,7 @@ docker/docker-compose-rotten-fruit-v1-6.yml
 
 ## Report
 
-`docs/reports/rotten_fruit_v1_report.md`
+`docs/reports/20260713_rotten_fruit_v1_report.md`
 
 ## Implementation Steps
 

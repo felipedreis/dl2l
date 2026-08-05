@@ -3,7 +3,7 @@
 CLAUDE.md's development cycle (step 5g) mandates every experiment report have
 Purpose / Assumptions / Hypothesis / Results / Analysis sections. This module
 doesn't try to auto-generate the narrative (that's the point of an
-experiment-specific write-up, see docs/reports/rotten_fruit_v1_report.md for
+experiment-specific write-up, see docs/reports/20260713_rotten_fruit_v1_report.md for
 the target tone/structure) — it gives a ReportBuilder that accumulates
 markdown sections in the right order and writes them to
 <report_dir>/<name>_report.md.
