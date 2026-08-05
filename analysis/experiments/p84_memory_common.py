@@ -40,6 +40,68 @@ def _mem_arms(cfg) -> list:
     return [c for c in cfg.conditions if "nomem" not in c.key]
 
 
+ENGRAM_COLUMNS = ["creature_key", "reinforced_cycle", "eligibility", "emotion_delta", "cycle_gap"]
+
+
+def load_engrams_sampled(cfg, max_rows_per_trial: int = 50_000,
+                         batch_size: int = 500_000) -> pd.DataFrame:
+    """Loads engrams.parquet with a per-trial row cap, true-streaming one file at a time.
+
+    Legacy-minimal trials in this campaign accumulate 70-125 MILLION engram rows each
+    (vs ~170K for current-stack trials — a 700x difference that is itself a finding, see
+    the report's D2 discussion: the current stack's neuromodulation/expectancy loop
+    evidently gates memory formation far more tightly than the legacy-minimal one).
+    Concatenating that across 48 trials via the ordinary load_all exceeds available
+    memory — confirmed live: the campaign's automated analysis step was OOM-killed
+    (rc=-9) trying to load the full table. A first fix (read each file fully, THEN
+    downsample) still peaked at ~19GB RSS on one 125M-row file alone, since the whole
+    file is materialized before the downsample step ever runs.
+
+    Every downstream use of this table (attach_engram_life_decile's life-decile means,
+    formation_vs_use's cumulative-count curves) is an aggregate statistic, never a
+    row-level join against another table, so a large systematic sample per trial is
+    statistically equivalent for these purposes. pyarrow's iter_batches streams the file
+    in bounded chunks regardless of its on-disk row-group layout, so peak memory per
+    file is ~batch_size rows, not the file's full row count — every large file is kept
+    to roughly the same footprint as a small one.
+    """
+    import pyarrow.parquet as pq
+
+    frames = []
+    for cond in cfg.cond_keys:
+        base = cfg.data_dir_for(cond)
+        for trial in cfg.trial_range:
+            path = base / cond / f"trial_{trial}" / "engrams.parquet"
+            if not path.exists():
+                continue
+            pf = pq.ParquetFile(path)
+            total_rows = pf.metadata.num_rows
+            # Every Kth batch, not every batch, so a systematic sample spans the whole
+            # file (i.e. the whole simulated lifetime) rather than only its first chunk.
+            n_batches = max(1, -(-total_rows // batch_size))  # ceil
+            keep_every = max(1, n_batches // max(1, (max_rows_per_trial // batch_size) or 1))
+            trial_frames = []
+            kept_rows = 0
+            for i, batch in enumerate(pf.iter_batches(batch_size=batch_size, columns=ENGRAM_COLUMNS)):
+                if i % keep_every != 0:
+                    continue
+                bdf = batch.to_pandas()
+                if kept_rows + len(bdf) > max_rows_per_trial:
+                    bdf = bdf.iloc[:max(0, max_rows_per_trial - kept_rows)]
+                if not bdf.empty:
+                    trial_frames.append(bdf)
+                    kept_rows += len(bdf)
+                if kept_rows >= max_rows_per_trial:
+                    break
+            if trial_frames:
+                tdf = pd.concat(trial_frames, ignore_index=True)
+                tdf["condition"] = cond
+                tdf["trial"] = trial
+                frames.append(tdf)
+    cols = ENGRAM_COLUMNS + ["condition", "trial"]
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=cols)
+
+
 def attach_engram_life_decile(engrams: pd.DataFrame, creatures: pd.DataFrame) -> pd.DataFrame:
     """Bucket engrams into life deciles by cycle rather than by wall-clock.
 

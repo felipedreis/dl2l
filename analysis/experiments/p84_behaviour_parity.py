@@ -425,7 +425,12 @@ def run(cfg) -> None:
     creatures = load_all(cfg, "creatures.parquet")
     actions = load_all(cfg, "actions.parquet")
     mouth = load_all(cfg, "mouth_interactions.parquet")
-    engrams = load_all(cfg, "engrams.parquet")
+    # Not load_all: legacy-minimal trials have 70-125M engram rows each (a 700x gap vs
+    # the current stack's ~170K/trial - itself a finding, see D2). Loading that
+    # concatenated across 48 trials OOM-killed the campaign's first analysis attempt.
+    # See load_engrams_sampled's docstring for why per-trial sampling is statistically
+    # sound here (every downstream use is an aggregate, never a row-level join).
+    engrams = p84_memory_common.load_engrams_sampled(cfg)
     decisions = load_all(cfg, "memory_decisions.parquet")
     conditioning = load_all(cfg, "conditioning.parquet")
     episodes = load_all(cfg, "consolidation_episodes.parquet")
