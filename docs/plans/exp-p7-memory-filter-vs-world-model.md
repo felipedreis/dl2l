@@ -164,7 +164,7 @@ Local execution: `docker compose -f docker/docker-compose-exp-p7-N.yml up`.
 - Sample size for P7-1: computed from P7-0 data via power analysis (Cohen's d, α=0.05, β=0.20,
   two-tailed; will be computed at the end of Phase 0 in the runner script).
 
-Report: `docs/reports/EXP_P7_MEMORY_FILTER_VS_WORLD_MODEL.md`.
+Report: `docs/reports/20260702_memory_filter_vs_world_model_report.md`.
 
 ---
 

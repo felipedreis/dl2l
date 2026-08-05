@@ -179,7 +179,7 @@ Retrain dual-encoder model on full-world data, export, rebuild jar, run validati
 
 ### Phase 7 — Combined report
 
-`docs/reports/EXP_48_SLEEP_BIAS_FIX.md`:
+`docs/reports/20260629_p48_sleep_bias_fix_report.md`:
 - Purpose / Assumptions / Hypothesis
 - Experiment A results (lifetime vs EXP-43, SLEEP selection rate)
 - Experiment B results (lifetime vs A, SLEEP selection rate)
@@ -206,7 +206,7 @@ Retrain dual-encoder model on full-world data, export, rebuild jar, run validati
 | `WorldModelFilter.java` | Pass internal state to engine |
 | `FullAppraisal.java` | Extract + forward live emotion levels |
 | `MemoryConsolidator.java` | `encodeInternalState`; dual path in `trainBatch` |
-| `docs/reports/EXP_48_SLEEP_BIAS_FIX.md` | Combined report |
+| `docs/reports/20260629_p48_sleep_bias_fix_report.md` | Combined report |
 
 ---
 

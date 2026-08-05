@@ -53,7 +53,7 @@ weights come from a full training run (see Training Plan below).
 6. **Build** — `mvn package` (90/90 tests must pass)
 
 7. **Validate** — run `docker-compose-exp-48-val.yml`, extract, compare SLEEP rate vs.
-   EXP-48 baseline (94.6%). Target: < 20%. Report in `docs/reports/EXP_51_INTERNAL_CRITIC.md`.
+   EXP-48 baseline (94.6%). Target: < 20%. Report in `docs/reports/20260629_p51_internal_critic_report.md`.
 
 ## Acceptance criteria
 
@@ -61,4 +61,4 @@ weights come from a full training run (see Training Plan below).
 - [x] `mvn package` passes 90/90 tests
 - [x] `ConsolidationPipelineTest` passes for dual-encoder
 - [ ] Training run + experiment shows statistically significant SLEEP rate reduction
-- [ ] Report written to `docs/reports/EXP_51_INTERNAL_CRITIC.md`
+- [ ] Report written to `docs/reports/20260629_p51_internal_critic_report.md`

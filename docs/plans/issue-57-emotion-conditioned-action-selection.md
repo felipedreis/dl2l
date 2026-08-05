@@ -2,7 +2,7 @@
 
 > **SUPERSEDED.** After design discussion this narrow plan was repurposed into the deeper
 > neuromodulatory expectancy loop. See **`issue-57-neuromodulatory-expectancy.md`** for the
-> implemented plan and `docs/reports/issue-57-neuromodulatory-expectancy.md` for results.
+> implemented plan and `docs/reports/20260707_p57_neuromodulatory_expectancy_report.md` for results.
 > Retained for history; the `affectBasic`-keyed operant idea here became the symbolic expectancy
 > predictor there.
 
