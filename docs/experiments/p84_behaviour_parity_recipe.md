@@ -149,14 +149,14 @@ the effect, not a reason to keep adding trials.
 **Executed 2026-08-04**, 3 trials × 3 creatures, `legacy_nomem` vs `legacy_mem`, real
 post-pacemaker/OOM-fix data:
 
-| outcome | d | ICC | trials needed |
-|---|---|---|---|
-| lifetime (s) | −0.078 | 0.000 | 977 |
-| mean interaction interval (s) | +0.037 | 0.126 | 5483 |
-| RANDOM share of decisions | −4.854 | 0.000 | 1 |
-| AFFORDANCE share | −0.577 | 0.000 | 19 |
-| TARGET_DISTANCE share | n/a (always 0) | — | — |
-| RANDOM late/early ratio | +0.245 | 0.000 | 101 |
+| outcome                       | d              | ICC   | trials needed |
+| ----------------------------- | -------------- | ----- | ------------- |
+| lifetime (s)                  | −0.078         | 0.000 | 977           |
+| mean interaction interval (s) | +0.037         | 0.126 | 5483          |
+| RANDOM share of decisions     | −4.854         | 0.000 | 1             |
+| AFFORDANCE share              | −0.577         | 0.000 | 19            |
+| TARGET_DISTANCE share         | n/a (always 0) | —     | —             |
+| RANDOM late/early ratio       | +0.245         | 0.000 | 101           |
 
 Lifetime and interval effects are indistinguishable from zero at this design — no
 reasonable n resolves them, so P1/P4/P5 may legitimately come back *inconclusive* rather
