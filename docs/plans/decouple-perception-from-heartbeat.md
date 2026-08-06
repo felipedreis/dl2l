@@ -296,30 +296,59 @@ end-to-end path, worth having independently of this issue:
 
 ### 4b.3 — CI
 
-`.github/workflows/ci.yml` runs `mvn test -Dtest='!ConsolidationPipelineTest'` on PRs.
-Surefire's default includes already match `*IntegrationTest.java`, so **no workflow or pom
-include change is needed** — the tests run in the pipeline as soon as they exist. Two small
-additions:
+`.github/workflows/ci.yml` runs `mvn test -Dtest='!ConsolidationPipelineTest'` on PRs, and
+surefire's default includes already match `*IntegrationTest.java`, so no workflow change was
+needed. `pom.xml` gained `akka-testkit` (test scope) and a surefire `METRICS_PORT` override.
 
-- `pom.xml` — `akka-testkit_${scala.version}` (2.5.32, matching the other akka artifacts),
-  `<scope>test</scope>`, for `TestKit.awaitCond` / `expectMsg` rather than hand-rolled
-  polling loops.
-- `pom.xml` surefire `<configuration>` — add `<environmentVariables><METRICS_PORT>` (a
-  high free port) alongside the existing `argLine`.
+---
 
-**Flakiness discipline** — these are wall-clock tests on a shared CI runner:
-- Assert *bands*, never point values; the property under test is "30-ish, not 300", a
-  ~5x-wide band still fails on today's code.
-- Never `Thread.sleep`-and-assert; use `TestKit.awaitCond` with a generous deadline so a
-  slow runner is slow, not red.
-- Boot one `ActorSystem` per class (`@BeforeAll`), tear down in `@AfterAll` with
-  `TestKit.shutdownActorSystem`. Ephemeral remoting ports mean parallel classes cannot
-  collide.
-- If any test proves unstable on the runner despite this, tag it `@Tag("integration")` and
-  add `-Dgroups` to the workflow rather than deleting it — but start without the tag, since
-  the whole point is that it runs on every PR.
+## Step 4b — outcome (implemented 2026-08-06)
 
-`mvn package` must compile clean; `mvn test` green locally and in CI.
+Three classes, nine tests, ~3 minutes total, all green; `mvn package` builds the fat jar.
+
+| class | covers |
+|---|---|
+| `SimulationCycleRateIntegrationTest` | rate == tick rate in dense and empty worlds; rate independent of perception load; cognition survives the detector being stopped; baseline arm reproduces the pre-fix rate |
+| `PerceptionFlickerIntegrationTest` | flips/second, gated vs baseline arm in the same world; `perceivedobjects` survives the write path |
+| `SimulationLifecycleIntegrationTest` | handshake → spawn → full sensory-motor loop → persistence; one decision per cycle; hunger both accrues and is relieved |
+
+**Measured, same world, same build:**
+
+| | cycle rate | perception flicker |
+|---|---|---|
+| tick-gated | 30.5 Hz | 4.6 flips/s (15.2% of pairs) |
+| baseline arm | 152.5 Hz | 44.1 flips/s (28.9% of pairs) |
+
+**Bite check.** With `tickGatedCognition = false` forced in both test worlds, the gated
+assertions fail as intended: 160 Hz against a nominal 30, and the flicker comparison
+collapses. The tests are not vacuous.
+
+### Findings from building this layer
+
+1. **Flips-per-second, not fraction-of-pairs.** Issue #85's acceptance criterion is phrased
+   as "the ~25% of consecutive pairs baseline", but that fraction is a per-cycle quantity —
+   at 5x the cycle rate it counts 5x as many pairs, so fixing the rate moves its denominator
+   as much as its numerator. Measured, the fraction only roughly halves (28.9% → 15.2%) while
+   flips per second — what the downstream pipeline actually experiences — falls almost
+   tenfold. **The issue's criterion should be re-worded to the per-second figure.**
+2. **`MLServiceExtension` loaded eagerly regardless of need.** `Holder.preStart()` and
+   `CreatureActor.init()` both resolved it unconditionally, so any run — including a config
+   with no `WORLD_MODEL` filter — paid a DJL/PyTorch native-runtime download and hundreds of
+   MB. Now gated on `CreatureActor.worldModelInUse()`. This is what makes the integration
+   tests hermetic; it is also a straight win for every non-JEPA run.
+3. **A startup race in the manager (not fixed here — worth its own issue).**
+   `SimulationManager.handleRegister` starts the simulation as soon as the expected holder
+   count is reached (after a fixed 5 s sleep), without ever waiting for the `idProvider`; if
+   registration has not landed by then it asks a null ref for creature ids and the run dies
+   with `question not sent to [null]`. `SequentialIdProvider.handleNewMember` compounds it by
+   blocking its own dispatcher thread on a 5 s `Await`. Separate JVMs started seconds apart
+   hide this in deployment; one JVM does not. The harness works around it by creating the
+   holder last, after a settle.
+4. **Two buffers sit between a cognitive cycle and a readable file** —
+   `CreatureComponent.persist()` (256 states) and `ArrowIpcBackend` (4096 rows). A `Flush`
+   moves neither's partial contents, so integration tests finalize the dump instead. Turning
+   both off by environment variable was tried first and distorted the measurement badly: one
+   record batch per row dropped a ~270 Hz simulation to ~1 Hz.
 
 ---
 

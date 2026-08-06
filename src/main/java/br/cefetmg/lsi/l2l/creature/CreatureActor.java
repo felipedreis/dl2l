@@ -90,6 +90,9 @@ public class CreatureActor implements Creature {
 
     private Cancellable clock;
 
+    /** Set in {@link #init()}; gates the MLServiceExtension lookups here and in {@link #kill()}. */
+    private boolean worldModelInUse;
+
     // null means "inherit global settings from SimulationSettingsExtension"
     private final LearningSettings learningSettings;
 
@@ -172,7 +175,16 @@ public class CreatureActor implements Creature {
             consolidator = context.system().deadLetters();
         }
 
-        final MLServiceExtension.Impl mlExt = MLServiceExtension.of(context.system());
+        // Resolved only when something will actually use it. MLServiceExtension's constructor
+        // loads the species models through DJL/PyTorch, which costs a native-runtime
+        // download on first use and hundreds of MB of memory - pure waste for a run whose
+        // filter chain has no WORLD_MODEL, and it is what made an integration test that
+        // boots a real creature depend on network access. FullAppraisal already treats a
+        // null mlExt as "WORLD_MODEL silently unavailable" (see its preStart), and the
+        // JEPA-mode MemoryConsolidator above is only created under the same condition.
+        worldModelInUse = worldModelInUse(effective);
+        final MLServiceExtension.Impl mlExt = worldModelInUse
+                ? MLServiceExtension.of(context.system()) : null;
 
         SequentialId componentId = id;
         for (Map.Entry<Class<?>, Function<SequentialId, CreatureComponent>> entry : componentFactories(effective, mlExt, wmFilterRef).entrySet()) {
@@ -204,6 +216,16 @@ public class CreatureActor implements Creature {
         collisionDetector.tell(getPositioningAttr(), ActorRef.noSender());
     }
 
+    /**
+     * Whether any subsystem in this configuration reaches the species world model. Every
+     * such path - FullAppraisal's WORLD_MODEL filter, the JEPA-mode MemoryConsolidator, and
+     * JepaExpectancyPredictor (which reads the filter's prediction cache) - is gated on the
+     * WORLD_MODEL filter being enabled, so this single check covers all of them.
+     */
+    public static boolean worldModelInUse(LearningSettings settings) {
+        return settings.isFilterEnabled(ActionSelectionType.WORLD_MODEL);
+    }
+
     private LinkedHashMap<Class<?>, Function<SequentialId, CreatureComponent>> componentFactories(
             LearningSettings effective, MLServiceExtension.Impl mlExt,
             AtomicReference<WorldModelFilter> wmFilterRef) {
@@ -231,7 +253,12 @@ public class CreatureActor implements Creature {
             TypedActor.context().stop(p.second);
         }
         TypedActor.context().stop(consolidator);
-        MLServiceExtension.of(TypedActor.context().system()).releaseAdapter(id.key);
+        // Only if init() resolved the extension - see its comment there. Calling of() here
+        // would otherwise construct (and load) the whole ML service just to release an
+        // adapter that was never created.
+        if (worldModelInUse) {
+            MLServiceExtension.of(TypedActor.context().system()).releaseAdapter(id.key);
+        }
         SimulationSettingsExtension.of(TypedActor.context().system()).releaseCreatureSettings(id.key);
 
         // Same UUID as the birth write above - no upsert semantics (see ArrowIpcBackend's
