@@ -33,10 +33,10 @@ docker build -f docker/Dockerfile -t dl2l .
 # Run an experiment (any env — see "Running Experiments" below)
 cd ansible && ansible-playbook -i inventories/local run-experiment.yml -e experiment=<name>
 
-# Extract data directly from a running PostgreSQL container (used internally by the
-# ansible trial runner; call it manually to re-extract from a live container)
+# Extract data from a trial's raw Arrow IPC dump (used internally by the ansible trial
+# runner; call it manually to re-extract from a raw dump that's still on disk)
 PYTHONPATH=scripts python3 -m dl2l_data.extract \
-    --experiment <name> --condition <key> --trial <n> --out <data-dir> --container <db-container>
+    --experiment <name> --condition <key> --trial <n> --out <data-dir> --raw-dir <saveDir>/raw
 ```
 
 The generic launch script signature:
@@ -55,7 +55,7 @@ The simulation runs as four cooperating Akka actor roles — each can run on a s
 | `manager` | `SimulationManager` | Orchestrates startup; distributes creatures/world-objects to holders; detects simulation end |
 | `idProvider` | `SequentialIdProvider` | Issues globally unique `SequentialId` values across the cluster |
 | `collisionDetector` | `CollisionDetectorActor` | Maintains a `QuadTree` of all object positions; answers proximity queries from creatures; streams geometry updates via Akka Streams |
-| `holder` | `Holder` | Owns a shard of creatures and world-objects; runs creature lifecycle; persists state to PostgreSQL via EclipseLink JPA |
+| `holder` | `Holder` | Owns a shard of creatures and world-objects; runs creature lifecycle; persists state via `BDActor`/`ArrowIpcBackend` (see "Persistence") |
 
 Startup sequence enforced by `SimulationManager`: wait for all expected holders → `AckReady` handshake → distribute world-objects → spawn creatures → simulation runs until all creatures die → `Finish` message terminates the cluster.
 
@@ -88,20 +88,19 @@ Custom dispatchers defined in application.conf:
 - `collision-dispatcher` — uses `CollisionDetectorPriorityMailbox`
 - `component-dispatcher` — uses `ComponentMailbox`
 
-## Database
+## Persistence
 
-PostgreSQL. Schema name must be `data`. Connection configured in `src/main/resources/META-INF/persistence.xml`:
-- URL: `jdbc:postgresql://dl2l-db:5432/l2l` (hardcoded default — Docker's per-container DNS
-  resolves `dl2l-db` in every environment that uses docker-compose, i.e. local and Pi)
-- User/password: `postgres`/`postgres`
-- DDL generation: `drop-and-create-tables` on startup
+No database, anywhere. (This section used to document a PostgreSQL/JPA/EclipseLink setup —
+`persistence.xml`, `DL2L_DB_URL`, drop-and-create-tables — all removed as part of issue #79;
+`docker/docker-compose.yml` has no db service and never has to.) `BDActor` is the sole writer
+per JVM, backed by `ArrowIpcBackend`: an off-heap Arrow IPC stream, one file per table, at
+`saveDir/raw/*.arrow` — see `PersistenceExtension`'s javadoc for the write path's history and
+`ArrowIpcBackend`'s for the format/batching details.
 
-`DL2L_DB_URL` (read in `JpaPersister`'s constructor) overrides the URL above when set — needed
-on CCAD, where Singularity instances share the node's network namespace instead of getting
-per-container hostnames like Docker, so postgres is reached at `jdbc:postgresql://localhost:5432/l2l`
-instead. Unset (the default everywhere else), behavior is unchanged.
-
-All JPA entities are in `creature/bd/` and `common/SequentialId`. EclipseLink is the JPA provider.
+Extraction (`scripts/dl2l_data/extract.py`) is equally DB-free: it registers each raw
+`.arrow` file as a view in an embedded, in-process DuckDB and runs `tables.py`'s SQL against
+that — no `psql`, no live container/instance, no network. See its module docstring for the
+full history of what this replaced.
 
 ## Running Experiments
 
@@ -155,16 +154,16 @@ confirmed working end-to-end through a real (non-smoke) trial as of 2026-07-15.
 ### Extraction and upload internals
 
 `scripts/dl2l_data/` is the extraction/upload package the ansible roles call:
-- `dl2l_data.extract` — `docker exec <container> psql ... COPY` per table (or, with
-  `--runtime singularity` on CCAD, `singularity exec instance://<name> psql ...` —
-  reusing the psql client bundled in the postgres image itself, since there's no
-  reason to assume a bare psql client exists on the cluster host) → one Parquet file
-  per table under `<data-dir>/<condition>/trial_N/`, plus a gzipped `pg_dump` backup
-  and a root `manifest.json`.
+- `dl2l_data.extract` — registers each raw per-table `.arrow` file (written by
+  `ArrowIpcBackend` at `saveDir/raw/`, on every environment including CCAD) as a view in an
+  embedded DuckDB and runs `tables.py`'s SQL against it → one Parquet file per table under
+  `<data-dir>/<condition>/trial_N/`, plus the raw Arrow dump itself as the backup (no restore
+  step needed — see the module's own docstring) and a root `manifest.json`.
 - `dl2l_data.upload` — pushes a data-dir tree to the HF dataset repo.
-- `scripts/pg_extract.py` is a separate, older CSV-oriented extractor (mirrors the
-  Java `--extractor` output format exactly) kept for parity with historical data; it
-  shares its low-level `psql`/`pg_dump` helpers with `dl2l_data.db`.
+- `scripts/pg_extract.py` is a separate, older CSV-oriented extractor (mirrors the Java
+  `--extractor` output format exactly) kept only for parity with historical data captured
+  before the Postgres write path was removed (issue #79); it still shares its low-level
+  `psql`/`pg_dump` helpers with `dl2l_data.db`, both legacy-only at this point.
 
 ## Container Images & Versioning
 

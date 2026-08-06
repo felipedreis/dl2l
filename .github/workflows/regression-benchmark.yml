@@ -1,0 +1,98 @@
+name: Regression Benchmark
+
+# Runs the ci_regression_benchmark experiment (experiments/ci_regression_benchmark.yml) once
+# per push to main, computes a few concrete behavioral metrics (cognitive cycle rate,
+# perception flip rate, mean lifespan - see scripts/ci_regression_benchmark.py) from its
+# output, and compares them against recent history on the benchmark-data branch. Fails the
+# job (a visible red X on main) if any metric drifts outside its tolerance band - a silent
+# ~9x cognitive-cycle-rate change, exactly issue #85's finding, would have failed this
+# immediately instead of surfacing weeks later in manual campaign-data review.
+#
+# No Postgres/database service needed here: BDActor/ArrowIpcBackend write raw Arrow IPC
+# straight to disk, and dl2l_data.extract reads it back via an embedded DuckDB - see
+# CLAUDE.md's "Persistence" section. This job is just "docker compose up, wait, read files".
+on:
+  push:
+    branches: [main]
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+
+      - name: Checkout benchmark-data history
+        id: checkout_history
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          ref: benchmark-data
+          path: benchmark-data
+          fetch-depth: 1
+
+      - name: Bootstrap benchmark-data branch (only ever runs once, on the very first push)
+        if: steps.checkout_history.outcome == 'failure'
+        run: |
+          rm -rf benchmark-data
+          mkdir -p benchmark-data
+          cd benchmark-data
+          git init -q -b benchmark-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q --allow-empty -m "Initialize benchmark-data branch"
+          # A hand-rolled `git init` here doesn't inherit actions/checkout's persisted
+          # credentials (that only applies to directories it actually checked out), so wire
+          # an authenticated remote explicitly - same GITHUB_TOKEN the job's contents:write
+          # permission already grants.
+          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '23'
+          distribution: temurin
+          cache: maven
+
+      - name: Install ansible + python deps
+        # No huggingface_hub - experiments/ci_regression_benchmark.yml sets
+        # upload.enabled: false (see its own comment for why), so collect_upload never
+        # calls dl2l_data.upload here.
+        run: |
+          pip install --quiet ansible duckdb pandas pyarrow
+          ansible-galaxy collection install -r ansible/requirements.yml
+
+      - name: Run the benchmark simulation
+        run: |
+          cd ansible
+          ansible-playbook -i inventories/local run-experiment.yml -e experiment=ci_regression_benchmark
+
+      - name: Compare metrics against history
+        id: compare
+        run: |
+          python3 scripts/ci_regression_benchmark.py \
+            --history benchmark-data/metrics.jsonl \
+            --commit "${{ github.sha }}" \
+            --summary-file "${GITHUB_STEP_SUMMARY}"
+
+      - name: Commit updated history back to benchmark-data
+        # Always, regardless of whether the comparison step above failed (a detected
+        # regression still becomes a real history point, not something that silently
+        # vanishes - see scripts/ci_regression_benchmark.py's module docstring) - but only
+        # if it actually produced a new record (the ansible/comparison steps themselves
+        # failing outright, e.g. a simulation crash, leaves nothing to commit).
+        if: always()
+        run: |
+          cd benchmark-data
+          if git status --porcelain | grep -q .; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add metrics.jsonl
+            git commit -q -m "Benchmark: ${{ github.sha }}"
+            git push origin benchmark-data
+          else
+            echo "nothing to commit - the benchmark run did not produce a new metrics record"
+          fi
