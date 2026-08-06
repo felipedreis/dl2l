@@ -411,13 +411,16 @@ public class FullAppraisal extends CreatureComponent {
     /**
      * Emits a {@link TediumStimulus} to regulate the tedium affect based on the selected action.
      *
-     * <p>This pathway is only active when the neuromodulator loop is <em>disabled</em>.
-     * When neuromodulation is on, tedium is regulated by dopamine absence in
-     * {@link NeuromodulatorSystem} — re-applying it here would double-count the effect.
-     * WANDER relieves tedium (novelty); OBSERVE increases it (passive fixation); all
-     * other non-sleep actions apply a mild idle rate.
+     * <p>No-op entirely when {@code learningSettings.isTediumEnabled()} is false (the
+     * default - see that flag's javadoc: neither Mapa (2009) nor Campos (2015) modelled
+     * this affect). Otherwise only active when the neuromodulator loop is
+     * <em>disabled</em>: when neuromodulation is on, tedium is regulated by dopamine
+     * absence in {@link NeuromodulatorSystem} instead — re-applying it here would
+     * double-count the effect. WANDER relieves tedium (novelty); OBSERVE increases it
+     * (passive fixation); all other non-sleep actions apply a mild idle rate.
      */
     private void dispatchTediumStimulus(ActionType selectedAction) {
+        if (!learningSettings.isTediumEnabled()) return;
         if (learningSettings.isNeuromodulatorLoopActive()) return;
         if (selectedAction == ActionType.SLEEP) return;
 

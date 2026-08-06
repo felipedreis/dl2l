@@ -86,7 +86,7 @@ public final class TestingCreature implements Creature {
         register(cid = cid.next(), new FullAppraisal(cid, learningSettings, null));
         register(cid = cid.next(), new HomeostaticRegulation(cid, learningSettings));
         register(cid = cid.next(), new Valuation(cid, learningSettings));
-        register(cid = cid.next(), new NeuromodulatorSystem(cid));
+        register(cid = cid.next(), new NeuromodulatorSystem(cid, learningSettings));
         register(cid = cid.next(), new EndocrineSystem(cid));
 
         // Wire each component to the Creature + self-ref.

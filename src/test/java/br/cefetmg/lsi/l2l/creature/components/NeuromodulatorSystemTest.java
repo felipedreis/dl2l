@@ -1,8 +1,11 @@
 package br.cefetmg.lsi.l2l.creature.components;
 
+import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.SequentialId;
+import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
+import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyMode;
 import br.cefetmg.lsi.l2l.creature.testing.TestingHarness;
 import br.cefetmg.lsi.l2l.stimuli.DopaminergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.NeuromodulatorState;
@@ -11,6 +14,8 @@ import br.cefetmg.lsi.l2l.stimuli.OrexinergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.SerotonergicStimulus;
 import br.cefetmg.lsi.l2l.world.FruitType;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -21,6 +26,28 @@ import static org.junit.jupiter.api.Assertions.*;
 public class NeuromodulatorSystemTest {
 
     private static final SequentialId SID = new SequentialId(999L);
+
+    /**
+     * Issue #85 follow-up: tediumEnabled defaults false (neither Mapa (2009) nor
+     * Campos (2015) modelled the affect), so the tedium-specific tests below opt in
+     * explicitly - same idiom as OrexinFunctionalTest's orexinOn()/orexinOff(). Every other
+     * flag matches TestingHarness.Builder.defaultLearningSettings().
+     */
+    private static LearningSettings tediumOn() {
+        return new LearningSettings(
+                true, false,
+                List.of(ActionSelectionType.TARGET_DISTANCE,
+                        ActionSelectionType.AFFORDANCE,
+                        ActionSelectionType.RANDOM),
+                false, ExpectancyMode.DISCRETE,
+                false,  // neuromodulationEnabled
+                false,  // actionTendencyEnabled
+                false,  // orexinEnabled
+                false,  // endocrineEnabled
+                true,   // tickGatedCognition
+                true    // tediumEnabled
+        );
+    }
 
     private static DopaminergicStimulus dopamine(double rpe) {
         return new DopaminergicStimulus(SID, SID.next(), rpe, FruitType.RED_APPLE, ActionType.EAT);
@@ -159,7 +186,7 @@ public class NeuromodulatorSystemTest {
 
     @Test
     void positive_dopamine_relieves_tedium() {
-        TestingHarness h = TestingHarness.builder().build();
+        TestingHarness h = TestingHarness.builder().learningSettings(tediumOn()).build();
         h.creature().emotions().regulate(Constants.TEDIUM, 3.0);
         double before = h.creature().emotions().getLevel(Constants.TEDIUM);
 
@@ -172,7 +199,7 @@ public class NeuromodulatorSystemTest {
 
     @Test
     void negative_dopamine_does_not_relieve_tedium() {
-        TestingHarness h = TestingHarness.builder().build();
+        TestingHarness h = TestingHarness.builder().learningSettings(tediumOn()).build();
         h.creature().emotions().regulate(Constants.TEDIUM, 3.0);
         double before = h.creature().emotions().getLevel(Constants.TEDIUM);
 
@@ -183,7 +210,7 @@ public class NeuromodulatorSystemTest {
 
     @Test
     void tick_raises_tedium_passively() {
-        TestingHarness h = TestingHarness.builder().build();
+        TestingHarness h = TestingHarness.builder().learningSettings(tediumOn()).build();
         double before = h.creature().emotions().getLevel(Constants.TEDIUM);
 
         h.inject(NeuromodulatorSystem.class, tick(0.0));

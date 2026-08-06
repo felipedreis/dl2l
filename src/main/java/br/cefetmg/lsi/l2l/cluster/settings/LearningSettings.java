@@ -61,6 +61,16 @@ public class LearningSettings implements Serializable {
     // --- Tick-gated cognition (issue #85) — default-ON, unlike every other flag here ---
     private final boolean tickGatedCognition;
 
+    // Issue #85 follow-up: neither Mapa (2009) nor Campos (2015) - the architectures p84
+    // validates parity against - modelled tedium/boredom at all; it is a DL2L addition
+    // (issue #57). Default-off so the base architecture matches what is being validated,
+    // and so a creature's arousal (EmotionalSystemActor.getMaxArousal()) is never pinned by
+    // an affect neither reference model has an opinion about. Gates both tedium mechanisms
+    // entirely - the legacy per-action drift in FullAppraisal.dispatchTediumStimulus and the
+    // reward-absence model in NeuromodulatorSystem.onTick/onDopamine - so "disabled" means
+    // the emotion never leaves MIN_AROUSAL_LEVEL, not just "less prominent".
+    private final boolean tediumEnabled;
+
     public LearningSettings(boolean circadianEnabled,
                             boolean consolidationEnabled,
                             List<ActionSelectionType> enabledFilters) {
@@ -114,6 +124,25 @@ public class LearningSettings implements Serializable {
                             boolean orexinEnabled,
                             boolean endocrineEnabled,
                             boolean tickGatedCognition) {
+        // tediumEnabled=false: preserves every existing 10-arg call site (this constructor's
+        // signature is used with positional args by tests, e.g. TickGatedCognitionTest) while
+        // defaulting the new flag off everywhere that does not explicitly ask for tedium.
+        this(circadianEnabled, consolidationEnabled, enabledFilters, expectancyEnabled,
+                expectancyMode, neuromodulationEnabled, actionTendencyEnabled, orexinEnabled,
+                endocrineEnabled, tickGatedCognition, false);
+    }
+
+    public LearningSettings(boolean circadianEnabled,
+                            boolean consolidationEnabled,
+                            List<ActionSelectionType> enabledFilters,
+                            boolean expectancyEnabled,
+                            ExpectancyMode expectancyMode,
+                            boolean neuromodulationEnabled,
+                            boolean actionTendencyEnabled,
+                            boolean orexinEnabled,
+                            boolean endocrineEnabled,
+                            boolean tickGatedCognition,
+                            boolean tediumEnabled) {
         this.circadianEnabled       = circadianEnabled;
         this.consolidationEnabled   = consolidationEnabled;
         this.enabledFilters         = Collections.unmodifiableList(new ArrayList<>(enabledFilters));
@@ -124,6 +153,7 @@ public class LearningSettings implements Serializable {
         this.orexinEnabled          = orexinEnabled;
         this.endocrineEnabled       = endocrineEnabled;
         this.tickGatedCognition     = tickGatedCognition;
+        this.tediumEnabled          = tediumEnabled;
     }
 
     /** Default: all subsystems enabled, full filter chain in canonical order. */
@@ -186,6 +216,17 @@ public class LearningSettings implements Serializable {
     /** Whether the cortisol/endocrine system (HPA axis) is active. */
     public boolean isEndocrineEnabled() {
         return endocrineEnabled;
+    }
+
+    /**
+     * Whether the tedium/boredom affect is modelled at all. Default-off - see this field's
+     * declaration above for why. When false, neither the legacy per-action drift
+     * ({@code FullAppraisal.dispatchTediumStimulus}) nor the neuromodulator reward-absence
+     * model ({@code NeuromodulatorSystem.onTick}/{@code onDopamine}) ever moves the emotion
+     * off {@link Constants#MIN_AROUSAL_LEVEL}.
+     */
+    public boolean isTediumEnabled() {
+        return tediumEnabled;
     }
 
     /** The emotion→action tendency map used when {@link #isActionTendencyEnabled()}. */
