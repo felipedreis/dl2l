@@ -19,9 +19,12 @@ import java.util.logging.Logger;
  * dispatcher during {@code onReceive} is held for the NEXT drain — same semantics as
  * production, where self-tells land in the next mailbox batch.
  *
- * Strings ({@code ""} tick wake-ups) are ignored by the queue but {@link #drain()} still
- * runs {@code onReceive} with whatever's buffered (possibly empty), which is what the
- * production {@code ComponentMessageQueue.dequeue()} does.
+ * Strings are ignored by the queue but {@link #drain()} still runs {@code onReceive} with
+ * whatever's buffered (possibly empty), which is what the production
+ * {@code ComponentMessageQueue.dequeue()} does. (Nothing sends strings any more - the
+ * pacemaker used to send {@code ""} and now sends a
+ * {@link br.cefetmg.lsi.l2l.stimuli.CognitiveTick}, issue #85 - but the branch is kept so
+ * this stays a faithful analogue of the production queue.)
  */
 public final class BatchingDispatcher implements ComponentRef {
 

@@ -50,6 +50,7 @@ class FocusRegulationTest {
         SequentialId a1 = new SequentialId(90_001L);
         h1.injectLuminous(new LuminousStimulus(a1, a1.next(), FruitType.RED_APPLE,
                 new Point(base.x + 120, base.y)));
+        h1.tick();
         CorticalStimulus c1 = h1.effectorCortexRecorder().lastOf(CorticalStimulus.class);
         assertNotNull(c1);
         assertEquals(ActionType.APPROACH, c1.action);
@@ -61,6 +62,7 @@ class FocusRegulationTest {
         SequentialId a2 = new SequentialId(90_001L);
         h2.injectLuminous(new LuminousStimulus(a2, a2.next(), FruitType.RED_APPLE,
                 new Point(base.x + 30, base.y)));
+        h2.tick();
         CorticalStimulus c2 = h2.effectorCortexRecorder().lastOf(CorticalStimulus.class);
         assertNotNull(c2);
         assertEquals(ActionType.APPROACH, c2.action);
@@ -85,6 +87,7 @@ class FocusRegulationTest {
         SequentialId a = new SequentialId(90_001L);
         h.injectLuminous(new LuminousStimulus(a, a.next(), FruitType.RED_APPLE,
                 new Point(p.x, p.y)));
+        h.tick();
 
         CorticalStimulus c = h.effectorCortexRecorder().lastOf(CorticalStimulus.class);
         assertNotNull(c);

@@ -14,6 +14,19 @@ public class BehaviouralEfficiencyState implements PersistenceState {
 
 	private int numberOfObjects;
 
+	/**
+	 * Issue #85: how many objects were <em>actually</em> perceived this cycle, before
+	 * PartialAppraisal's synthetic {@code Self} fallback is applied - so 0 means an empty
+	 * sensory field.
+	 *
+	 * <p>{@link #numberOfObjects} cannot answer that: it counts the post-fallback perception
+	 * list, so an empty cycle and a one-real-object cycle both read 1. Measuring the
+	 * perception flicker (the fraction of consecutive cycles that cross the empty/non-empty
+	 * boundary) previously required reconstructing it from raw stimulus dumps; this column
+	 * makes it a one-line query over behavioural_efficiency.
+	 */
+	private int perceivedObjects;
+
 	public BehaviouralEfficiencyState(){
 
 	}
@@ -52,5 +65,13 @@ public class BehaviouralEfficiencyState implements PersistenceState {
 
 	public void setNumberOfObjects(int numberOfObjects) {
 		this.numberOfObjects = numberOfObjects;
+	}
+
+	public int getPerceivedObjects() {
+		return perceivedObjects;
+	}
+
+	public void setPerceivedObjects(int perceivedObjects) {
+		this.perceivedObjects = perceivedObjects;
 	}
 }

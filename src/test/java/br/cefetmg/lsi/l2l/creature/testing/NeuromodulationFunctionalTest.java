@@ -108,6 +108,7 @@ class NeuromodulationFunctionalTest {
             SequentialId a = new SequentialId(100_000L + i * 2L);
             h.injectLuminous(new LuminousStimulus(a, a.next(), FruitType.RED_APPLE,
                     new Point(creaturePos.x + 100, creaturePos.y)));
+            h.tick();
             CorticalStimulus c = h.effectorCortexRecorder().lastOf(CorticalStimulus.class);
             if (c == null) continue;
             total++;

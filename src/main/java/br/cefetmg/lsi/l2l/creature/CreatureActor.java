@@ -28,6 +28,7 @@ import br.cefetmg.lsi.l2l.creature.ml.MemoryConsolidator;
 import br.cefetmg.lsi.l2l.creature.ml.MemoryTraceConsolidator;
 import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
 import br.cefetmg.lsi.l2l.physics.CreaturePositioningAttr;
+import br.cefetmg.lsi.l2l.stimuli.CognitiveTick;
 import scala.concurrent.duration.Duration;
 
 import java.util.HashMap;
@@ -245,30 +246,29 @@ public class CreatureActor implements Creature {
     }
 
     /**
-     * Issue #79 Phase B: called once per wall-clock tick by the {@code clock} scheduler
-     * (see {@code init()}). Two independent things happen here, exactly as they did before
-     * Phase B, just now both gated to the same tick instead of one being 1Hz-fixed and the
-     * other unbounded:
+     * Called once per wall-clock tick by the {@code clock} scheduler (see {@code init()}).
+     * Two things happen here, and since issue #85 only one of them drives cognition:
      *
-     * <p>1. The direct heartbeat to {@code PartialAppraisal} guarantees a cognitive cycle
-     * fires this tick even with zero perception. Without it, {@code PartialAppraisal.onReceive}
-     * only fires when {@code SensoryCortex} has a stimulus to forward - which never happens
-     * if nothing is within sensory range - so a creature alone in empty space would never
-     * metabolize, check death, or act. This is the same unconditional send the pre-Phase-B
-     * 1Hz keep-alive scheduler made.
+     * <p>1. The {@link CognitiveTick} to {@code PartialAppraisal} is the <em>sole</em> driver
+     * of the cognitive cycle. That component buffers perception as it arrives and appraises
+     * it only when a tick lands, so exactly one cycle runs per tick - which both guarantees
+     * a creature alone in empty space still metabolizes, checks death and acts (the liveness
+     * property the pre-Phase-B 1Hz keep-alive provided), and pins the cycle rate to
+     * {@link Constants#TARGET_CYCLE_HZ}.
      *
      * <p>2. {@link #updatePositioningAttribute()} broadcasts this tick's position/perceptual
-     * fields to the collision detector, which - asynchronously, and only if something is
-     * actually nearby - triggers its own separate perception-driven cycle(s) on
-     * {@code PartialAppraisal}. This was always decoupled in timing from the heartbeat (the
-     * collision-detector round trip can even cross nodes); Phase B only changes *how often*
-     * a new broadcast is triggered (once per tick, not once per movement), not this
-     * asynchrony. See this method's declaration on {@link Creature} for why it's routed
-     * through the typed-actor proxy.
+     * fields to the collision detector, whose replies flow back through the sensors into
+     * PartialAppraisal's buffer. That round trip is asynchronous and can cross nodes, but it
+     * no longer <em>triggers</em> cycles of its own - before issue #85 it did, which is why
+     * the measured rate ran ~9x nominal and why perception alternated with empty heartbeat
+     * cycles at ~66 Hz. Liveness therefore does not depend on the detector being reachable.
+     *
+     * <p>See this method's declaration on {@link Creature} for why it's routed through the
+     * typed-actor proxy.
      */
     @Override
     public void tick() {
-        componentRef(PartialAppraisal.class).tell("", ActorRef.noSender());
+        componentRef(PartialAppraisal.class).tell(new CognitiveTick(id, id.next()), ActorRef.noSender());
         updatePositioningAttribute();
     }
 

@@ -44,6 +44,7 @@ class ActionTendencyFunctionalTest {
         SequentialId a = new SequentialId(90_001L);
         h.injectLuminous(new LuminousStimulus(a, a.next(), FruitType.RED_APPLE,
                 new Point(p.x + 100, p.y)));
+        h.tick();
 
         CorticalStimulus c = h.effectorCortexRecorder().lastOf(CorticalStimulus.class);
         assertNotNull(c);

@@ -77,7 +77,13 @@ TABLES = {
                css.time,
                bes.complextask::text           AS is_complex,
                bes.behaviouralefficiency       AS efficiency,
-               bes.numberofobjects             AS n_objects
+               bes.numberofobjects             AS n_objects,
+               -- Issue #85: objects actually perceived, before PartialAppraisal's synthetic
+               -- Self fallback. n_objects counts the post-fallback list, so an empty cycle
+               -- and a one-object cycle are both 1 there; n_perceived == 0 is the only way
+               -- to identify an empty sensory field. Perception flip rate is then
+               -- (df.n_perceived > 0).diff().abs().mean().
+               bes.perceivedobjects            AS n_perceived
         FROM data.behavioural_efficiency_state bes
         JOIN data.change_stimulus_state css
           ON bes.changestimulusstate_id = css.id
@@ -106,6 +112,24 @@ TABLES = {
                oss.type                  AS object_type,
                oss.distance, oss.angle, oss.direction
         FROM data.object_seen_state oss
+        JOIN data.change_stimulus_state css
+          ON oss.changestimulusstate_id = css.id
+        ORDER BY css.key, css.time
+        """,
+        None,
+    ),
+    # Issue #85 (incidental gap): object_smelt_state has been written since the Nose was
+    # added but never extracted, so smell-driven ProprioceptiveStimulus appeared in no
+    # Parquet output and `perceptions` silently meant "vision only". ObjectSmeltState
+    # carries no distance/angle - the Nose computes those into the OlfactoryStimulus it
+    # emits, not into the persisted record - so this is object identity plus timing.
+    "smell_perceptions": (
+        """
+        SELECT css.key                    AS creature_key,
+               css.time,
+               oss.objecttype            AS object_type,
+               oss.smelltype             AS smell_type
+        FROM data.object_smelt_state oss
         JOIN data.change_stimulus_state css
           ON oss.changestimulusstate_id = css.id
         ORDER BY css.key, css.time
@@ -200,7 +224,7 @@ TABLES = {
 # originally wrote them (a couple of analyses key off this ordering in logs).
 TABLE_ORDER = [
     "creatures", "actions", "drives", "behavioural_efficiency", "body_states",
-    "perceptions", "mouth_interactions", "sleep_episodes", "neuromodulators",
+    "perceptions", "smell_perceptions", "mouth_interactions", "sleep_episodes", "neuromodulators",
     "endocrine", "expectancy", "engrams", "consolidation_episodes",
     "consolidation_batches", "memory_traces",
 ]

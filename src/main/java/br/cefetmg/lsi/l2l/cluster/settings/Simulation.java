@@ -115,9 +115,14 @@ public class Simulation {
         boolean orexinEnabled         = ls.hasPath("orexinEnabled")         && ls.getBoolean("orexinEnabled");
         boolean endocrineEnabled      = ls.hasPath("endocrineEnabled")      && ls.getBoolean("endocrineEnabled");
 
+        // Issue #85 — default-ON (note the inverted shape vs the flags above): only an
+        // explicit `tickGatedCognition = false` restores the pre-#85 per-delivery cycle,
+        // which exists for the p85 baseline arm and nothing else.
+        boolean tickGatedCognition = !ls.hasPath("tickGatedCognition") || ls.getBoolean("tickGatedCognition");
+
         return new LearningSettings(circadianEnabled, consolidationEnabled, enabledFilters,
                 expectancyEnabled, expectancyMode, neuromodulationEnabled, actionTendencyEnabled,
-                orexinEnabled, endocrineEnabled);
+                orexinEnabled, endocrineEnabled, tickGatedCognition);
     }
 
     public Long getNumHolders() {
