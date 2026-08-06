@@ -274,6 +274,18 @@ public class PartialAppraisal extends CreatureComponent {
 
         if (metricsExt != null) {
             metricsExt.setGauge("dl2l_creature_arousal", id.toString(), maxEmotion.getLevel());
+            // dl2l_creature_arousal alone is the level of whichever emotion is winning, with
+            // the winner's identity discarded - so a creature switching from hunger to sleep
+            // at the same intensity shows a flat line, and the three losing emotions are
+            // invisible. Emit each active emotion under its own tag as well; the max above is
+            // then the top of these four curves rather than an unattributable number.
+            // EmotionalSystemActor.ACTIVE is the single source of truth for which emotions
+            // are live (the other five registered ones are deferred or disabled and would
+            // just sit at MIN_AROUSAL_LEVEL).
+            for (String emotion : EmotionalSystemActor.ACTIVE) {
+                metricsExt.setGauge("dl2l_creature_emotion_level", id.toString(),
+                        "emotion", emotion, emotionalSystem.getLevel(emotion));
+            }
         }
 
         logger.fine(String.format("PartialAppraisal[%s]: arousal=%.3f perceptions=%d behaviouralEfficiency=%.3f",
