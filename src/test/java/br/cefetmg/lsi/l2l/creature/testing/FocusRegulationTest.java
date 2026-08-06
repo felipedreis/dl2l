@@ -119,6 +119,43 @@ class FocusRegulationTest {
         }
     }
 
+    /**
+     * SLEEP used to pass a literal {@code 0} as its angle. That angle is an absolute world
+     * bearing (see {@code Point.angleAlpha}), not a relative turn, so every sleep cycle
+     * rotated the creature to face due east - reaching the eye as
+     * {@code setVisionFieldPosition(0)} and deciding where it looked on waking. speed=0 hid
+     * it from the position stream, but it was plainly visible in the UI: a live run had 78%
+     * of geometry frames pegged to a bit-exact angle of 0.0.
+     *
+     * <p>Asserts the invariant (never the bearing 0) rather than a specific angle: which
+     * action runs before SLEEP is selected is not deterministic here, so the heading at the
+     * moment sleep starts is not either.
+     */
+    @Test
+    void sleep_never_snaps_the_heading_due_east() {
+        TestingHarness h = TestingHarness.builder()
+                .learningSettings(tendencyOn()).build();
+        // An arbitrary non-zero bearing. Nothing in the run can legitimately produce a
+        // bit-exact 0.0 from here - atan2 of real positions does not, and WANDER's random
+        // turn is continuous - so any exact zero below is the hardcoded constant coming back.
+        h.creature().setVisionFieldPosition(2.3);
+        h.creature().emotions().regulate(Constants.SLEEP, 5.0);
+
+        for (int i = 0; i < 50; i++) h.tick();
+
+        List<CorticalStimulus> sleepCorticals = h.effectorCortexRecorder()
+                .ofType(CorticalStimulus.class).stream()
+                .filter(c -> c.action == ActionType.SLEEP)
+                .toList();
+
+        assertFalse(sleepCorticals.isEmpty(),
+                "SLEEP must be selected at least once in 50 ticks with high sleep arousal");
+        for (CorticalStimulus c : sleepCorticals) {
+            assertNotEquals(0.0, c.angle,
+                    "SLEEP must hold the current heading, never assign the absolute bearing 0");
+        }
+    }
+
     @Test
     void eye_emits_no_visual_stimulus_when_field_is_closed() {
         TestingHarness h = TestingHarness.builder().build();
