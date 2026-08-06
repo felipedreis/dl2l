@@ -84,16 +84,16 @@ Restated from the recipe §8, plus what actually happened during execution:
 
 ## Hypotheses
 
-| ID | Claim |
-|---|---|
-| P1 | Memory arm's interaction interval ≤ no-memory's, gap widening with k |
-| P2 | With memory, RANDOM is displaced as MEMORY engages; without memory, no trend |
-| P3 | Nearest (`TARGET_DISTANCE`) and Affordances used similarly with/without memory |
-| P4 | Memory extends life; ratio compared to Campos's 6.7× |
-| P5 | Time alive rises with interaction count, memory above no-memory (**shape only**) |
-| S1 | In the all-rewarding `simple` world, the interval decreases monotonically, unlike the mixed world |
-| D1 | Learned APPROACH share against Mapa's 0.25/0.40/0.70 (**descriptive**) |
-| D2 | Memory forms, is increasingly used and increasingly decisive; use tracks survival |
+| ID  | Claim                                                                                             |
+| --- | ------------------------------------------------------------------------------------------------- |
+| P1  | Memory arm's interaction interval ≤ no-memory's, gap widening with k                              |
+| P2  | With memory, RANDOM is displaced as MEMORY engages; without memory, no trend                      |
+| P3  | Nearest (`TARGET_DISTANCE`) and Affordances used similarly with/without memory                    |
+| P4  | Memory extends life; ratio compared to Campos's 6.7×                                              |
+| P5  | Time alive rises with interaction count, memory above no-memory (**shape only**)                  |
+| S1  | In the all-rewarding `simple` world, the interval decreases monotonically, unlike the mixed world |
+| D1  | Learned APPROACH share against Mapa's 0.25/0.40/0.70 (**descriptive**)                            |
+| D2  | Memory forms, is increasingly used and increasingly decisive; use tracks survival                 |
 
 Each is decided **within an arm pair** (`legacy_nomem` vs `legacy_mem`,
 `current_nomem` vs `current_mem`), never across stacks or worlds — see the recipe §7.
@@ -302,17 +302,17 @@ quality) are included as figures for completeness; given D2's headline finding a
 
 ## Verdict summary
 
-| ID | legacy pair | current pair | simple-world pair |
-|---|---|---|---|
-| P1 | inconclusive | inconclusive | inconclusive |
-| P2 | **refuted** (no time trend) | **confirmed** | refuted (no time trend) |
-| P3 (Affordances) | **confirmed** | refuted (tiny, significant gap) | refuted (small, significant gap) |
-| P3 (Nearest) | inapplicable (structural) | inapplicable (structural) | inapplicable (structural) |
-| P4 | **refuted** (0.77×) | **refuted** (1.00×) | untestable (censored) |
-| P5 (shape) | confirmed | confirmed | untestable (censored) |
-| S1 | not confirmed as stated; survival-censoring version supported | — | — |
-| D1 | descriptive: diverges from all three reference levels | descriptive: flat at initial value | descriptive: diverges fastest |
-| D2 | formation matched-control confirmed; ~700× formation-rate gap between stacks | same | same |
+| ID               | legacy pair                                                                  | current pair                       | simple-world pair                |
+| ---------------- | ---------------------------------------------------------------------------- | ---------------------------------- | -------------------------------- |
+| P1               | inconclusive                                                                 | inconclusive                       | inconclusive                     |
+| P2               | **refuted** (no time trend)                                                  | **confirmed**                      | refuted (no time trend)          |
+| P3 (Affordances) | **confirmed**                                                                | refuted (tiny, significant gap)    | refuted (small, significant gap) |
+| P3 (Nearest)     | inapplicable (structural)                                                    | inapplicable (structural)          | inapplicable (structural)        |
+| P4               | **refuted** (0.77×)                                                          | **refuted** (1.00×)                | untestable (censored)            |
+| P5 (shape)       | confirmed                                                                    | confirmed                          | untestable (censored)            |
+| S1               | not confirmed as stated; survival-censoring version supported                | —                                  | —                                |
+| D1               | descriptive: diverges from all three reference levels                        | descriptive: flat at initial value | descriptive: diverges fastest    |
+| D2               | formation matched-control confirmed; ~700× formation-rate gap between stacks | same                               | same                             |
 
 ---
 
