@@ -9,7 +9,7 @@ unchanged through both write-path swaps and are DuckDB-backed either way, so the
 dtypes were already correct end-to-end before PR 1 too - what changed is that the underlying
 storage is now natively typed (Arrow) rather than a CSV-era format that round-tripped some
 columns as strings. PR 1's own local + CCAD validation
-(`docs/reports/arrow_ipc_write_path_validation_report.md`) already confirmed empirically that
+(`docs/reports/20260804_arrow_ipc_write_path_validation_report.md`) already confirmed empirically that
 every downstream Parquet output column (`time`, `lifetime_s`, `born_time`, `seq`, `dopamine`,
 `serotonin`, `orexin`, etc.) comes back as a native `int64`/`float64`, not `object`/string -
 this plan is the follow-up cleanup PR 1 explicitly deferred.

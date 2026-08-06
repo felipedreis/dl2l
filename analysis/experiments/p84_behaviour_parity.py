@@ -1,0 +1,469 @@
+"""
+Analysis: p84_behaviour_parity — Mapa (2009) and Campos (2015) parity (issue #84).
+
+One experiment, both papers. Their headline figures are different *measurements* of the
+same runs, so they are produced side by side here:
+
+  F1  interval to find and interact, k = 1..10      Mapa Fig. 47
+  F2  time alive at the k-th interaction            Mapa Fig. 50
+  F3  cumulative selections per criterion           Campos Fig. 5
+  F4  the same, first 1000 decisions                Campos Fig. 6
+  F5  lifetime per arm, and the memory ratio        Campos's 6.7x
+  F6  learned conditioning trajectory               Mapa's 0.25/0.40/0.70 levels
+  M1-M6                                             memory mechanism (p84_memory_common)
+
+Comparisons are read WITHIN an arm pair (legacy_nomem vs legacy_mem, and so on), never
+across stacks, so the only thing varying in a comparison is the MEMORY filter.
+
+The creature is the replication unit, but creatures within a trial share a world, a food
+supply and an RNG stream. Every primary test is therefore run twice — at creature level
+(all the data) and at trial level (immune to clustering, low-powered) — and a result is
+only read as real when the two agree. See stats.compare_arms.
+
+Absolute milliseconds are never compared against the papers: our ms-per-cycle moves with
+host load and dispatcher sizing (see the p59/p79 tick-rate work). Only curve shape and
+ratios carry across.
+
+Usage:
+  PYTHONPATH=analysis python3 -m dl2l_analysis --experiment p84_behaviour_parity
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+from scipy import stats as scipy_stats
+
+from analysis.dl2l_analysis.figures import boxplot_by_condition, plt, save, setup
+from analysis.dl2l_analysis.loading import (
+    attach_born_time_and_ticks,
+    interaction_intervals,
+    load_all,
+    make_tick_rank_attacher,
+    num,
+)
+from analysis.dl2l_analysis.stats import (
+    compare_arms,
+    cohens_d,
+    icc1,
+    kruskal_test,
+    print_comparison,
+    required_n,
+)
+from analysis.experiments import p84_memory_common
+
+MAX_K = 10
+CRITERIA = ["TARGET_DISTANCE", "AFFORDANCE", "MEMORY", "RANDOM"]
+CRITERION_LABEL = {"TARGET_DISTANCE": "Nearest", "AFFORDANCE": "Affordances",
+                   "MEMORY": "Memory", "RANDOM": "Random"}
+CRITERION_COLOR = {"TARGET_DISTANCE": "#4c9f70", "AFFORDANCE": "#e08a3c",
+                   "MEMORY": "#2b5eb8", "RANDOM": "#b04a4a"}
+ZOOM_N = 1000
+CAMPOS_LIFETIME_RATIO = 6.7          # his 1.4e4 s with memory / 2.1e3 s without
+MAPA_LEVELS = {"low": 0.25, "medium": 0.40, "high": 0.70}
+
+
+def arm_pairs(cfg) -> list:
+    """(no-memory, memory) pairs present in this run, matched by stack and world."""
+    keys = set(cfg.cond_keys)
+    pairs = []
+    for k in cfg.cond_keys:
+        if "nomem" in k:
+            partner = k.replace("nomem", "mem")
+            if partner in keys:
+                pairs.append((k, partner))
+    return pairs
+
+
+# ---------------------------------------------------------------------------
+# Per-creature outcome table — the unit every test operates on
+# ---------------------------------------------------------------------------
+
+def per_creature_outcomes(intervals, actions, creatures) -> pd.DataFrame:
+    """One row per creature: the three quantities the parity claims are argued from."""
+    keys = ["condition", "trial", "creature_key"]
+
+    out = creatures[keys + ["lifetime_s"]].drop_duplicates().copy()
+    out["lifetime_s"] = num(out["lifetime_s"])
+
+    if not intervals.empty:
+        mi = intervals.groupby(keys)["interval_s"].mean().rename("mean_interval_s")
+        out = out.merge(mi, on=keys, how="left")
+
+    if not actions.empty:
+        counts = actions.groupby(keys)["selection_type"].value_counts().unstack(fill_value=0)
+        total = counts.sum(axis=1).clip(lower=1)
+        for crit in CRITERIA:
+            out = out.merge((counts.get(crit, 0) / total).rename(f"share_{crit}"),
+                            on=keys, how="left")
+        out = out.merge(counts.sum(axis=1).rename("n_decisions"), on=keys, how="left")
+
+        # Campos's "random choice is no longer needed": RANDOM's rate late vs early.
+        ratios = []
+        for k, g in actions.groupby(keys):
+            g = g.sort_values("time")
+            n = len(g)
+            if n < 30:
+                continue
+            third = n // 3
+            is_rand = (g["selection_type"] == "RANDOM").values
+            early = is_rand[:third].mean()
+            if early > 0:
+                ratios.append((*k, is_rand[-third:].mean() / early))
+        if ratios:
+            out = out.merge(pd.DataFrame(ratios, columns=keys + ["random_slope_ratio"]),
+                            on=keys, how="left")
+    return out
+
+
+# ---------------------------------------------------------------------------
+# F1 / F2 — Mapa's curves
+# ---------------------------------------------------------------------------
+
+def _mean_by_k(intervals, cfg, value):
+    out = {}
+    for c in cfg.conditions:
+        d = intervals[intervals["condition"] == c.key]
+        if d.empty:
+            continue
+        # Creature is the unit; averaging within trial first would discard exactly the
+        # replication this design is built on.
+        g = d.groupby("k")[value]
+        out[c.key] = (g.mean(), g.sem())
+    return out
+
+
+def mapa_figures(intervals, cfg) -> None:
+    if intervals.empty:
+        print("  (skipping F1/F2 — no interactions recorded)")
+        return
+    for value, ylabel, title, fname in (
+        ("interval_s", "interval (s)",
+         "F1 — interval to find and interact (Mapa Fig. 47)\n"
+         "shape comparable, absolute seconds are not", "f1_interaction_interval.png"),
+        ("cumulative_s", "time alive (s)",
+         "F2 — time alive at the k-th interaction (Mapa Fig. 50)",
+         "f2_time_alive.png"),
+    ):
+        stats_by_cond = _mean_by_k(intervals, cfg, value)
+        if not stats_by_cond:
+            continue
+        fig, ax = plt.subplots(figsize=(9, 5.5))
+        for c in cfg.conditions:
+            if c.key not in stats_by_cond:
+                continue
+            mean, sem = stats_by_cond[c.key]
+            ax.errorbar(mean.index, mean.values, yerr=sem.values, marker="o", capsize=3,
+                        color=c.color, label=c.label)
+        ax.set_xlabel("number of interactions")
+        ax.set_ylabel(ylabel)
+        ax.set_title(title)
+        ax.set_xticks(range(1, MAX_K + 1))
+        ax.legend(fontsize=8)
+        ax.grid(alpha=0.3)
+        fig.tight_layout()
+        save(fig, fname, cfg)
+
+
+def interval_trend(intervals, cfg) -> None:
+    """Mapa: memory's advantage should grow with k. Silva: in an all-rewarding world the
+    interval itself should fall monotonically, which is what the *_simple arms test."""
+    print("\n  Interval trends")
+    stats_by_cond = _mean_by_k(intervals, cfg, "interval_s")
+
+    for nomem, mem in arm_pairs(cfg):
+        if nomem not in stats_by_cond or mem not in stats_by_cond:
+            continue
+        a, b = stats_by_cond[nomem][0], stats_by_cond[mem][0]
+        ks = sorted(set(a.index) & set(b.index))
+        if len(ks) < 3:
+            continue
+        gap = np.array([a[k] - b[k] for k in ks])       # >0 = memory faster
+        rho, p = scipy_stats.spearmanr(ks, gap)
+        print(f"    {nomem} vs {mem}: memory faster at {int((gap > 0).sum())}/{len(ks)} k; "
+              f"gap-vs-k rho={rho:+.3f} (p={p:.4g})")
+
+    for c in cfg.conditions:
+        if c.key not in stats_by_cond:
+            continue
+        mean = stats_by_cond[c.key][0]
+        if len(mean) >= 3:
+            rho, p = scipy_stats.spearmanr(mean.index, mean.values)
+            print(f"    {c.label:<28s} interval-vs-k rho={rho:+.3f} (p={p:.4g})"
+                  f"{'   [decreasing]' if rho < 0 and p < .05 else ''}")
+
+
+# ---------------------------------------------------------------------------
+# F3 / F4 — Campos's curves
+# ---------------------------------------------------------------------------
+
+def _representative(actions, cond):
+    """Campos plots typical single realizations — take the median-length creature."""
+    d = actions[actions["condition"] == cond]
+    if d.empty:
+        return d
+    lengths = d.groupby(["trial", "creature_key"]).size().sort_values()
+    trial, ck = lengths.index[len(lengths) // 2]
+    return d[(d["trial"] == trial) & (d["creature_key"] == ck)].sort_values("time")
+
+
+def campos_figures(actions, cfg) -> None:
+    for limit, fname, title in (
+        (None, "f3_cumulative_selections.png",
+         "F3 — cumulative selections per criterion, whole life (Campos Fig. 5)"),
+        (ZOOM_N, "f4_cumulative_first1000.png",
+         f"F4 — first {ZOOM_N} decisions (Campos Fig. 6)"),
+    ):
+        conds = [c for c in cfg.conditions
+                 if not actions[actions["condition"] == c.key].empty]
+        if not conds:
+            return
+        fig, axes = plt.subplots(1, len(conds), figsize=(4.4 * len(conds), 4.6),
+                                 squeeze=False)
+        for ax, c in zip(axes[0], conds):
+            d = _representative(actions, c.key)
+            if limit is not None:
+                d = d.head(limit)
+            if d.empty:
+                continue
+            idx = np.arange(1, len(d) + 1)
+            for crit in CRITERIA:
+                cum = (d["selection_type"] == crit).cumsum().values
+                if cum[-1] == 0:
+                    continue
+                ax.plot(idx, cum, color=CRITERION_COLOR[crit], label=CRITERION_LABEL[crit])
+            ax.set_title(c.label, fontsize=9)
+            ax.set_xlabel("decisions")
+            ax.set_ylabel("cumulative selections")
+            ax.grid(alpha=0.3)
+        handles = [plt.Line2D([], [], color=CRITERION_COLOR[c], label=CRITERION_LABEL[c])
+                   for c in CRITERIA]
+        fig.legend(handles=handles, loc="lower center", ncol=len(CRITERIA), fontsize=8,
+                   frameon=False)
+        fig.suptitle(title)
+        fig.tight_layout(rect=[0, 0.07, 1, 0.93])
+        save(fig, fname, cfg)
+
+
+def criterion_share_figure(per_creature, cfg) -> None:
+    fig, ax = plt.subplots(figsize=(10, 5.5))
+    width = 0.8 / max(1, len(cfg.conditions))
+    x = np.arange(len(CRITERIA))
+    for i, c in enumerate(cfg.conditions):
+        d = per_creature[per_creature["condition"] == c.key]
+        means = [d[f"share_{crit}"].mean() if f"share_{crit}" in d else 0 for crit in CRITERIA]
+        means = [0 if pd.isna(m) else m for m in means]
+        ax.bar(x + i * width, means, width, color=c.color, label=c.label, alpha=0.85)
+    ax.set_xticks(x + width * (len(cfg.conditions) - 1) / 2)
+    ax.set_xticklabels([CRITERION_LABEL[c] for c in CRITERIA])
+    ax.set_ylabel("share of a creature's decisions")
+    ax.set_title("Selection criteria usage, with and without memory")
+    ax.legend(fontsize=7)
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    save(fig, "f3b_criterion_shares.png", cfg)
+
+
+def lifetime_figure(per_creature, cfg) -> None:
+    data = {c.key: per_creature[per_creature["condition"] == c.key]["lifetime_s"].dropna().values
+            for c in cfg.conditions}
+    if not any(len(v) for v in data.values()):
+        print("  (skipping F5 — no lifetimes; creatures may still have been alive at the cap)")
+        return
+    fig, ax = plt.subplots(figsize=(10, 5.5))
+    boxplot_by_condition(ax, data, cfg, ylabel="lifetime (s)",
+                         title="F5 — survival, with and without memory")
+    ax.tick_params(axis="x", rotation=20)
+    fig.tight_layout()
+    save(fig, "f5_lifetime.png", cfg)
+
+    print(f"\n  F5 — memory/no-memory lifetime ratio (Campos reports {CAMPOS_LIFETIME_RATIO:.1f}x)")
+    for nomem, mem in arm_pairs(cfg):
+        a, b = data.get(nomem, []), data.get(mem, [])
+        if len(a) and len(b) and np.mean(a) > 0:
+            print(f"    {nomem} -> {mem}: {np.mean(b) / np.mean(a):.2f}x")
+
+
+# ---------------------------------------------------------------------------
+# F6 — conditioning trajectory
+# ---------------------------------------------------------------------------
+
+def conditioning_figure(conditioning, cfg) -> None:
+    if conditioning.empty:
+        print("  (skipping F6 — no conditioning data)")
+        return
+    df = conditioning.copy()
+    df["probability"] = num(df["probability"])
+    keys = ["condition", "trial", "creature_key", "target", "seq"]
+    total = df.groupby(keys)["probability"].transform("sum")
+    # Raw probabilities are not shares: varyProbability clamps at 0 while the compensating
+    # -delta/(n-1) is applied unconditionally, so a target's raw sum drifts off 100.
+    # ActionProbabilityFilter normalises at selection time; so must we.
+    df["share"] = df["probability"] / total.where(total > 0, np.nan)
+
+    fig, ax = plt.subplots(figsize=(9, 5.5))
+    approach = df[df["action"] == "APPROACH"]
+    for c in cfg.conditions:
+        d = approach[approach["condition"] == c.key]
+        if len(d) < 20:
+            continue
+        d = d.assign(bucket=pd.qcut(num(d["seq"]), 20, labels=False, duplicates="drop"))
+        s = d.groupby("bucket")["share"].mean()
+        ax.plot(s.index, s.values, marker="o", ms=3, color=c.color, label=c.label)
+    for name, level in MAPA_LEVELS.items():
+        ax.axhline(level, ls="--", lw=1, color="#888")
+        ax.text(0.01, level, f" Mapa {name} ({level:.2f})", va="bottom", fontsize=7,
+                color="#666", transform=ax.get_yaxis_transform())
+    ax.set_xlabel("reinforcement events (20 equal-count buckets)")
+    ax.set_ylabel("normalised APPROACH share")
+    ax.set_title("F6 — learned conditioning against Mapa's initial levels\n"
+                 "descriptive: we do not replicate her initial-conditioning sweep")
+    ax.legend(fontsize=7)
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    save(fig, "f6_conditioning.png", cfg)
+
+
+# ---------------------------------------------------------------------------
+# Statistics
+# ---------------------------------------------------------------------------
+
+OUTCOMES = [
+    ("lifetime_s", "lifetime (s)"),
+    ("mean_interval_s", "mean interaction interval (s)"),
+    ("share_RANDOM", "RANDOM share of decisions"),
+    ("share_AFFORDANCE", "AFFORDANCE share"),
+    ("share_TARGET_DISTANCE", "TARGET_DISTANCE share"),
+    ("random_slope_ratio", "RANDOM late/early ratio"),
+]
+
+
+def run_tests(per_creature, cfg) -> list:
+    print("\n" + "=" * 76)
+    print("  Memory vs no-memory, within each pair")
+    print("  (creature-level is the headline; trial-level is the clustering check)")
+    print("=" * 76)
+    results = []
+    for nomem, mem in arm_pairs(cfg):
+        print(f"\n  --- {nomem}  vs  {mem} ---")
+        for col, label in OUTCOMES:
+            if col not in per_creature.columns:
+                continue
+            sub = per_creature[per_creature[col].notna()]
+            res = compare_arms(sub, col, nomem, mem, label=label)
+            print_comparison(res)
+            res["pair"] = (nomem, mem)
+            results.append(res)
+
+    print("\n  --- across all arms ---")
+    for col, label in OUTCOMES:
+        if col not in per_creature.columns:
+            continue
+        groups, labels = [], []
+        for c in cfg.conditions:
+            v = per_creature[per_creature["condition"] == c.key][col].dropna().values
+            if len(v):
+                groups.append(v)
+                labels.append(c.key)
+        if len(groups) >= 2:
+            print(f"    {label}")
+            kruskal_test(groups, labels)
+    return results
+
+
+def sizing_report(per_creature, cfg, cluster_size=None) -> None:
+    """Turn this run into the sample size for the next one.
+
+    Reports, per outcome, the observed standardised effect and the intra-class correlation
+    across trials, then the creatures-per-arm needed at 80% power — inflated by the design
+    effect, because creatures inside a trial are not independent samples.
+    """
+    if cluster_size is None:
+        n = per_creature.groupby(["condition", "trial"])["creature_key"].nunique()
+        cluster_size = float(n.mean()) if len(n) else 1.0
+
+    print("\n" + "=" * 76)
+    print(f"  SAMPLE SIZE for the next run (alpha=0.05, power=0.80, "
+          f"{cluster_size:.0f} creatures/trial)")
+    print("=" * 76)
+
+    for nomem, mem in arm_pairs(cfg):
+        print(f"\n  --- {nomem} vs {mem} ---")
+        print(f"    {'outcome':<30s} {'d':>7s} {'ICC':>6s} {'DEFF':>6s} "
+              f"{'creatures':>10s} {'trials':>7s}")
+        for col, label in OUTCOMES:
+            if col not in per_creature.columns:
+                continue
+            a = per_creature[(per_creature["condition"] == nomem)][col].dropna()
+            b = per_creature[(per_creature["condition"] == mem)][col].dropna()
+            if len(a) < 2 or len(b) < 2:
+                continue
+            d = cohens_d(a, b)
+            mem_df = per_creature[per_creature["condition"] == mem]
+            icc = icc1([g[col].dropna().values for _, g in mem_df.groupby("trial")])
+            req = required_n(d, icc=icc, cluster_size=cluster_size)
+            n_c = req["n_clustered"]
+            trials = req["clusters"]
+            print(f"    {label:<30s} {d:+7.3f} {icc:6.3f} {req['design_effect']:6.2f} "
+                  f"{n_c:10.1f} {trials:7.0f}"
+                  if np.isfinite(n_c) else
+                  f"    {label:<30s} {d:+7.3f} {icc:6.3f} {req['design_effect']:6.2f} "
+                  f"{'no effect':>10s} {'-':>7s}")
+    print("\n  Read the largest 'trials' across the outcomes you intend to claim.")
+    print("  An outcome with d near zero needs an impractical n — that is a real finding")
+    print("  about the effect, not a reason to keep adding trials.")
+
+
+# ---------------------------------------------------------------------------
+# Driver
+# ---------------------------------------------------------------------------
+
+def run(cfg) -> None:
+    setup(cfg)
+    print(f"Loading {cfg.name} from {cfg.data_dir}")
+
+    creatures = load_all(cfg, "creatures.parquet")
+    actions = load_all(cfg, "actions.parquet")
+    mouth = load_all(cfg, "mouth_interactions.parquet")
+    # Not load_all: legacy-minimal trials have 70-125M engram rows each (a 700x gap vs
+    # the current stack's ~170K/trial - itself a finding, see D2). Loading that
+    # concatenated across 48 trials OOM-killed the campaign's first analysis attempt.
+    # See load_engrams_sampled's docstring for why per-trial sampling is statistically
+    # sound here (every downstream use is an aggregate, never a row-level join).
+    engrams = p84_memory_common.load_engrams_sampled(cfg)
+    decisions = load_all(cfg, "memory_decisions.parquet")
+    conditioning = load_all(cfg, "conditioning.parquet")
+    episodes = load_all(cfg, "consolidation_episodes.parquet")
+    traces = load_all(cfg, "memory_traces.parquet")
+
+    if creatures.empty or actions.empty:
+        print("No creatures/actions data — nothing to analyse.")
+        return
+
+    actions["time"] = num(actions["time"])
+    creatures = attach_born_time_and_ticks(creatures, actions)
+    attach_tick_rank, _ = make_tick_rank_attacher(actions)
+    actions = attach_tick_rank(actions, creatures)
+    if not decisions.empty:
+        decisions = attach_tick_rank(decisions.rename(columns={"time_ms": "time"}), creatures)
+    engrams = p84_memory_common.attach_engram_life_decile(engrams, creatures)
+
+    intervals = interaction_intervals(mouth, creatures, max_k=MAX_K)
+    per_creature = per_creature_outcomes(intervals, actions, creatures)
+    print(f"  {len(per_creature)} creatures across {per_creature['trial'].nunique()} trials "
+          f"x {len(cfg.conditions)} arms")
+
+    mapa_figures(intervals, cfg)
+    campos_figures(actions, cfg)
+    criterion_share_figure(per_creature, cfg)
+    lifetime_figure(per_creature, cfg)
+    conditioning_figure(conditioning, cfg)
+    if not intervals.empty:
+        interval_trend(intervals, cfg)
+
+    run_tests(per_creature, cfg)
+    p84_memory_common.run_all(cfg, engrams=engrams, actions=actions, decisions=decisions,
+                              creatures=creatures, episodes=episodes, traces=traces)
+    sizing_report(per_creature, cfg)
+
+    print(f"\nFigures saved → {cfg.fig_dir}")
