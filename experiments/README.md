@@ -29,6 +29,10 @@ image:                          # optional. Defaults: {source: build}
                                  #   (or buildx on pi). registry: pull a
                                  #   pre-built tag from the per-env inventory
                                  #   group_vars instead of building.
+                                 #   Override which tag with `-e dl2l_image=...`
+                                 #   on the ansible-playbook command line - see
+                                 #   CLAUDE.md's "Container Images & Versioning"
+                                 #   for the tag scheme (release/preview/latest).
 
 data_dir: <path>                # required. Where extracted data is written,
                                  # relative to repo root, e.g. ml/data_<name>.

@@ -166,6 +166,34 @@ confirmed working end-to-end through a real (non-smoke) trial as of 2026-07-15.
   Java `--extractor` output format exactly) kept for parity with historical data; it
   shares its low-level `psql`/`pg_dump` helpers with `dl2l_data.db`.
 
+## Container Images & Versioning
+
+Three workflows publish `ghcr.io/felipedreis/dl2l` images, each owning a distinct set of
+tags — none of them redefine another's tag:
+
+| Tag(s) | Workflow | When |
+|---|---|---|
+| `latest`, `sha-<short>` | `.github/workflows/cd.yml` | every push to `main` |
+| `preview-<branch>`, `sha-<short>` | `.github/workflows/preview-image.yml` | every push to a `preview/**` branch |
+| `<X.Y.Z>`, `<X.Y>`, `stable`, `sha-<short>` | `.github/workflows/release.yml` | every push to a `release/X.Y.Z` branch (semver, validated) |
+
+`release.yml` also runs the full test suite before publishing (a versioned release image is
+never published untested), cuts a permanent `vX.Y.Z` git tag at that commit — so the version
+survives the `release/X.Y.Z` branch itself being deleted or moved — and creates a matching
+GitHub Release with auto-generated notes. The Maven version is set for that build only
+(`mvn versions:set`, never committed); `pom.xml` in git always stays `2.0.0-SNAPSHOT`.
+
+**To pin an experiment or training run to a specific image** — the moving `latest` a plain
+`ansible-playbook` run pulls by default is rarely what you want when citing a version —
+override the `dl2l_image` group var on the command line:
+
+```bash
+ansible-playbook -i inventories/ccad run-experiment.yml -e experiment=<name> \
+  -e dl2l_image=ghcr.io/felipedreis/dl2l:1.2.0        # a specific release
+ansible-playbook -i inventories/local run-experiment.yml -e experiment=<name> \
+  -e dl2l_image=ghcr.io/felipedreis/dl2l:preview-my-branch   # a branch under preview/
+```
+
 ## WebSocket API (feature/api branch)
 
 `CollisionDetectorActor` feeds position updates into a `GeometrySourceProvider` (Akka Streams queue). `GeometryWebService` merges creature and object streams and broadcasts `GeometryUpdate` JSON over WebSocket at `ws://localhost:8080/geometry`.
