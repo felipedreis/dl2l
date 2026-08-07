@@ -1,6 +1,5 @@
 package br.cefetmg.lsi.l2l.creature.components;
 
-import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.bd.NeuromodulatorStateLog;
@@ -27,8 +26,6 @@ import java.util.List;
  */
 public class NeuromodulatorSystem extends CreatureComponent {
 
-    private final LearningSettings learningSettings;
-
     private double dopamine = 0.0;
     private double serotonin = 0.0;
     private double orexin = 0.0;
@@ -36,9 +33,8 @@ public class NeuromodulatorSystem extends CreatureComponent {
     private double lastCircadianPhase = 0.0;
     private long publishSeq = 0;
 
-    public NeuromodulatorSystem(SequentialId id, LearningSettings learningSettings) {
+    public NeuromodulatorSystem(SequentialId id) {
         super(id);
-        this.learningSettings = learningSettings;
     }
 
     @Override
@@ -62,14 +58,12 @@ public class NeuromodulatorSystem extends CreatureComponent {
     /**
      * Phasic dopamine release: add the reward-prediction-error quantum to the tonic pool, and — since
      * tedium is the affective readout of the reward system — a positive prediction error (a rewarding
-     * or novel event) relieves boredom. Relief is gated on {@code tediumEnabled} (default off, see
-     * {@link LearningSettings#isTediumEnabled()}) alongside the rise it counteracts in {@link #onTick} -
-     * dopamine accumulation itself is unaffected either way.
+     * or novel event) relieves boredom.
      */
     private void onDopamine(DopaminergicStimulus da) {
         lastPhasicDopamine = da.rpe;
         dopamine = clampFloor(dopamine + da.rpe);
-        if (learningSettings.isTediumEnabled() && da.rpe > 0) {
+        if (da.rpe > 0) {
             creature.emotions().regulate(Constants.TEDIUM, -Constants.DA_TEDIUM_RELIEF * da.rpe);
         }
     }
@@ -87,9 +81,7 @@ public class NeuromodulatorSystem extends CreatureComponent {
     /**
      * Per-cycle reuptake (multiplicative decay) plus circadian-modulated baseline synthesis, then the
      * passive boredom rise: with no reward arriving, tedium creeps up — slowed by serotonergic
-     * contentment (a content creature tolerates monotony longer). The rise is gated on
-     * {@code tediumEnabled} (default off); dopamine/serotonin/orexin decay and baseline synthesis run
-     * regardless — tedium is the only state this method's tick affects conditionally.
+     * contentment (a content creature tolerates monotony longer).
      */
     private void onTick(NeuromodulatorTick tick) {
         dopamine  = clampFloor(dopamine  * Constants.DOPAMINE_DECAY  + baseline(Constants.DOPAMINE_BASELINE,  tick.circadianPhase));
@@ -97,11 +89,9 @@ public class NeuromodulatorSystem extends CreatureComponent {
         orexin    = clampFloor(orexin    * Constants.OREXIN_DECAY);
         lastCircadianPhase = tick.circadianPhase;
 
-        if (learningSettings.isTediumEnabled()) {
-            double satiety = clamp01(serotonin * (1.0 - Constants.SEROTONIN_DECAY));
-            double rise = Constants.BOREDOM_RISE_RATE / (1.0 + Constants.SEROTONIN_BOREDOM_TOLERANCE * satiety);
-            creature.emotions().regulate(Constants.TEDIUM, rise);
-        }
+        double satiety = clamp01(serotonin * (1.0 - Constants.SEROTONIN_DECAY));
+        double rise = Constants.BOREDOM_RISE_RATE / (1.0 + Constants.SEROTONIN_BOREDOM_TOLERANCE * satiety);
+        creature.emotions().regulate(Constants.TEDIUM, rise);
     }
 
     private static double clamp01(double v) {

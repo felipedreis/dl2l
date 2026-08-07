@@ -240,7 +240,7 @@ public class CreatureActor implements Creature {
         factories.put(FullAppraisal.class,         id -> new FullAppraisal(id, effective, mlExt, wmFilterRef));
         factories.put(HomeostaticRegulation.class, id -> new HomeostaticRegulation(id, effective));
         factories.put(Valuation.class,             id -> new Valuation(id, effective));
-        factories.put(NeuromodulatorSystem.class,  id -> new NeuromodulatorSystem(id, effective));
+        factories.put(NeuromodulatorSystem.class,  NeuromodulatorSystem::new);
         factories.put(EndocrineSystem.class,       EndocrineSystem::new);
         return factories;
     }

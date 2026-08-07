@@ -120,12 +120,9 @@ public class Simulation {
         // which exists for the p85 baseline arm and nothing else.
         boolean tickGatedCognition = !ls.hasPath("tickGatedCognition") || ls.getBoolean("tickGatedCognition");
 
-        // Issue #85 follow-up — default-off; see LearningSettings.tediumEnabled's javadoc.
-        boolean tediumEnabled = ls.hasPath("tediumEnabled") && ls.getBoolean("tediumEnabled");
-
         return new LearningSettings(circadianEnabled, consolidationEnabled, enabledFilters,
                 expectancyEnabled, expectancyMode, neuromodulationEnabled, actionTendencyEnabled,
-                orexinEnabled, endocrineEnabled, tickGatedCognition, tediumEnabled);
+                orexinEnabled, endocrineEnabled, tickGatedCognition);
     }
 
     public Long getNumHolders() {

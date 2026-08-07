@@ -29,29 +29,6 @@ public class LearningSettingsTest {
         assertTrue(new LearningSettings().isConsolidationEnabled());
     }
 
-    /**
-     * Issue #85 follow-up: neither Mapa (2009) nor Campos (2015) - the architectures p84
-     * validates parity against - modelled tedium, so the base architecture default is off.
-     * Also asserts the 10-arg constructor (still used positionally by e.g.
-     * TickGatedCognitionTest) delegates to tediumEnabled=false rather than requiring every
-     * call site to be updated.
-     */
-    @Test
-    void defaults_disable_tedium() {
-        assertFalse(new LearningSettings().isTediumEnabled());
-        assertFalse(new LearningSettings(true, false, LearningSettings.MASTER_FILTER_ORDER).isTediumEnabled());
-        assertFalse(new LearningSettings(true, false, LearningSettings.MASTER_FILTER_ORDER,
-                false, ExpectancyMode.DISCRETE, false, false, false, false, true)
-                .isTediumEnabled());
-    }
-
-    @Test
-    void tedium_can_be_explicitly_enabled() {
-        LearningSettings ls = new LearningSettings(true, false, LearningSettings.MASTER_FILTER_ORDER,
-                false, ExpectancyMode.DISCRETE, false, false, false, false, true, true);
-        assertTrue(ls.isTediumEnabled());
-    }
-
     @Test
     void defaults_include_all_five_filters_in_master_order() {
         List<ActionSelectionType> filters = new LearningSettings().getEnabledFilters();
@@ -168,27 +145,6 @@ public class LearningSettingsTest {
         assertTrue(ls.isCircadianEnabled());
         assertTrue(ls.isConsolidationEnabled());
         assertEquals(LearningSettings.MASTER_FILTER_ORDER, ls.getEnabledFilters());
-        assertFalse(ls.isTediumEnabled(), "tedium must default off with no learningSettings block");
-    }
-
-    @Test
-    void tedium_enabled_parses_from_config() {
-        String hocon = "simulation {\n"
-                + "  holders = 1\n"
-                + "  positionFactory = \"br.cefetmg.lsi.l2l.world.RandomPositionFactory\"\n"
-                + "  reposition = false\n"
-                + "  creatureSettings = [{quantity = 1}]\n"
-                + "  worldObjectSettings = []\n"
-                + "  worldSize = { width = 100, height = 100 }\n"
-                + "  learningSettings {\n"
-                + "    tediumEnabled = true\n"
-                + "  }\n"
-                + "}";
-
-        com.typesafe.config.Config config = com.typesafe.config.ConfigFactory.parseString(hocon);
-        Simulation sim = new Simulation(config);
-
-        assertTrue(sim.getLearningSettings().isTediumEnabled());
     }
 
     // -----------------------------------------------------------------------
