@@ -78,11 +78,32 @@ MEMORY filter. Never compare across stacks or worlds.
 | `legacy_nomem_simple` | legacy-minimal | TARGET_DISTANCE, AFFORDANCE, RANDOM | simple |
 | `legacy_mem_simple` | legacy-minimal | + MEMORY | simple |
 
-- **legacy-minimal** = circadian, consolidation, expectancy, neuromodulation,
-  actionTendency, orexin, endocrine all `false`. A mismatch here is attributable to the
-  core architecture rather than to one of six later subsystems.
-- **current default** = the `20260717_memory_vs_wm` baseline stack.
+- **legacy-minimal** = circadian, consolidation, expectancy, neuromodulation, orexin,
+  endocrine all `false`, **`actionTendencyEnabled = true`**. A mismatch here is attributable
+  to the core architecture rather than to one of the later subsystems.
+- **current** = expectancy + neuromodulation + orexin + endocrine `true`,
+  **`actionTendencyEnabled = false`**.
 - **No arm enables `WORLD_MODEL`** — neither source architecture had one.
+
+### Why action tendency is ON in legacy and OFF in current
+
+`ActionTendencyFilter` is **not** a modern addition: its javadoc attributes the tendencies
+to Campos (2006) and its pass-through rule to the 2015 paper being replicated here, and
+`LearningSettings.DEFAULT_ACTION_TENDENCIES` cites Campos (2006) directly. It belongs to
+the source architecture. An earlier run of this experiment had it `false` in the legacy
+arms, which wrongly *removed* a mechanism both sources had — that run's legacy results
+should not be compared against these.
+
+The modern layer that stands in for it is neuromodulation.
+`docs/plans/tedium-saturation.md` measured the two as independently sufficient for the same
+job (tendency alone held tedium at 0.18–0.42; neuromodulation alone at 0.18–0.22), which is
+what licenses treating them as a substitution rather than as an addition. So the arms carry
+exactly one emotion→action mechanism each, and the pair isolates *which* mechanism rather
+than *how many*.
+
+Note this is deliberately **not** the shipped production default, which has both enabled.
+That configuration answers a different question (external validity for the JEPA experiment)
+and is out of scope here.
 - **mixed** world = Campos's 20/20/60 red/green/gray. `GRAY_APPLE` has `caloricValue = 0`,
   so some interactions are unrewarding.
 - **simple** world = red/green only, 50/50. Every interaction regulates hunger.
@@ -218,6 +239,31 @@ the analysis does the same, per `(target, seq)`.
 ---
 
 ## 6. Statistics
+
+### Criterion shares are computed over *chosen* decisions
+
+Campos reports four selection criteria; our `ActionSelection.selectOne` can report five,
+because it credits whichever filter first narrows the candidate set to one — and
+`ActionTendencyFilter` can do that. `DEFAULT_ACTION_TENDENCIES` maps `TEDIUM -> {WANDER}`,
+a singleton, so any cycle where tedium dominates is *determined* by the constraint with no
+choice left for the scoring filters. Measured at **86% of decisions** in the earlier
+campaign's current arms, where it was silently omitted from the figures entirely.
+
+`ACTION_TENDENCY` decisions are therefore **reported as their own category and excluded
+from the four-way shares**, which are computed over decisions where a criterion actually
+chose. `constraint_determined_frac` is reported per arm so the denominator is always
+visible.
+
+Two alternatives were considered and rejected. *Reattributing* those decisions to the next
+filter in the chain is worse than doing nothing: every downstream filter is a pass-through
+on a one-element list, so the entire 86% would land on `TARGET_DISTANCE` and manufacture a
+spurious match with Campos's substantial "Nearest" share. *Making the tendency soft* (pass
+through unless ≥2 survive) would restore a meaningful four-way split, but removes the forced
+WANDER that `docs/plans/tedium-saturation.md` measured as what prevents tedium saturation in
+exactly the legacy configuration this experiment runs — so it trades a reporting problem for
+a behavioural one.
+
+### Tests
 
 Lifetimes and intervals are strongly right-skewed, so everything is rank-based. No
 t-tests, no ANOVA.

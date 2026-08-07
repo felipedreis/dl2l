@@ -53,11 +53,31 @@ from analysis.dl2l_analysis.stats import (
 from analysis.experiments import p84_memory_common
 
 MAX_K = 10
+# Campos's four reported selection criteria, mapped one-for-one onto ours.
 CRITERIA = ["TARGET_DISTANCE", "AFFORDANCE", "MEMORY", "RANDOM"]
 CRITERION_LABEL = {"TARGET_DISTANCE": "Nearest", "AFFORDANCE": "Affordances",
                    "MEMORY": "Memory", "RANDOM": "Random"}
 CRITERION_COLOR = {"TARGET_DISTANCE": "#4c9f70", "AFFORDANCE": "#e08a3c",
                    "MEMORY": "#2b5eb8", "RANDOM": "#b04a4a"}
+
+# ACTION_TENDENCY is NOT one of Campos's four, and is not a selection criterion in his
+# sense: ActionTendencyFilter constrains the candidate set by dominant drive (Campos 2006
+# innate tendencies) rather than choosing among alternatives. Our ActionSelection.selectOne
+# nonetheless credits whichever filter first narrows to a single candidate, and because
+# DEFAULT_ACTION_TENDENCIES maps TEDIUM -> {WANDER} — a singleton — any cycle where tedium
+# dominates is fully DETERMINED by the constraint, with no choice left for the scoring
+# filters downstream. Measured at 86% of decisions in the earlier campaign's current arms.
+#
+# Those decisions are therefore reported separately and excluded from the four-way shares,
+# which are computed over decisions where a genuine choice actually happened. Excluding them
+# is not cosmetic: leaving them in silently swamps the comparison, and reattributing them to
+# the next filter in the chain would be worse still — every downstream filter is a
+# pass-through on a one-element list, so the whole 86% would land on TARGET_DISTANCE and
+# spuriously manufacture a match with Campos's substantial "Nearest" share.
+CONSTRAINT_DETERMINED = "ACTION_TENDENCY"
+ALL_SELECTION_TYPES = CRITERIA + [CONSTRAINT_DETERMINED]
+CRITERION_LABEL[CONSTRAINT_DETERMINED] = "Tendency (constraint)"
+CRITERION_COLOR[CONSTRAINT_DETERMINED] = "#8d8d8d"
 ZOOM_N = 1000
 CAMPOS_LIFETIME_RATIO = 6.7          # his 1.4e4 s with memory / 2.1e3 s without
 MAPA_LEVELS = {"low": 0.25, "medium": 0.40, "high": 0.70}
@@ -92,15 +112,25 @@ def per_creature_outcomes(intervals, actions, creatures) -> pd.DataFrame:
 
     if not actions.empty:
         counts = actions.groupby(keys)["selection_type"].value_counts().unstack(fill_value=0)
-        total = counts.sum(axis=1).clip(lower=1)
+        n_all = counts.sum(axis=1)
+        n_constraint = counts.get(CONSTRAINT_DETERMINED, 0)
+        # Denominator is CHOSEN decisions, not all decisions — see CONSTRAINT_DETERMINED's
+        # comment. Shares are therefore "of the decisions where a criterion actually chose",
+        # which is the quantity Campos's four-way breakdown reports.
+        n_chosen = (n_all - n_constraint).clip(lower=1)
         for crit in CRITERIA:
-            out = out.merge((counts.get(crit, 0) / total).rename(f"share_{crit}"),
+            out = out.merge((counts.get(crit, 0) / n_chosen).rename(f"share_{crit}"),
                             on=keys, how="left")
-        out = out.merge(counts.sum(axis=1).rename("n_decisions"), on=keys, how="left")
+        out = out.merge(n_all.rename("n_decisions"), on=keys, how="left")
+        out = out.merge((n_constraint / n_all.clip(lower=1))
+                        .rename("constraint_determined_frac"), on=keys, how="left")
 
         # Campos's "random choice is no longer needed": RANDOM's rate late vs early.
+        # Also computed over chosen decisions only, so a shift in how often the tendency
+        # constraint fires cannot masquerade as random choice being displaced by memory.
+        chosen = actions[actions["selection_type"] != CONSTRAINT_DETERMINED]
         ratios = []
-        for k, g in actions.groupby(keys):
+        for k, g in chosen.groupby(keys):
             g = g.sort_values("time")
             n = len(g)
             if n < 30:
@@ -227,19 +257,25 @@ def campos_figures(actions, cfg) -> None:
             if d.empty:
                 continue
             idx = np.arange(1, len(d) + 1)
-            for crit in CRITERIA:
+            # ALL_SELECTION_TYPES, not CRITERIA: the tendency-constraint curve is drawn
+            # (dashed, grey) rather than omitted. Plotting only Campos's four silently hid
+            # the dominant category in the previous campaign's current arms.
+            for crit in ALL_SELECTION_TYPES:
                 cum = (d["selection_type"] == crit).cumsum().values
                 if cum[-1] == 0:
                     continue
-                ax.plot(idx, cum, color=CRITERION_COLOR[crit], label=CRITERION_LABEL[crit])
+                ax.plot(idx, cum, color=CRITERION_COLOR[crit], label=CRITERION_LABEL[crit],
+                        ls="--" if crit == CONSTRAINT_DETERMINED else "-",
+                        alpha=0.6 if crit == CONSTRAINT_DETERMINED else 1.0)
             ax.set_title(c.label, fontsize=9)
             ax.set_xlabel("decisions")
             ax.set_ylabel("cumulative selections")
             ax.grid(alpha=0.3)
-        handles = [plt.Line2D([], [], color=CRITERION_COLOR[c], label=CRITERION_LABEL[c])
-                   for c in CRITERIA]
-        fig.legend(handles=handles, loc="lower center", ncol=len(CRITERIA), fontsize=8,
-                   frameon=False)
+        handles = [plt.Line2D([], [], color=CRITERION_COLOR[c], label=CRITERION_LABEL[c],
+                              ls="--" if c == CONSTRAINT_DETERMINED else "-")
+                   for c in ALL_SELECTION_TYPES]
+        fig.legend(handles=handles, loc="lower center", ncol=len(ALL_SELECTION_TYPES),
+                   fontsize=8, frameon=False)
         fig.suptitle(title)
         fig.tight_layout(rect=[0, 0.07, 1, 0.93])
         save(fig, fname, cfg)
@@ -256,8 +292,19 @@ def criterion_share_figure(per_creature, cfg) -> None:
         ax.bar(x + i * width, means, width, color=c.color, label=c.label, alpha=0.85)
     ax.set_xticks(x + width * (len(cfg.conditions) - 1) / 2)
     ax.set_xticklabels([CRITERION_LABEL[c] for c in CRITERIA])
-    ax.set_ylabel("share of a creature's decisions")
-    ax.set_title("Selection criteria usage, with and without memory")
+    ax.set_ylabel("share of a creature's CHOSEN decisions")
+    # Per-arm range, not a pooled mean: arms differ enormously here (an arm with the
+    # tendency filter off is 0% by construction, one with it on can exceed 80%), so a
+    # single averaged number would describe none of them.
+    frac = per_creature.get("constraint_determined_frac")
+    if frac is not None and frac.notna().any():
+        by_arm = per_creature.groupby("condition")["constraint_determined_frac"].mean()
+        excluded = f"{100 * by_arm.min():.0f}–{100 * by_arm.max():.0f}% depending on arm"
+    else:
+        excluded = "n/a"
+    ax.set_title("Selection criteria usage, with and without memory\n"
+                 f"(over chosen decisions; {excluded} of decisions were determined by the "
+                 "tendency constraint and excluded)", fontsize=10)
     ax.legend(fontsize=7)
     ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
@@ -331,10 +378,14 @@ def conditioning_figure(conditioning, cfg) -> None:
 OUTCOMES = [
     ("lifetime_s", "lifetime (s)"),
     ("mean_interval_s", "mean interaction interval (s)"),
-    ("share_RANDOM", "RANDOM share of decisions"),
-    ("share_AFFORDANCE", "AFFORDANCE share"),
-    ("share_TARGET_DISTANCE", "TARGET_DISTANCE share"),
+    ("share_RANDOM", "RANDOM share of chosen"),
+    ("share_AFFORDANCE", "AFFORDANCE share of chosen"),
+    ("share_TARGET_DISTANCE", "TARGET_DISTANCE share of chosen"),
     ("random_slope_ratio", "RANDOM late/early ratio"),
+    # Not a parity claim — reported so the denominator behind every share above is visible
+    # rather than implicit, and so a between-arm difference in how often the tendency
+    # constraint fires is legible instead of silently reshaping the other shares.
+    ("constraint_determined_frac", "decisions determined by tendency"),
 ]
 
 

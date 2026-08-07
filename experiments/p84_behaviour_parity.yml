@@ -30,6 +30,13 @@
 # memory}: the legacy pair isolates the core architecture, the current pair says whether
 # the newer subsystems break the match. Parity claims are read WITHIN a pair.
 #
+# Each stack carries exactly ONE emotion->action mechanism, so the pair isolates which
+# mechanism rather than how many: legacy has actionTendency ON (it models Campos 2006
+# tendencies and the 2015 pass-through rule — part of the source architecture, not a modern
+# addition), current has it OFF with neuromodulation+expectancy ON instead. See the recipe's
+# section 3 for why these are substitutes rather than additions, and note this is
+# deliberately not the shipped production default, which enables both.
+#
 # The two *_simple arms drop GRAY_APPLE (caloricValue 0) so every interaction is
 # rewarding. Mapa attributes Silva's (2008) monotonically decreasing interval curve to
 # precisely that, and her own oscillating curve to the presence of unrewarding
