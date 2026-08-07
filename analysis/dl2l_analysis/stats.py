@@ -7,6 +7,8 @@ analysis/exp_20260709_memory_vs_wm_v1.py (L183-206).
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 from scipy import stats as scipy_stats
 
@@ -136,8 +138,19 @@ def compare_arms(df, value: str, arm_a: str, arm_b: str, arm_col: str = "conditi
     out["n_clusters"] = (len(ta), len(tb))
     if len(ta) >= 2 and len(tb) >= 2:
         out["p_trial"] = float(scipy_stats.mannwhitneyu(ta, tb, alternative="two-sided").pvalue)
-        agree = (out["p_creature"] < 0.05) == (out["p_trial"] < 0.05)
-        out["verdict"] = "consistent" if agree else "clustering-sensitive"
+        # Mann-Whitney on small clusters has a floor: with perfect separation the smallest
+        # attainable two-sided p is 2 / C(n1+n2, n1) — 0.1 at 3v3, 0.029 at 4v4. If that
+        # floor is above alpha the trial-level test CANNOT be significant no matter how
+        # large the true effect, so calling the pair "clustering-sensitive" would blame
+        # pseudo-replication for what is really just too few clusters. Say so instead.
+        min_p = 2.0 / math.comb(len(ta) + len(tb), len(ta))
+        out["min_attainable_p_trial"] = float(min_p)
+        if min_p > 0.05:
+            out["verdict"] = (f"cluster-level underpowered (min attainable p={min_p:.3f} "
+                              f"at {len(ta)}v{len(tb)} clusters)")
+        else:
+            agree = (out["p_creature"] < 0.05) == (out["p_trial"] < 0.05)
+            out["verdict"] = "consistent" if agree else "clustering-sensitive"
     else:
         out["p_trial"] = float("nan")
         out["verdict"] = "too few clusters for a sensitivity check"
