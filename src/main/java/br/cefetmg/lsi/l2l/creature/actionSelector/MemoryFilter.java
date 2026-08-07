@@ -19,10 +19,16 @@ import java.util.Objects;
 /**
  * Symbolic action filter based on Suelen Mapa's long-term memory system (2009).
  *
- * Scores each candidate action by the cumulative expected emotional outcome derived
- * from the creature's own recent engrams. The score for action a targeting object
- * type t is: sum(-emotionDelta × eligibility) over all engrams matching (a, t).
- * A negative emotionDelta means aversive emotion decreased — a beneficial outcome.
+ * Scores each candidate action by the expected emotional outcome derived from the
+ * creature's own recent engrams. The score for action a targeting object type t is the
+ * MEAN of (-emotionDelta × eligibility) over all engrams matching (a, t) — an average
+ * value per remembered occurrence, not a total. A negative emotionDelta means aversive
+ * emotion decreased — a beneficial outcome.
+ *
+ * The mean matters: with a sum (as before issue #88) the score tracked how often an
+ * action had been taken rather than how well it turned out, and because acting lays more
+ * engrams the filter reinforced its own past choices regardless of outcome. See
+ * docs/plans/memoryfilter-mean-not-sum.md.
  *
  * Decision rule:
  *   - If any action has a non-zero score, return the single highest-scoring action.
@@ -51,14 +57,29 @@ public class MemoryFilter implements ActionFilter {
         if (engrams.isEmpty()) return actions;
 
         // Accumulate score per (ActionType, WorldObjectType) key from engrams.
-        // Score = sum of -emotionDelta × eligibility; higher = better expected outcome.
-        Map<ActionKey, Double> scores = new HashMap<>();
+        // Score = MEAN of -emotionDelta × eligibility; higher = better expected outcome.
+        //
+        // Mean, not sum (issue #88). Summing made the score grow with how OFTEN an action had
+        // been taken rather than how good it was, and since taking an action lays more engrams
+        // for it the filter was self-reinforcing: whatever got chosen early accumulated the
+        // largest total and kept winning, outcome irrelevant. Measured over one real trial's
+        // 252,188 engrams, APPROACH totalled 895.9 across 172,088 engrams while EAT totalled
+        // 11.5 across 1,016 — so APPROACH won, despite EAT being worth more than twice as much
+        // PER OCCURRENCE (0.0113 vs 0.0052). Creatures approached food continuously and rarely
+        // ate it; enabling this filter cut feeding 3.6-65x and took mortality from 0% to 100%
+        // in two of three arm pairs. Dividing by the count removes the frequency term and
+        // restores the intended ordering (EAT > SLEEP > WANDER > APPROACH on that data).
+        Map<ActionKey, double[]> totals = new HashMap<>();   // key -> {sum, count}
         for (Engram e : engrams) {
             WorldObjectType objType = e.perception().objectType.getOrElse(null);
             ActionKey key = new ActionKey(e.actionType(), objType);
             double contribution = -e.emotionDelta() * e.eligibility();
-            scores.merge(key, contribution, Double::sum);
+            double[] acc = totals.computeIfAbsent(key, k -> new double[2]);
+            acc[0] += contribution;
+            acc[1] += 1;
         }
+        Map<ActionKey, Double> scores = new HashMap<>();
+        totals.forEach((key, acc) -> scores.put(key, acc[0] / acc[1]));
 
         // Split candidates into scored and unscored buckets.
         List<ScoredAction> scored = new ArrayList<>();
