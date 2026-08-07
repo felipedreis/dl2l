@@ -2,22 +2,13 @@ package br.cefetmg.lsi.l2l.creature.bd;
 
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import org.apache.arrow.memory.OutOfMemoryException;
-import org.apache.arrow.vector.BigIntVector;
-import org.apache.arrow.vector.BitVector;
-import org.apache.arrow.vector.VarCharVector;
-import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.compression.CompressionUtil;
-import org.apache.arrow.vector.ipc.ArrowStreamReader;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -36,38 +27,6 @@ import static org.junit.jupiter.api.Assertions.*;
 class ArrowIpcBackendTest {
 
     private static final long DEFAULT_LIMIT_MB = 256;
-
-    /** Reads every batch of a raw table file back, concatenated, keyed by column name. */
-    private static Map<String, List<Object>> readArrowFile(Path file) throws IOException {
-        Map<String, List<Object>> columns = new LinkedHashMap<>();
-        try (var fis = new FileInputStream(file.toFile());
-             var allocator = new org.apache.arrow.memory.RootAllocator(Long.MAX_VALUE);
-             ArrowStreamReader reader = new ArrowStreamReader(fis, allocator)) {
-            while (reader.loadNextBatch()) {
-                VectorSchemaRoot root = reader.getVectorSchemaRoot();
-                for (var vector : root.getFieldVectors()) {
-                    List<Object> values = columns.computeIfAbsent(vector.getField().getName(), k -> new ArrayList<>());
-                    for (int i = 0; i < root.getRowCount(); i++) {
-                        values.add(vector.isNull(i) ? null : readValue(vector, i));
-                    }
-                }
-            }
-        }
-        return columns;
-    }
-
-    private static Object readValue(org.apache.arrow.vector.FieldVector vector, int i) {
-        if (vector instanceof VarCharVector v) return new String(v.get(i), StandardCharsets.UTF_8);
-        if (vector instanceof BigIntVector v) return v.get(i);
-        if (vector instanceof org.apache.arrow.vector.IntVector v) return v.get(i);
-        if (vector instanceof org.apache.arrow.vector.Float8Vector v) return v.get(i);
-        if (vector instanceof BitVector v) return v.get(i) != 0;
-        throw new AssertionError("unhandled vector type: " + vector.getClass());
-    }
-
-    private static int rowCount(Map<String, List<Object>> columns) {
-        return columns.isEmpty() ? 0 : columns.values().iterator().next().size();
-    }
 
     @Test
     void constructorCreatesAllTwentyTwoRawFilesUpFront(@TempDir Path tmp) throws Exception {
@@ -96,8 +55,8 @@ class ArrowIpcBackendTest {
             backend.persistBatch(Map.of("creature_state", List.of(alive, dead)));
             backend.dumpToParquet();
 
-            Map<String, List<Object>> cols = readArrowFile(tmp.resolve("creature_state.arrow"));
-            assertEquals(2, rowCount(cols));
+            Map<String, List<Object>> cols = ArrowTestReader.readArrowFile(tmp.resolve("creature_state.arrow"));
+            assertEquals(2, ArrowTestReader.rowCount(cols));
             assertEquals(List.of(alive.getId().toString(), dead.getId().toString()), cols.get("id"));
             assertEquals(List.of(1000L, 2000L), cols.get("borntime"));
             assertEquals(List.of(0L, 5000L), cols.get("deadtime"));
@@ -119,8 +78,8 @@ class ArrowIpcBackendTest {
             backend.persistBatch(Map.of("stimulus_state", List.of(blank)));
             backend.dumpToParquet();
 
-            Map<String, List<Object>> cols = readArrowFile(tmp.resolve("stimulus_state.arrow"));
-            assertEquals(1, rowCount(cols));
+            Map<String, List<Object>> cols = ArrowTestReader.readArrowFile(tmp.resolve("stimulus_state.arrow"));
+            assertEquals(1, ArrowTestReader.rowCount(cols));
             assertEquals(blank.getId().toString(), cols.get("id").get(0));
             for (String nullable : List.of("stimulusclass", "type", "componentkey", "stimulusseq",
                     "changestimulusemitted_id", "changestimulusreceived_id")) {
@@ -142,14 +101,14 @@ class ArrowIpcBackendTest {
             backend.persistBatch(Map.of("nose_state", List.of(new NoseState(), new NoseState())));
             // Exactly at the batch-size threshold: write() must have flushed synchronously,
             // readable even though the stream hasn't been end()-ed/finalized yet.
-            assertEquals(2, rowCount(readArrowFile(file)), "N==batchRows must already be flushed to disk");
+            assertEquals(2, ArrowTestReader.rowCount(ArrowTestReader.readArrowFile(file)), "N==batchRows must already be flushed to disk");
 
             backend.persistBatch(Map.of("nose_state", List.of(new NoseState())));
             // N+1: the 3rd row starts a new, not-yet-full batch - must NOT be visible yet.
-            assertEquals(2, rowCount(readArrowFile(file)), "the N+1th row must stay unflushed until threshold or finalize");
+            assertEquals(2, ArrowTestReader.rowCount(ArrowTestReader.readArrowFile(file)), "the N+1th row must stay unflushed until threshold or finalize");
 
             backend.dumpToParquet();
-            assertEquals(3, rowCount(readArrowFile(file)), "finalize must flush the trailing partial batch");
+            assertEquals(3, ArrowTestReader.rowCount(ArrowTestReader.readArrowFile(file)), "finalize must flush the trailing partial batch");
         } finally {
             backend.close();
         }
@@ -165,7 +124,7 @@ class ArrowIpcBackendTest {
 
         assertDoesNotThrow(() -> backend.persistBatch(Map.of("nose_state", List.of(new NoseState(), new NoseState()))));
 
-        assertEquals(1, rowCount(readArrowFile(file)), "post-finalize writes must be dropped, not appended");
+        assertEquals(1, ArrowTestReader.rowCount(ArrowTestReader.readArrowFile(file)), "post-finalize writes must be dropped, not appended");
 
         backend.close(); // idempotent, must not throw a second time
     }

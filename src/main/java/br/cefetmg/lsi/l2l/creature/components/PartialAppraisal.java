@@ -9,6 +9,7 @@ import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
 import br.cefetmg.lsi.l2l.creature.common.Perception;
 import br.cefetmg.lsi.l2l.stimuli.AdrenergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.AdenosinergicStimulus;
+import br.cefetmg.lsi.l2l.stimuli.CognitiveTick;
 import br.cefetmg.lsi.l2l.stimuli.EmotionalStimulus;
 import br.cefetmg.lsi.l2l.stimuli.EndocrineTick;
 import br.cefetmg.lsi.l2l.stimuli.NeuromodulatorTick;
@@ -29,6 +30,12 @@ public class PartialAppraisal extends CreatureComponent {
     private final LearningSettings learningSettings;
     private CircadianClock circadian;
     private EmotionalSystem emotionalSystem;
+    /**
+     * Issue #85: perception accumulated since the last {@link CognitiveTick}, appraised as
+     * one scene when the next tick lands. Sensory input is state here, not a trigger - see
+     * {@link #onReceive} .
+     */
+    private final List<ProprioceptiveStimulus> perceptBuffer = new ArrayList<>();
     // Accumulated circadian sleep-drive; flushed every HOMEO_BATCH_SIZE cycles (driveRate varies per phase).
     private double accumulatedSleepDrive = 0;
     // Issue #79 Phase B: accumulated dt-weighted hunger drift, flushed alongside sleep drive
@@ -51,6 +58,31 @@ public class PartialAppraisal extends CreatureComponent {
         lastTickNanos = System.nanoTime();
     }
 
+    /**
+     * Issue #85: separates <em>receiving</em> perception from <em>running</em> a cognitive
+     * cycle. Proprioceptive input is accumulated into {@link #perceptBuffer} and nothing
+     * else happens; a cycle runs only when a {@link CognitiveTick} arrives from
+     * {@code CreatureActor}'s wall-clock scheduler, appraising the whole buffer as one
+     * scene and clearing it.
+     *
+     * <p>Before this, every delivery ran a cycle. Since the collision detector's replies
+     * arrive independently of the tick, that made the real cycle rate ~9x
+     * {@link Constants#TARGET_CYCLE_HZ} and, worse, split the perceptual stream into
+     * alternating empty (heartbeat) and non-empty (perception) cycles at ~66 Hz - a
+     * stationary object appeared and vanished within milliseconds. Aggregating a whole tick
+     * window removes that alternation by construction and makes the
+     * {@link #buildEmotionalStimulus} {@code Self} fallback mean what it says: nothing was
+     * perceived during this window.
+     *
+     * <p>Two ticks in one batch (a slow actor, or a dispatcher hiccup) run one cycle, not
+     * two. No metabolic time is lost: {@link #tickMetabolicPacemaker}'s {@code
+     * cycleEquivalent} weights each cycle by the wall-clock time it actually covered.
+     *
+     * <p>When {@code learningSettings.isTickGatedCognition()} is false the pre-#85 behaviour
+     * is restored - a cycle per delivery, over that delivery's own stimuli. That exists so
+     * the p85 experiment can run a baseline arm from the same build as the fixed arm; it is
+     * not a supported production mode.
+     */
     @Override
     public void onReceive(Object message) {
         @SuppressWarnings("unchecked")
@@ -58,11 +90,39 @@ public class PartialAppraisal extends CreatureComponent {
                 ? (List<Stimulus>) list
                 : List.of();
 
-        // Direct ground truth for this creature's real cognitive-cycle rate — every
-        // onReceive() call increments it, including the unconditional 1Hz keep-alive
-        // ticks (CreatureActor's own scheduler), so repeated scrapes let cycles/second
-        // be computed directly instead of inferred after the fact from a proxy like
-        // NeuromodulatorSystem's seq counter.
+        List<ProprioceptiveStimulus> propStimuli = new ArrayList<>();
+        boolean ticked = false;
+        for (Stimulus stimulus : stimuli) {
+            switch (stimulus) {
+                case ProprioceptiveStimulus ps -> propStimuli.add(ps);
+                case CognitiveTick ct -> ticked = true;
+                default -> {}
+            }
+        }
+
+        if (learningSettings.isTickGatedCognition()) {
+            perceptBuffer.addAll(propStimuli);
+            if (!ticked) {
+                return;
+            }
+            propStimuli = new ArrayList<>(perceptBuffer);
+            perceptBuffer.clear();
+        }
+
+        runCognitiveCycle(propStimuli);
+    }
+
+    /**
+     * One cognitive cycle over {@code propStimuli}, the perception this cycle appraises.
+     * Metabolism, neuromodulators and the endocrine tick advance first so action selection
+     * sees the current internal state, then the scene is appraised and handed to
+     * {@link FullAppraisal}.
+     */
+    private void runCognitiveCycle(List<ProprioceptiveStimulus> propStimuli) {
+        // Direct ground truth for this creature's real cognitive-cycle rate. Since issue #85
+        // this increments once per wall-clock tick, so repeated scrapes read back
+        // TARGET_CYCLE_HZ directly; it counts cycles, not message deliveries (buffer-only
+        // deliveries return before reaching here).
         if (metricsExt != null) {
             metricsExt.incrementCounter("dl2l_creature_cognitive_cycles_total", "creature", id.toString());
         }
@@ -72,14 +132,6 @@ public class PartialAppraisal extends CreatureComponent {
         tickNeuromodulators();
         releaseOrexin();
         tickEndocrine();
-
-        List<ProprioceptiveStimulus> propStimuli = new ArrayList<>();
-        for (Stimulus stimulus : stimuli) {
-            switch (stimulus) {
-                case ProprioceptiveStimulus ps -> propStimuli.add(ps);
-                default -> {}
-            }
-        }
 
         EmotionalStimulus emotional = buildEmotionalStimulus(propStimuli);
         creature.fullAppraisal().tell(emotional);
@@ -222,6 +274,18 @@ public class PartialAppraisal extends CreatureComponent {
 
         if (metricsExt != null) {
             metricsExt.setGauge("dl2l_creature_arousal", id.toString(), maxEmotion.getLevel());
+            // dl2l_creature_arousal alone is the level of whichever emotion is winning, with
+            // the winner's identity discarded - so a creature switching from hunger to sleep
+            // at the same intensity shows a flat line, and the three losing emotions are
+            // invisible. Emit each active emotion under its own tag as well; the max above is
+            // then the top of these four curves rather than an unattributable number.
+            // EmotionalSystemActor.ACTIVE is the single source of truth for which emotions
+            // are live (the other five registered ones are deferred or disabled and would
+            // just sit at MIN_AROUSAL_LEVEL).
+            for (String emotion : EmotionalSystemActor.ACTIVE) {
+                metricsExt.setGauge("dl2l_creature_emotion_level", id.toString(),
+                        "emotion", emotion, emotionalSystem.getLevel(emotion));
+            }
         }
 
         logger.fine(String.format("PartialAppraisal[%s]: arousal=%.3f perceptions=%d behaviouralEfficiency=%.3f",
@@ -250,6 +314,10 @@ public class PartialAppraisal extends CreatureComponent {
         BehaviouralEfficiencyState behaviouralState = new BehaviouralEfficiencyState();
         behaviouralState.setBehaviouralEfficiency(emotional.behaviouralEfficiency);
         behaviouralState.setNumberOfObjects(emotional.getPerceptions().size());
+        // Issue #85: the pre-fallback count, so an empty sensory field is distinguishable
+        // from a single perceived object - both leave numberOfObjects at 1. See the field's
+        // javadoc on BehaviouralEfficiencyState.
+        behaviouralState.setPerceivedObjects(propStimuli.size());
         behaviouralState.setComplexTask(emotional.getPerceptions().size() >= Constants.COMPLEX_TASK);
         behaviouralState.setChangeStimulusState(changeEmotional);
 

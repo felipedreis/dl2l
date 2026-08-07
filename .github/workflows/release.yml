@@ -1,0 +1,134 @@
+name: Release
+
+# Cuts a versioned, citable release: a release/X.Y.Z branch push runs the full test suite,
+# then (only if it's green) publishes ghcr.io/.../dl2l:X.Y.Z (+ :X.Y, :stable, :sha-<short>),
+# pushes a permanent vX.Y.Z git tag at that commit, and creates a GitHub Release.
+#
+# The Maven version is set for this build only (mvn versions:set, below) - pom.xml in git
+# stays 2.0.0-SNAPSHOT. There is deliberately no version-bump commit/PR: the release version
+# lives only in the git tag and the image tags, which is enough for an experiment to pin to
+# a specific, reproducible dl2l build (see CLAUDE.md's "Container Images & Versioning").
+on:
+  push:
+    branches: ['release/**']
+
+# A second push to the same release/X.Y.Z branch before the first run finishes must not race
+# the tag-creation step below against itself.
+concurrency:
+  group: release-${{ github.ref }}
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # A versioned release image is meant to be trustworthy enough to cite in an experiment
+  # spec - it must never be published untested, even though publish rebuilds with skipTests
+  # for speed (mvn package -DskipTests) once this job has already proven the suite green.
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '23'
+          distribution: temurin
+          cache: maven
+
+      - name: Run full test suite
+        run: |
+          mvn test \
+            -Dtest='!ConsolidationPipelineTest' \
+            --no-transfer-progress
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse semantic version from the branch name
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#release/}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::branch name 'release/${VERSION}' is not release/X.Y.Z (semver) - refusing to guess a version" >&2
+            exit 1
+          fi
+          MAJOR_MINOR="$(echo "$VERSION" | cut -d. -f1,2)"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "major_minor=${MAJOR_MINOR}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '23'
+          distribution: temurin
+          cache: maven
+
+      - name: Set the Maven build version (not committed - see workflow header)
+        run: |
+          mvn org.codehaus.mojo:versions-maven-plugin:2.17.1:set \
+            -DnewVersion="${{ steps.version.outputs.version }}" \
+            -DgenerateBackupPoms=false
+
+      - name: Build fat jar
+        # Already proven green by the test job above; -DskipTests here is speed only.
+        run: |
+          mvn package \
+            -DskipTests \
+            --no-transfer-progress
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=${{ steps.version.outputs.major_minor }}
+            # "latest good release" - separate from cd.yml's `latest` ("latest main push").
+            # Neither tag redefines the other.
+            type=raw,value=stable
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Cut the permanent git tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" > /dev/null; then
+            echo "tag v${VERSION} already exists - not re-creating (idempotent re-run)"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "v${VERSION}" -m "Release v${VERSION}"
+            git push origin "v${VERSION}"
+          fi
+
+          if gh release view "v${VERSION}" > /dev/null 2>&1; then
+            echo "GitHub Release v${VERSION} already exists - not re-creating"
+          else
+            gh release create "v${VERSION}" --title "v${VERSION}" --generate-notes
+          fi

@@ -28,6 +28,7 @@ import br.cefetmg.lsi.l2l.creature.ml.MemoryConsolidator;
 import br.cefetmg.lsi.l2l.creature.ml.MemoryTraceConsolidator;
 import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
 import br.cefetmg.lsi.l2l.physics.CreaturePositioningAttr;
+import br.cefetmg.lsi.l2l.stimuli.CognitiveTick;
 import scala.concurrent.duration.Duration;
 
 import java.util.HashMap;
@@ -88,6 +89,9 @@ public class CreatureActor implements Creature {
     private CreatureState state;
 
     private Cancellable clock;
+
+    /** Set in {@link #init()}; gates the MLServiceExtension lookups here and in {@link #kill()}. */
+    private boolean worldModelInUse;
 
     // null means "inherit global settings from SimulationSettingsExtension"
     private final LearningSettings learningSettings;
@@ -171,7 +175,16 @@ public class CreatureActor implements Creature {
             consolidator = context.system().deadLetters();
         }
 
-        final MLServiceExtension.Impl mlExt = MLServiceExtension.of(context.system());
+        // Resolved only when something will actually use it. MLServiceExtension's constructor
+        // loads the species models through DJL/PyTorch, which costs a native-runtime
+        // download on first use and hundreds of MB of memory - pure waste for a run whose
+        // filter chain has no WORLD_MODEL, and it is what made an integration test that
+        // boots a real creature depend on network access. FullAppraisal already treats a
+        // null mlExt as "WORLD_MODEL silently unavailable" (see its preStart), and the
+        // JEPA-mode MemoryConsolidator above is only created under the same condition.
+        worldModelInUse = worldModelInUse(effective);
+        final MLServiceExtension.Impl mlExt = worldModelInUse
+                ? MLServiceExtension.of(context.system()) : null;
 
         SequentialId componentId = id;
         for (Map.Entry<Class<?>, Function<SequentialId, CreatureComponent>> entry : componentFactories(effective, mlExt, wmFilterRef).entrySet()) {
@@ -203,6 +216,16 @@ public class CreatureActor implements Creature {
         collisionDetector.tell(getPositioningAttr(), ActorRef.noSender());
     }
 
+    /**
+     * Whether any subsystem in this configuration reaches the species world model. Every
+     * such path - FullAppraisal's WORLD_MODEL filter, the JEPA-mode MemoryConsolidator, and
+     * JepaExpectancyPredictor (which reads the filter's prediction cache) - is gated on the
+     * WORLD_MODEL filter being enabled, so this single check covers all of them.
+     */
+    public static boolean worldModelInUse(LearningSettings settings) {
+        return settings.isFilterEnabled(ActionSelectionType.WORLD_MODEL);
+    }
+
     private LinkedHashMap<Class<?>, Function<SequentialId, CreatureComponent>> componentFactories(
             LearningSettings effective, MLServiceExtension.Impl mlExt,
             AtomicReference<WorldModelFilter> wmFilterRef) {
@@ -230,7 +253,12 @@ public class CreatureActor implements Creature {
             TypedActor.context().stop(p.second);
         }
         TypedActor.context().stop(consolidator);
-        MLServiceExtension.of(TypedActor.context().system()).releaseAdapter(id.key);
+        // Only if init() resolved the extension - see its comment there. Calling of() here
+        // would otherwise construct (and load) the whole ML service just to release an
+        // adapter that was never created.
+        if (worldModelInUse) {
+            MLServiceExtension.of(TypedActor.context().system()).releaseAdapter(id.key);
+        }
         SimulationSettingsExtension.of(TypedActor.context().system()).releaseCreatureSettings(id.key);
 
         // Same UUID as the birth write above - no upsert semantics (see ArrowIpcBackend's
@@ -245,30 +273,29 @@ public class CreatureActor implements Creature {
     }
 
     /**
-     * Issue #79 Phase B: called once per wall-clock tick by the {@code clock} scheduler
-     * (see {@code init()}). Two independent things happen here, exactly as they did before
-     * Phase B, just now both gated to the same tick instead of one being 1Hz-fixed and the
-     * other unbounded:
+     * Called once per wall-clock tick by the {@code clock} scheduler (see {@code init()}).
+     * Two things happen here, and since issue #85 only one of them drives cognition:
      *
-     * <p>1. The direct heartbeat to {@code PartialAppraisal} guarantees a cognitive cycle
-     * fires this tick even with zero perception. Without it, {@code PartialAppraisal.onReceive}
-     * only fires when {@code SensoryCortex} has a stimulus to forward - which never happens
-     * if nothing is within sensory range - so a creature alone in empty space would never
-     * metabolize, check death, or act. This is the same unconditional send the pre-Phase-B
-     * 1Hz keep-alive scheduler made.
+     * <p>1. The {@link CognitiveTick} to {@code PartialAppraisal} is the <em>sole</em> driver
+     * of the cognitive cycle. That component buffers perception as it arrives and appraises
+     * it only when a tick lands, so exactly one cycle runs per tick - which both guarantees
+     * a creature alone in empty space still metabolizes, checks death and acts (the liveness
+     * property the pre-Phase-B 1Hz keep-alive provided), and pins the cycle rate to
+     * {@link Constants#TARGET_CYCLE_HZ}.
      *
      * <p>2. {@link #updatePositioningAttribute()} broadcasts this tick's position/perceptual
-     * fields to the collision detector, which - asynchronously, and only if something is
-     * actually nearby - triggers its own separate perception-driven cycle(s) on
-     * {@code PartialAppraisal}. This was always decoupled in timing from the heartbeat (the
-     * collision-detector round trip can even cross nodes); Phase B only changes *how often*
-     * a new broadcast is triggered (once per tick, not once per movement), not this
-     * asynchrony. See this method's declaration on {@link Creature} for why it's routed
-     * through the typed-actor proxy.
+     * fields to the collision detector, whose replies flow back through the sensors into
+     * PartialAppraisal's buffer. That round trip is asynchronous and can cross nodes, but it
+     * no longer <em>triggers</em> cycles of its own - before issue #85 it did, which is why
+     * the measured rate ran ~9x nominal and why perception alternated with empty heartbeat
+     * cycles at ~66 Hz. Liveness therefore does not depend on the detector being reachable.
+     *
+     * <p>See this method's declaration on {@link Creature} for why it's routed through the
+     * typed-actor proxy.
      */
     @Override
     public void tick() {
-        componentRef(PartialAppraisal.class).tell("", ActorRef.noSender());
+        componentRef(PartialAppraisal.class).tell(new CognitiveTick(id, id.next()), ActorRef.noSender());
         updatePositioningAttribute();
     }
 

@@ -58,6 +58,9 @@ public class LearningSettings implements Serializable {
     private final boolean orexinEnabled;
     private final boolean endocrineEnabled;
 
+    // --- Tick-gated cognition (issue #85) — default-ON, unlike every other flag here ---
+    private final boolean tickGatedCognition;
+
     public LearningSettings(boolean circadianEnabled,
                             boolean consolidationEnabled,
                             List<ActionSelectionType> enabledFilters) {
@@ -96,6 +99,21 @@ public class LearningSettings implements Serializable {
                             boolean actionTendencyEnabled,
                             boolean orexinEnabled,
                             boolean endocrineEnabled) {
+        this(circadianEnabled, consolidationEnabled, enabledFilters, expectancyEnabled,
+                expectancyMode, neuromodulationEnabled, actionTendencyEnabled, orexinEnabled,
+                endocrineEnabled, true);
+    }
+
+    public LearningSettings(boolean circadianEnabled,
+                            boolean consolidationEnabled,
+                            List<ActionSelectionType> enabledFilters,
+                            boolean expectancyEnabled,
+                            ExpectancyMode expectancyMode,
+                            boolean neuromodulationEnabled,
+                            boolean actionTendencyEnabled,
+                            boolean orexinEnabled,
+                            boolean endocrineEnabled,
+                            boolean tickGatedCognition) {
         this.circadianEnabled       = circadianEnabled;
         this.consolidationEnabled   = consolidationEnabled;
         this.enabledFilters         = Collections.unmodifiableList(new ArrayList<>(enabledFilters));
@@ -105,6 +123,7 @@ public class LearningSettings implements Serializable {
         this.actionTendencyEnabled  = actionTendencyEnabled;
         this.orexinEnabled          = orexinEnabled;
         this.endocrineEnabled       = endocrineEnabled;
+        this.tickGatedCognition     = tickGatedCognition;
     }
 
     /** Default: all subsystems enabled, full filter chain in canonical order. */
@@ -114,6 +133,20 @@ public class LearningSettings implements Serializable {
 
     public boolean isCircadianEnabled() {
         return circadianEnabled;
+    }
+
+    /**
+     * Issue #85: whether a cognitive cycle runs once per wall-clock tick over the perception
+     * buffered since the previous tick (true, the default and the only supported production
+     * setting), or once per message delivery over that delivery's own stimuli (false).
+     *
+     * <p>False reproduces the pre-#85 behaviour - cycle rate ~9x
+     * {@link Constants#TARGET_CYCLE_HZ} and perception alternating with empty heartbeat
+     * cycles at ~66 Hz. It exists so the p85 experiment's baseline arm can run from the same
+     * build as the fixed arm, keeping the new instrumentation column present in both.
+     */
+    public boolean isTickGatedCognition() {
+        return tickGatedCognition;
     }
 
     /** Whether the expectancy → RPE → dopamine learning loop is active (else legacy binary valence). */

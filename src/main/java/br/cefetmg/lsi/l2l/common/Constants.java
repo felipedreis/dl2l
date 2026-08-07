@@ -19,7 +19,12 @@ public interface Constants {
     // A's flat per-cycle version which re-broke if cycle rate ever shifted again.
     double DELTA = 1.5e-3;
 
-    double CHOLINERGIC_DELTA = 1.70711e-2;
+    // Issue #85: Phase A's /= S unwound alongside TEDIUM_*/PAIN_IMMUNE_RATE/BOREDOM_RISE_RATE
+    // below (1.70711e-2 * 5.858 = 1.00003e-1). Sleep recovery accrues once per cognitive
+    // cycle (FullAppraisal, weighted by sleepEpisode.batchTickCount), which is once per tick
+    // now, so leaving it at the Phase A value would have made sleep debt clear ~9x slower in
+    // wall-clock terms than before the cycle rate was fixed.
+    double CHOLINERGIC_DELTA = 1.0e-1;
 
     double MAX_VISION_FIELD_OPENING = 150;
     double MIN_VISION_FIELD_OPENING = 50;
@@ -50,22 +55,29 @@ public interface Constants {
     String CURIOSITY = "curiosity";
     String FERTILITY = "fertility";
 
-    // Issue #79: rescaled /= S in Phase A (S=5.858, see DELTA's comment above), still at
-    // that Phase A value - NOT unwound like DELTA/circadian below. KNOWN GAP: these accrue
-    // per action-selection event (HomeostaticRegulation.handleTedium), not per dt-weighted
-    // pacemaker cycle, so they remain call-rate-sensitive rather than truly wall-clock-
-    // coupled - same "re-breaks if cycle throughput shifts" caveat Phase A always had.
-    // Left as a follow-up (see docs/plans/issue-79-decouple-biological-clock.md's Phase B
-    // section) rather than guessed at without a dt-weighting mechanism to make the value
-    // meaningful.
-    double TEDIUM_IDLE_RATE     = 3.41422e-3;
-    double TEDIUM_OBSERVE_RATE  = 8.53555e-3;
-    double TEDIUM_WANDER_RELIEF = 8.53555e-3;
+    // Issue #85: Phase A's /= S rescale (S=5.858, see DELTA's comment above) unwound, back
+    // to the pre-#76 originals - the same clean-round-number corroboration DELTA's comment
+    // describes (3.41422e-3 * 5.858 = 2.00005e-2, and so on to within 0.0025%).
+    //
+    // The KNOWN GAP this comment used to record - that these accrue per action-selection
+    // event rather than per dt-weighted pacemaker cycle, and so re-break whenever cycle
+    // throughput shifts - is closed by tick-gating rather than by dt-weighting them: a
+    // cognitive cycle now happens exactly once per wall-clock tick (see
+    // PartialAppraisal.onReceive), so "per cycle" and "per 1/TARGET_CYCLE_HZ second" are the
+    // same statement and no dt term is needed. They become call-rate-sensitive again only if
+    // something is ever allowed to drive a cycle other than the tick.
+    //
+    // Recalibrated rather than left alone because the #85 fix cut the real cycle rate ~9x
+    // (260-300 Hz measured -> 30 Hz), which would otherwise have made every one of these
+    // accrue ~9x slower in wall-clock terms than during the p84 campaign. Tedium was
+    // observed pegged at MAX_AROUSAL_LEVEL on a live run before this change.
+    double TEDIUM_IDLE_RATE     = 2.0e-2;
+    double TEDIUM_OBSERVE_RATE  = 5.0e-2;
+    double TEDIUM_WANDER_RELIEF = 5.0e-2;
 
     double PAIN_IMMUNE_THRESHOLD = 0.2;
-    // Issue #79: rescaled /= S in Phase A - same KNOWN GAP as TEDIUM_* above (event-driven,
-    // not dt-weighted).
-    double PAIN_IMMUNE_RATE      = 8.53555e-4;
+    // Issue #85: Phase A rescale unwound, same reasoning as TEDIUM_* above.
+    double PAIN_IMMUNE_RATE      = 5.0e-3;
 
     double MIN_AROUSAL_LEVEL = 0.18;
     double MAX_AROUSAL_LEVEL = 7;
@@ -164,8 +176,13 @@ public interface Constants {
     // Passive boredom accrual per cognitive cycle when no reward arrives. Kept below the metabolic
     // hunger drift (DELTA) so hunger dominates and drives foraging; boredom is a gentle background
     // pressure that surfaces only when basic needs are met and no reward is arriving.
-    // Issue #79: rescaled /= S (see DELTA's comment above) - preserves the < DELTA ratio.
-    double BOREDOM_RISE_RATE = 1.36569e-4;
+    // Issue #85: Phase A rescale unwound (see TEDIUM_* above). This also REPAIRS the "kept
+    // below DELTA" ratio the comment above states, which had been silently wrong since #79
+    // Phase B: that phase unwound DELTA but not this constant, so the ratio went from its
+    // intended 0.533 (both at Phase A values, and both at the pre-#76 originals) to 0.091 -
+    // boredom accrued ~5.9x weaker relative to hunger than calibrated. Restored to 0.533,
+    // still < DELTA so hunger still dominates foraging.
+    double BOREDOM_RISE_RATE = 8.0e-4;
     // Tedium relief per unit of positive reward-prediction error (a rewarding/novel event).
     double DA_TEDIUM_RELIEF = 1.0;
     // How strongly serotonergic contentment (satiety) slows the passive boredom rise.

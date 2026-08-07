@@ -111,6 +111,26 @@ public class MetricsExtension extends AbstractExtensionId<MetricsExtension.Impl>
         }
 
         /**
+         * Get-or-create a per-creature gauge carrying one extra dimension - e.g. one series
+         * per (creature, emotion) rather than a single collapsed value - and set it.
+         *
+         * <p>The extra tag is part of the holder key, not just the Micrometer tag set:
+         * keying on name+creature alone would make every emotion of one creature share a
+         * single {@link AtomicReference}, so the last one written each cycle would overwrite
+         * the rest and all four series would report the same number.
+         *
+         * <p>Multiplies series count by the tag's cardinality - keep that bounded (see
+         * {@code EmotionalSystemActor.ACTIVE}, four values) rather than passing anything
+         * unbounded like an object id.
+         */
+        public void setGauge(String name, String creatureId, String tagKey, String tagValue, double value) {
+            gaugeHolders.computeIfAbsent(name + "|" + creatureId + "|" + tagKey + "=" + tagValue, k ->
+                    registry.gauge(name, Tags.of("creature", creatureId, tagKey, tagValue),
+                            new AtomicReference<>(value), AtomicReference::get)
+            ).set(value);
+        }
+
+        /**
          * Get-or-create a role/cluster-level gauge with no per-creature dimension
          * (simulation lifecycle, live population count, ...) and set its value.
          */

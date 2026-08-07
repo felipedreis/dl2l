@@ -56,7 +56,7 @@ class TableSchemasTest {
                 "sequential", "changestimulusstate_id"));
         t.put("body_state", List.of("finalx", "finaly", "initialx", "initialy", "speed", "stimulusstate_id"));
         t.put("behavioural_efficiency_state", List.of("behaviouralefficiency", "complextask", "numberofobjects",
-                "changestimulusstate_id"));
+                "perceivedobjects", "changestimulusstate_id"));
         t.put("regulation_batch_stat", List.of("batchsize", "drivestouchedmask", "regulatingcount",
                 "samedrivecollision", "changestimulusstate_id"));
         t.put("engram_state", List.of("action_type", "creature_key", "cycle_gap", "eligibility", "emotion_delta",

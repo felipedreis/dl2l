@@ -4,6 +4,7 @@ import akka.actor.ActorRef;
 import akka.actor.PoisonPill;
 import akka.dispatch.Envelope;
 import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
+import br.cefetmg.lsi.l2l.stimuli.CognitiveTick;
 import br.cefetmg.lsi.l2l.stimuli.NeuromodulatorTick;
 import br.cefetmg.lsi.l2l.stimuli.Stimulus;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +36,26 @@ public class ComponentMessageQueueTest {
 
     private Stimulus stimulus() {
         return new NeuromodulatorTick(new SequentialId(1), new SequentialId(2), 0.0);
+    }
+
+    @Test
+    public void cognitiveTickMergesIntoTheSameBatchAsPerception() {
+        // Issue #85: CognitiveTick extends Stimulus specifically so it merges here. If it
+        // were any other type, the default branch below would deliver it as its own
+        // isolated single-element batch, costing PartialAppraisal a second onReceive per
+        // wall-clock tick and splitting the tick from the perception it is meant to
+        // appraise. That coupling is invisible at the CognitiveTick declaration site, so it
+        // is pinned here.
+        Stimulus perception = stimulus();
+        CognitiveTick tick = new CognitiveTick(new SequentialId(1), new SequentialId(2));
+        enqueue(perception);
+        enqueue(tick);
+
+        List<?> batch = (List<?>) queue.dequeue().message();
+
+        assertEquals(List.of(perception, tick), batch,
+                "the tick must arrive in the same batch as the perception queued before it");
+        assertFalse(queue.hasMessages());
     }
 
     @Test

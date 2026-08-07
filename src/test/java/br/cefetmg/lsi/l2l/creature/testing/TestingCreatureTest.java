@@ -80,6 +80,7 @@ class TestingCreatureTest {
         LuminousStimulus luminous = new LuminousStimulus(
                 new SequentialId(42L), new SequentialId(43L), FruitType.RED_APPLE, applePos);
         h.injectLuminous(luminous);
+        h.tick();
 
         // Chain: Eye->SensoryCortex->Partial->Full->EffectorCortex->Body
         assertTrue(h.sensoryCortexRecorder().hasAny(VisualStimulus.class),
@@ -116,6 +117,7 @@ class TestingCreatureTest {
                 new SequentialId(50L), new SequentialId(51L),
                 FruitType.RED_APPLE, h.creature().getPosition());
         h.injectLuminous(contact);
+        h.tick();
 
         CorticalStimulus cortical = h.effectorCortexRecorder().lastOf(CorticalStimulus.class);
         assertNotNull(cortical);
@@ -215,6 +217,7 @@ class TestingCreatureTest {
                 new SequentialId(70L), new SequentialId(71L),
                 FruitType.RED_APPLE, new Point(start.x + 100, start.y));
         h.injectLuminous(luminous);
+        h.tick();
 
         Point after = h.creature().getPosition();
         assertNotEquals(start, after,
@@ -248,6 +251,7 @@ class TestingCreatureTest {
                 new SequentialId(80L), new SequentialId(81L),
                 FruitType.RED_APPLE, new Point(200, 100));
         h.injectLuminous(luminous);
+        h.tick();
 
         CorticalStimulus cortical = h.effectorCortexRecorder().lastOf(CorticalStimulus.class);
         assertNotNull(cortical);

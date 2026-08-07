@@ -16,8 +16,16 @@ dependency-reduced-pom.xml
 # Training data, experiment outputs, and model checkpoints live on HuggingFace,
 # not in git. Only the small deployed TorchScript models (src/main/resources/models/)
 # stay in the repo since they are needed to build the JAR.
+#
+# `ml/data/` alone only matches a literal directory named exactly "data" - every real
+# experiment's output actually lands at ml/data_<name>/ (e.g. ml/data_ci_regression_benchmark/,
+# created locally by `ansible-playbook ... -e experiment=ci_regression_benchmark`), which
+# needs the separate glob below to actually be excluded. ml/data_p8/ is a deliberately
+# committed exception (a small reference JEPA training dataset), not evidence this pattern
+# was meant to match it.
 data/
 ml/data/
+ml/data_*/
 ml/checkpoints/
 # Ansible per-run scratch state (rendered docker-compose.yml, etc.)
 ansible/.run/

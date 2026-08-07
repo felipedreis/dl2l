@@ -347,7 +347,11 @@ public class FullAppraisal extends CreatureComponent {
      * clamped to {@code [MIN_STEP, MAX_STEP]} and {@code [MIN_VISION_FIELD_OPENING,
      * MAX_VISION_FIELD_OPENING]}. Each action type then overrides the defaults as needed:
      * APPROACH narrows focus linearly with proximity (attentional narrowing feedback loop);
-     * SLEEP sets speed=0 and focus=0 (eye closed); EAT locks on the target at contact.
+     * SLEEP sets speed=0 and focus=0 (eye closed) while holding the current heading;
+     * EAT locks on the target at contact.
+     *
+     * <p>The angle is an <em>absolute</em> world bearing in every branch, never a relative
+     * turn - so a branch that wants "keep facing where I am facing" has to say so explicitly.
      */
     private CorticalStimulus produceCortical(Action action, double behaviouralEfficiency) {
         Perception perception = action.perception;
@@ -384,8 +388,16 @@ public class FullAppraisal extends CreatureComponent {
                 cortical(action, perception.angle, Constants.MAX_VISION_FIELD_OPENING, 0);
 
             case SLEEP ->
-                // focus=0.0: eye closed; gate enforced in Eye.onReceive (< MIN check)
-                cortical(action, 0, 0.0, 0);
+                // focus=0.0: eye closed; gate enforced in Eye.onReceive (< MIN check).
+                // Heading is the CURRENT vision-field position, not 0: the angle here is an
+                // absolute world bearing (Point.angleAlpha == atan2(dy, dx)), so the literal
+                // 0 this used to pass rotated the creature to face due east on every sleep
+                // cycle. With speed 0 that never showed up as movement, but it is applied -
+                // it reached the eye as setVisionFieldPosition(0) and was visible in the UI
+                // as a snap to the right, measured at 78% of frames pegged to a bit-exact
+                // 0.0 and 4.3 transitions/s. It also decided where the creature was looking
+                // on waking, biasing first perception eastward. Sleeping should not steer.
+                cortical(action, creature.getVisionFieldPosition(), 0.0, 0);
 
             // TURN, TOUCH, PLAY are not yet wired into action selection; fall back to defaults.
             default -> cortical(action, perception.angle, defaultFocus, defaultSpeed);

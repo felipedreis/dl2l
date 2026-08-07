@@ -129,9 +129,14 @@ public class Holder extends AbstractActor implements Registrable {
         // Sets up the persistence backend (see PersistenceExtension) before any creature is
         // spawned - CreatureActor/component actors resolve bdActor() in their own preStart().
         PersistenceExtension.of(context().system()).configure(saveDir);
-        // Eagerly load the species ML models once for this JVM node.
-        // Fails fast here (before any creature spawns) if the model contract is invalid.
-        MLServiceExtension.of(context().system());
+        // Eagerly load the species ML models once for this JVM node, so an invalid model
+        // contract fails fast here rather than mid-run. Skipped entirely when the filter
+        // chain has no WORLD_MODEL: nothing in the run would touch the models, and loading
+        // them costs a DJL/PyTorch native-runtime download plus hundreds of MB for nothing.
+        // See CreatureActor.worldModelInUse().
+        if (CreatureActor.worldModelInUse(learningSettings)) {
+            MLServiceExtension.of(context().system());
+        }
     }
 
     @Override

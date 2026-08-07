@@ -214,6 +214,7 @@ public final class TableSchemas {
                 col("behaviouralefficiency", ColType.DOUBLE, BehaviouralEfficiencyState::getBehaviouralEfficiency),
                 col("complextask", ColType.BOOLEAN, BehaviouralEfficiencyState::isComplexTask),
                 col("numberofobjects", ColType.INT32, BehaviouralEfficiencyState::getNumberOfObjects),
+                col("perceivedobjects", ColType.INT32, BehaviouralEfficiencyState::getPerceivedObjects),
                 col("changestimulusstate_id", ColType.STRING, (BehaviouralEfficiencyState bes) ->
                         uuidOrNull(bes.getChangeStimulusState() != null ? bes.getChangeStimulusState().getId() : null)))));
 

@@ -17,6 +17,7 @@ import br.cefetmg.lsi.l2l.creature.components.Nose;
 import br.cefetmg.lsi.l2l.creature.components.PartialAppraisal;
 import br.cefetmg.lsi.l2l.creature.components.SensoryCortex;
 import br.cefetmg.lsi.l2l.creature.components.Valuation;
+import br.cefetmg.lsi.l2l.stimuli.CognitiveTick;
 import br.cefetmg.lsi.l2l.stimuli.LuminousStimulus;
 import br.cefetmg.lsi.l2l.stimuli.MechanicalStimulus;
 import br.cefetmg.lsi.l2l.stimuli.Stimulus;
@@ -29,13 +30,15 @@ import java.util.List;
  * Lifecycle:
  * <pre>
  *   TestingHarness h = TestingHarness.builder().build();
- *   h.injectLuminous(new LuminousStimulus(...));   // external stimulus
+ *   h.injectLuminous(new LuminousStimulus(...));   // external stimulus - buffers perception
  *   h.tick();                                       // one cognitive cycle
  *   assertEquals(ActionType.APPROACH, h.lastChosenAction());
  * </pre>
  *
- * A {@code tick()} fires {@link PartialAppraisal} (the clock-driven entry point used
- * by the real {@code CreatureActor} scheduler) and then runs the dispatcher loop until
+ * The {@code tick()} is not optional: since issue #85 perception on its own only fills
+ * {@link PartialAppraisal}'s buffer, and a cognitive cycle runs when a
+ * {@link CognitiveTick} arrives - exactly as the real {@code CreatureActor} scheduler
+ * drives it. {@code tick()} delivers that tick and then runs the dispatcher loop until
  * every {@link BatchingDispatcher} is empty.
  */
 public final class TestingHarness {
@@ -75,8 +78,18 @@ public final class TestingHarness {
     public ExternalSink memoryConsolidatorSink() { return creature.memoryConsolidatorSink(); }
     public ExternalSink bdSink()                 { return creature.bdSink(); }
 
-    /** Drive one cognitive cycle: kick PartialAppraisal, then drain everything. */
+    /**
+     * Drive one cognitive cycle: deliver a {@link CognitiveTick} to PartialAppraisal, then
+     * drain everything.
+     *
+     * <p>Issue #85: the tick is what makes a cycle run. Perception injected without a
+     * following {@code tick()} only fills PartialAppraisal's buffer and produces no
+     * decision - which mirrors production, where the collision detector's replies refresh
+     * perception but the creature's own scheduler decides when it is appraised.
+     */
     public void tick() {
+        creature.dispatcherOf(PartialAppraisal.class)
+                .tell(new CognitiveTick(creature.id(), creature.id().next()));
         creature.dispatcherOf(PartialAppraisal.class).drain();
         processUntilQuiescent();
     }

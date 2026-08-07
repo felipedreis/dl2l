@@ -129,6 +129,18 @@
             <version>2.5.32</version>
         </dependency>
 
+        <!-- Issue #85: TestKit.awaitCond for the integration tests, which assert on a real
+             ActorSystem driven by the real scheduler (see
+             src/test/java/br/cefetmg/lsi/l2l/integration/). Wall-clock properties like
+             "the cognitive cycle runs at TARGET_CYCLE_HZ" need awaitCond's poll-until-
+             deadline, not sleep-and-assert. -->
+        <dependency>
+            <groupId>com.typesafe.akka</groupId>
+            <artifactId>akka-testkit_${scala.version}</artifactId>
+            <version>2.5.32</version>
+            <scope>test</scope>
+        </dependency>
+
         <dependency>
             <groupId>com.typesafe.akka</groupId>
             <artifactId>akka-cluster_${scala.version}</artifactId>
@@ -226,6 +238,14 @@
                          grants in production - see scripts/run-dl2l.sh and ArrowIpcBackend's
                          javadoc. -->
                     <argLine>--add-opens=java.base/java.nio=ALL-UNNAMED</argLine>
+                    <environmentVariables>
+                        <!-- Issue #85: the integration tests boot a real ActorSystem, which
+                             registers MetricsExtension and binds its /metrics endpoint.
+                             A bind failure is already non-fatal (MetricsExtension logs and
+                             continues), but the default 9091 collides with anything running
+                             locally; moving it off keeps the test log clean. -->
+                        <METRICS_PORT>19091</METRICS_PORT>
+                    </environmentVariables>
                 </configuration>
             </plugin>
 

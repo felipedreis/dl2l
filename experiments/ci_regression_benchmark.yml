@@ -1,0 +1,33 @@
+# Regression trip-wire, not a scientific experiment: runs once per push to main
+# (.github/workflows/regression-benchmark.yml), computes a few concrete behavioral metrics
+# (cycle rate, perception flip rate, mean lifespan - see scripts/ci_regression_benchmark.py)
+# and compares them against recent history on the benchmark-data branch. Sibling of
+# smoke.yml, which verifies the deployment pipeline itself; this verifies the simulation's
+# observable behavior didn't silently drift - a silent ~9x cognitive-cycle-rate change
+# (issue #85's own finding) would have failed this immediately.
+name: ci_regression_benchmark
+
+trials: 3
+
+conditions:
+  - key: ci_bench
+    simulation: simulations/ci_regression_benchmark.conf
+    label: CI Regression Benchmark
+    color: "#555555"
+
+image:
+  source: build
+
+data_dir: ml/data_ci_regression_benchmark
+
+extract:
+  format: parquet
+  backup: false
+  tables: all
+
+# Runs on every push to main - publishing here would flood the HF dataset repo with
+# commit-level noise. See experiments/README.md's upload.enabled doc: "set false only for
+# throwaway smoke/CI runs you don't want published" - this is exactly that case, unlike
+# smoke.yml's manually-triggered smoke_ci/ prefix.
+upload:
+  enabled: false

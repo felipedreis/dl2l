@@ -2,7 +2,7 @@
   "title": "DL2L Live Overview",
   "uid": "dl2l-overview",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 3,
   "editable": true,
   "refresh": "5s",
   "time": { "from": "now-30m", "to": "now" },
@@ -22,54 +22,581 @@
   },
   "panels": [
     {
+      "id": 100,
+      "type": "row",
+      "title": "Cognition — cycle rate (issue #85)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
       "id": 1,
-      "title": "Arousal by creature",
+      "title": "Cognitive cycle rate by creature",
+      "description": "Issue #85: PartialAppraisal's own per-cycle counter. Should sit on TARGET_CYCLE_HZ (30). Before the tick-gating fix this ran 150-300 Hz because the collision detector's async replies drove extra cycles.",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "hertz",
+          "min": 0,
+          "custom": { "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "mean"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
       "targets": [
         {
-          "expr": "dl2l_creature_arousal{trial=~\"$trial\"}",
-          "legendFormat": "{{creature}} ({{trial}})"
+          "expr": "rate(dl2l_creature_cognitive_cycles_total{trial=~\"$trial\"}[1m])",
+          "legendFormat": "{{creature}}"
         }
       ]
     },
     {
       "id": 2,
-      "title": "Memory count by creature",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "title": "Mean cycle rate",
+      "description": "Green only in 25-45 Hz. Below = the pacemaker is starved (dispatcher contention); above = something other than the tick is driving cognition, which is the issue #85 regression. Reads low for the first minute of a run while the rate window fills.",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 4, "x": 12, "y": 1 },
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "hertz",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 25 },
+              { "color": "red", "value": 45 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "textMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
       "targets": [
         {
-          "expr": "dl2l_creature_memory_count{trial=~\"$trial\"}",
-          "legendFormat": "{{creature}} ({{trial}})"
+          "expr": "avg(rate(dl2l_creature_cognitive_cycles_total{trial=~\"$trial\"}[1m]))",
+          "legendFormat": "mean"
         }
       ]
     },
     {
       "id": 3,
-      "title": "Live creature count (population proxy)",
-      "type": "stat",
-      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 8 },
+      "title": "Max arousal by creature",
+      "description": "dl2l_creature_arousal — the level of the winning emotion only, with the winner's identity discarded. See the by-emotion panels below for which emotion it actually is.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "custom": { "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
       "targets": [
         {
-          "expr": "count(count by (creature) (dl2l_creature_arousal{trial=~\"$trial\"}))",
-          "legendFormat": "creatures"
+          "expr": "dl2l_creature_arousal{trial=~\"$trial\"}",
+          "legendFormat": "{{creature}}"
+        }
+      ]
+    },
+
+    {
+      "id": 200,
+      "type": "row",
+      "title": "Emotion, neuromodulators & memory",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 19,
+      "title": "Arousal by emotion (avg across creatures)",
+      "description": "The four ACTIVE emotions (hunger, sleep, pain, tedium). This is what tells you WHICH emotion is driving behaviour — dl2l_creature_arousal only gives the winning level. Colours pinned per emotion so one going flat cannot repaint the others.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "custom": { "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "hunger" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "sleep" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "pain" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "tedium" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "avg by (emotion) (dl2l_creature_emotion_level{trial=~\"$trial\"})",
+          "legendFormat": "{{emotion}}"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "title": "Emotion levels by creature",
+      "description": "Per-creature breakdown of the same metric — use when one creature diverges from the population average to its left.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "custom": { "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "dl2l_creature_emotion_level{trial=~\"$trial\"}",
+          "legendFormat": "{{creature}} / {{emotion}}"
         }
       ]
     },
     {
       "id": 4,
       "title": "Neuromodulators (avg across creatures)",
+      "description": "Colours pinned per molecule, so one that stops reporting cannot repaint the others.",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 8 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 10 },
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "dopamine" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "serotonin" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "orexin" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
       "targets": [
         { "expr": "avg(dl2l_creature_dopamine{trial=~\"$trial\"})", "legendFormat": "dopamine" },
         { "expr": "avg(dl2l_creature_serotonin{trial=~\"$trial\"})", "legendFormat": "serotonin" },
         { "expr": "avg(dl2l_creature_orexin{trial=~\"$trial\"})", "legendFormat": "orexin" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Memory count by creature",
+      "description": "Engrams held by MemorySystemActor. A flat ceiling means the memory cap is binding.",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "dl2l_creature_memory_count{trial=~\"$trial\"}",
+          "legendFormat": "{{creature}}"
+        }
+      ]
+    },
+
+    {
+      "id": 300,
+      "type": "row",
+      "title": "Population & simulation state",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 6,
+      "title": "Creatures alive",
+      "description": "Holder's own gauge (dl2l_creatures_alive), summed across holders — authoritative, unlike counting creatures that still report a metric.",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        { "expr": "sum(dl2l_creatures_alive{trial=~\"$trial\"})", "legendFormat": "alive" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Deaths",
+      "description": "Cumulative. No data until the first creature dies.",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 4, "x": 12, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "expr": "sum(dl2l_creature_deaths_total{trial=~\"$trial\"})", "legendFormat": "deaths" }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Simulation",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 4, "x": 16, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": { "text": "RUNNING", "color": "green", "index": 0 },
+                "0": { "text": "STOPPED", "color": "red", "index": 1 }
+              }
+            }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "none",
+        "colorMode": "background",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "expr": "max(dl2l_simulation_running{trial=~\"$trial\"})", "legendFormat": "running" }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Cognitive cycles",
+      "description": "Cumulative across all creatures this trial.",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 4, "x": 20, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "expr": "sum(dl2l_creature_cognitive_cycles_total{trial=~\"$trial\"})", "legendFormat": "cycles" }
+      ]
+    },
+
+    {
+      "id": 400,
+      "type": "row",
+      "title": "Persistence — BDActor / Arrow IPC",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 10,
+      "title": "BDActor queue depth",
+      "description": "Producer-side backlog into the single writer. Sustained growth is the issue #77 OOM signature — the creatures are outrunning persistence.",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 33 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        { "expr": "dl2l_bdactor_queue_depth{trial=~\"$trial\"}", "legendFormat": "queue depth" }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "BDActor batch size",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 33 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        { "expr": "dl2l_bdactor_batch_size{trial=~\"$trial\"}", "legendFormat": "batch size" }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Persist duration",
+      "description": "Wall-clock per persist call on the bd-dispatcher thread.",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 33 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": { "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        { "expr": "dl2l_bdactor_persist_duration_seconds{trial=~\"$trial\"}", "legendFormat": "persist" }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Arrow allocated (off-heap)",
+      "description": "ArrowIpcBackend's off-heap allocator. This is NOT in the JVM heap panel below — it is the direct-buffer arena the Arrow IPC write path uses.",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 40 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": { "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        { "expr": "dl2l_arrow_allocated_bytes{trial=~\"$trial\"}", "legendFormat": "allocated" }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Persistence health",
+      "description": "Both must stay 0. A late write means rows arrived after the dump was finalized (silently lost); fatal means FatalPersistenceHalt tripped and the trial's data is suspect.",
+      "type": "stat",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 40 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "none",
+        "colorMode": "background",
+        "textMode": "value_and_name",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "expr": "sum(dl2l_persistence_late_writes_total{trial=~\"$trial\"}) or vector(0)", "legendFormat": "late writes" },
+        { "expr": "max(dl2l_persistence_fatal{trial=~\"$trial\"}) or vector(0)", "legendFormat": "fatal halt" }
+      ]
+    },
+
+    {
+      "id": 500,
+      "type": "row",
+      "title": "JVM & runtime (per cluster role)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 47 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 15,
+      "title": "Heap used by role",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 48 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": { "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (job) (jvm_memory_used_bytes{area=\"heap\"})",
+          "legendFormat": "{{job}}"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "title": "GC pause time",
+      "description": "Seconds of pause per second of wall clock. Sustained high values on the holder distort the cognitive cycle rate above.",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 48 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "custom": { "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (job) (rate(jvm_gc_pause_seconds_sum[1m]))",
+          "legendFormat": "{{job}}"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "title": "Process CPU by role",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 55 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "custom": { "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        { "expr": "process_cpu_usage", "legendFormat": "{{job}}" }
+      ]
+    },
+    {
+      "id": 18,
+      "title": "Live threads by role",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 55 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        { "expr": "jvm_threads_live_threads", "legendFormat": "{{job}}" }
       ]
     }
   ]
