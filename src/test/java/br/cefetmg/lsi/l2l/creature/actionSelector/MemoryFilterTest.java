@@ -128,10 +128,14 @@ public class MemoryFilterTest {
     }
 
     @Test
-    void multiple_engrams_for_same_key_are_summed() {
-        // Two engrams for APPROACH RED_APPLE: scores +0.8 and +0.5 = total +1.3
-        // One engram for APPROACH GREEN_APPLE: score +1.2
-        // GREEN_APPLE total 1.2 < RED_APPLE total 1.3 → RED wins
+    void multiple_engrams_for_same_key_are_averaged_not_summed() {
+        // Two engrams for APPROACH RED_APPLE: +0.8 and +0.5 -> sum 1.3, MEAN 0.65
+        // One engram for APPROACH GREEN_APPLE: +1.2            -> sum 1.2, MEAN 1.20
+        //
+        // Under the old summing rule RED won (1.3 > 1.2) purely by having MORE engrams,
+        // though each was worth less than GREEN's single one. That is issue #88 in
+        // miniature — this test previously asserted RED and so encoded the bug as
+        // intended behaviour. Under the mean, GREEN correctly wins.
         memory.add(engram(ActionType.APPROACH, FruitType.RED_APPLE,   -1.0, 0.8));  // +0.8
         memory.add(engram(ActionType.APPROACH, FruitType.RED_APPLE,   -0.5, 1.0));  // +0.5
         memory.add(engram(ActionType.APPROACH, FruitType.GREEN_APPLE, -1.2, 1.0));  // +1.2
@@ -142,7 +146,31 @@ public class MemoryFilterTest {
         List<Action> result = filter.filter(actions, HUNGER);
 
         assertEquals(1, result.size());
-        assertEquals(FruitType.RED_APPLE, result.get(0).getTarget());
+        assertEquals(FruitType.GREEN_APPLE, result.get(0).getTarget());
+    }
+
+    @Test
+    void a_rare_high_value_action_beats_a_frequent_low_value_one() {
+        // Issue #88's acceptance criterion, at a frequency ratio that separates the two
+        // rules unambiguously. This mirrors the real failure: in the campaign that found
+        // the bug, APPROACH had 172,088 engrams totalling 895.9 while EAT had 1,016
+        // totalling 11.5 — so summing chose APPROACH even though EAT was worth more than
+        // twice as much per occurrence.
+        for (int i = 0; i < 100; i++) {
+            memory.add(engram(ActionType.APPROACH, FruitType.RED_APPLE, -0.1, 1.0));  // +0.1 each
+        }
+        memory.add(engram(ActionType.APPROACH, FruitType.GREEN_APPLE, -1.0, 1.0));    // +1.0 once
+
+        // Sum: RED 10.0 vs GREEN 1.0 -> RED. Mean: RED 0.1 vs GREEN 1.0 -> GREEN.
+        List<Action> actions = new ArrayList<>(List.of(approach(RED_NEAR), approach(GREEN_NEAR)));
+        MemoryFilter filter = new MemoryFilter(memory);
+
+        List<Action> result = filter.filter(actions, HUNGER);
+
+        assertEquals(1, result.size());
+        assertEquals(FruitType.GREEN_APPLE, result.get(0).getTarget(),
+                "the action worth more per occurrence must win regardless of how often "
+                        + "the alternative was taken");
     }
 
     @Test
