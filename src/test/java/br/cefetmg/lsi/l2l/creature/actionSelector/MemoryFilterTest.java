@@ -72,7 +72,7 @@ public class MemoryFilterTest {
 
     @Test
     void single_candidate_returns_unchanged_with_engrams() {
-        memory.add(engram(ActionType.APPROACH, FruitType.RED_APPLE, -2.0, 0.8));
+        memory.add(engram(ActionType.EAT, FruitType.RED_APPLE, -2.0, 0.8));
 
         List<Action> result = filter().filter(actions(approach(RED_NEAR)), HUNGER);
 
@@ -85,7 +85,7 @@ public class MemoryFilterTest {
         // conditioning says WHAT TO DO to it (Mapa 2009 §5.3.2). With only one object in view
         // there is no object-level choice to make, so memory must not narrow the action set —
         // narrowing here is exactly what used to crowd out EAT.
-        memory.add(engram(ActionType.APPROACH, FruitType.RED_APPLE, -2.0, 1.0));
+        memory.add(engram(ActionType.EAT, FruitType.RED_APPLE, -2.0, 1.0));
 
         List<Action> result = filter().filter(actions(approach(RED_NEAR), eat(RED_NEAR)), HUNGER);
 
@@ -112,8 +112,8 @@ public class MemoryFilterTest {
     void every_action_on_the_chosen_object_is_returned() {
         // RED is remembered as good, GREEN as harmful. Whichever is drawn, ALL the candidate
         // actions on it must come back — memory narrows to an object, never to an action.
-        memory.add(engram(ActionType.APPROACH, FruitType.RED_APPLE,   -2.0, 1.0));   // +2.0
-        memory.add(engram(ActionType.APPROACH, FruitType.GREEN_APPLE, +1.0, 1.0));   // -1.0
+        memory.add(engram(ActionType.EAT, FruitType.RED_APPLE,   -2.0, 1.0));   // +2.0
+        memory.add(engram(ActionType.EAT, FruitType.GREEN_APPLE, +1.0, 1.0));   // -1.0
 
         MemoryFilter filter = filter();
         for (int i = 0; i < DRAWS; i++) {
@@ -136,8 +136,8 @@ public class MemoryFilterTest {
     void selection_frequency_is_proportional_to_remembered_value() {
         // Campos: "Actions with a positive value are selected with a probability proportional to
         // this value". RED 3.0 vs GREEN 1.0 → RED should win three draws in four.
-        memory.add(engram(ActionType.APPROACH, FruitType.RED_APPLE,   -3.0, 1.0));
-        memory.add(engram(ActionType.APPROACH, FruitType.GREEN_APPLE, -1.0, 1.0));
+        memory.add(engram(ActionType.EAT, FruitType.RED_APPLE,   -3.0, 1.0));
+        memory.add(engram(ActionType.EAT, FruitType.GREEN_APPLE, -1.0, 1.0));
 
         double redShare = shareChoosing(FruitType.RED_APPLE);
 
@@ -156,7 +156,7 @@ public class MemoryFilterTest {
         // This inverts the old behaviour, which the test
         // `action_with_no_matching_engram_wins_only_when_all_scored_are_negative` pinned as
         // intended: "even negative scores get picked over no score".
-        memory.add(engram(ActionType.APPROACH, FruitType.GREEN_APPLE, +1.0, 1.0));   // -1.0
+        memory.add(engram(ActionType.EAT, FruitType.GREEN_APPLE, +1.0, 1.0));   // -1.0
 
         double redShare = shareChoosing(FruitType.RED_APPLE);   // RED has no engram at all
 
@@ -167,11 +167,16 @@ public class MemoryFilterTest {
     }
 
     @Test
-    void undefined_object_type_actions_are_grouped_as_one_object() {
-        // WANDER/SLEEP have no target object; they share the null key and so stand or fall
-        // together, with the operant table choosing between them if they are drawn.
-        memory.add(engram(ActionType.WANDER,   null,                 -5.0, 1.0));    // +5.0
-        memory.add(engram(ActionType.APPROACH, FruitType.RED_APPLE,  +1.0, 1.0));    // -1.0
+    void self_directed_actions_group_as_one_unexplored_object() {
+        // WANDER/SLEEP have no target and are never consummatory, so under Mapa's encoding they
+        // are never stored and the null-object group can never carry a score. It is therefore
+        // always "unexplored" and takes the novelty prior — which is the correct reading: memory
+        // has genuinely learned nothing about wandering, because wandering has no outcome
+        // attributable to an object.
+        //
+        // Here RED is remembered as harmful, so the unexplored self group should beat it, and
+        // when it does BOTH self-directed actions must survive together for the operant table.
+        memory.add(engram(ActionType.EAT, FruitType.RED_APPLE, +1.0, 1.0));   // score -1.0
 
         Action wander = new Action(ActionType.WANDER, SELF_PERC);
         Action sleep  = new Action(ActionType.SLEEP,  SELF_PERC);
@@ -186,8 +191,43 @@ public class MemoryFilterTest {
             }
         }
         assertTrue(bothReturned > DRAWS * 0.9,
-                "the self-directed actions are far better remembered and should usually win "
-                        + "together; got " + bothReturned + "/" + DRAWS);
+                "an unexplored self group must beat a remembered-harmful object, and its actions "
+                        + "must survive together; got " + bothReturned + "/" + DRAWS);
+    }
+
+    @Test
+    void approach_engrams_are_invisible_to_object_valuation() {
+        // The reason for the consummatory store. An APPROACH's outcome depends on whatever the
+        // creature does next, so eligibility traces credit every recent approach when a drive
+        // falls, whichever object was approached. Measured over the p84 pilot, EAT engrams
+        // discriminate apples by caloric value at 6.3x and APPROACH engrams at 1.09x — and
+        // approaches outnumber consummatory acts 114:1, so averaging them together collapsed the
+        // signal to 1.14x and creatures ate worthless fruit at the same rate as their controls.
+        //
+        // A pile of approach evidence favouring GREEN must not move the choice at all.
+        for (int i = 0; i < 500; i++) {
+            memory.add(engram(ActionType.APPROACH, FruitType.GREEN_APPLE, -5.0, 1.0));
+        }
+
+        List<Action> result = filter().filter(actions(approach(RED_NEAR), approach(GREEN_NEAR)), HUNGER);
+
+        assertEquals(2, result.size(),
+                "with only approach engrams, memory must have NO opinion and pass through");
+    }
+
+    @Test
+    void one_consummatory_engram_outweighs_any_amount_of_approach_evidence() {
+        // Same 500 approach engrams favouring GREEN, plus a single EAT engram saying GREEN was
+        // harmful. The one consummatory memory must decide it.
+        for (int i = 0; i < 500; i++) {
+            memory.add(engram(ActionType.APPROACH, FruitType.GREEN_APPLE, -5.0, 1.0));
+        }
+        memory.add(engram(ActionType.EAT, FruitType.GREEN_APPLE, +1.0, 1.0));   // score -1.0
+
+        double redShare = shareChoosing(FruitType.RED_APPLE);   // RED unexplored
+
+        assertTrue(redShare > 0.95,
+                "the single consummatory memory must govern, not the 500 approaches; got " + redShare);
     }
 
     // -----------------------------------------------------------------------
@@ -202,9 +242,9 @@ public class MemoryFilterTest {
         // Under a sum RED is preferred (1.3 > 1.2) purely for having been engaged more often,
         // though each engagement was worth less than GREEN's single one. Under the mean GREEN is
         // preferred, by 1.20 : 0.65.
-        memory.add(engram(ActionType.APPROACH, FruitType.RED_APPLE,   -0.8, 1.0));
+        memory.add(engram(ActionType.EAT, FruitType.RED_APPLE,   -0.8, 1.0));
         memory.add(engram(ActionType.EAT,      FruitType.RED_APPLE,   -0.5, 1.0));
-        memory.add(engram(ActionType.APPROACH, FruitType.GREEN_APPLE, -1.2, 1.0));
+        memory.add(engram(ActionType.EAT, FruitType.GREEN_APPLE, -1.2, 1.0));
 
         double greenShare = shareChoosing(FruitType.GREEN_APPLE);
 
@@ -221,9 +261,9 @@ public class MemoryFilterTest {
         // APPROACH had 172,088 engrams totalling 895.9 while EAT had 1,016 totalling 11.5 — so a
         // sum chose APPROACH even though EAT was worth more than twice as much per occurrence.
         for (int i = 0; i < 100; i++) {
-            memory.add(engram(ActionType.APPROACH, FruitType.RED_APPLE, -0.1, 1.0));   // +0.1 each
+            memory.add(engram(ActionType.EAT, FruitType.RED_APPLE, -0.1, 1.0));   // +0.1 each
         }
-        memory.add(engram(ActionType.APPROACH, FruitType.GREEN_APPLE, -1.0, 1.0));     // +1.0 once
+        memory.add(engram(ActionType.EAT, FruitType.GREEN_APPLE, -1.0, 1.0));     // +1.0 once
 
         // Sum: RED 10.0 vs GREEN 1.0 → RED. Mean: RED 0.1 vs GREEN 1.0 → GREEN, by 10 : 1.
         double greenShare = shareChoosing(FruitType.GREEN_APPLE);
@@ -242,7 +282,7 @@ public class MemoryFilterTest {
         // RED is known-good (+1.0); GREEN has never been encountered. Unmodulated, optimistic
         // initialisation values the unknown at the mean of the known-good, so the draw is even.
         // Tonic dopamine tilts it toward the unknown — novelty-seeking (Bunzeck & Duzel 2006).
-        memory.add(engram(ActionType.APPROACH, FruitType.RED_APPLE, -1.0, 1.0));
+        memory.add(engram(ActionType.EAT, FruitType.RED_APPLE, -1.0, 1.0));
 
         double unmodulated = shareChoosing(FruitType.GREEN_APPLE, 0.0);
         double modulated   = shareChoosing(FruitType.GREEN_APPLE, 2.0);
@@ -256,7 +296,7 @@ public class MemoryFilterTest {
 
     @Test
     void depleted_dopamine_does_not_push_novelty_below_the_baseline() {
-        memory.add(engram(ActionType.APPROACH, FruitType.RED_APPLE, -1.0, 1.0));
+        memory.add(engram(ActionType.EAT, FruitType.RED_APPLE, -1.0, 1.0));
 
         assertEquals(shareChoosing(FruitType.GREEN_APPLE, 0.0),
                 shareChoosing(FruitType.GREEN_APPLE, -3.0), 0.05,
@@ -274,7 +314,7 @@ public class MemoryFilterTest {
 
     @Test
     void a_pass_through_is_recorded_as_an_undecided_consultation() {
-        memory.add(engram(ActionType.APPROACH, FruitType.RED_APPLE, -1.0, 1.0));
+        memory.add(engram(ActionType.EAT, FruitType.RED_APPLE, -1.0, 1.0));
         MemoryFilter filter = filter();
 
         filter.filter(actions(approach(RED_NEAR), eat(RED_NEAR)), HUNGER);   // one object only
@@ -289,8 +329,8 @@ public class MemoryFilterTest {
 
     @Test
     void a_decision_records_the_chosen_object_and_how_far_it_narrowed() {
-        memory.add(engram(ActionType.APPROACH, FruitType.RED_APPLE,   -2.0, 1.0));
-        memory.add(engram(ActionType.APPROACH, FruitType.GREEN_APPLE, -1.0, 1.0));
+        memory.add(engram(ActionType.EAT, FruitType.RED_APPLE,   -2.0, 1.0));
+        memory.add(engram(ActionType.EAT, FruitType.GREEN_APPLE, -1.0, 1.0));
         MemoryFilter filter = filter();
 
         List<Action> result = filter.filter(
@@ -311,7 +351,7 @@ public class MemoryFilterTest {
 
     @Test
     void an_unexplored_object_on_either_side_records_nan_rather_than_a_fabricated_score() {
-        memory.add(engram(ActionType.APPROACH, FruitType.RED_APPLE, -2.0, 1.0));
+        memory.add(engram(ActionType.EAT, FruitType.RED_APPLE, -2.0, 1.0));
         MemoryFilter filter = filter();
 
         filter.filter(actions(approach(RED_NEAR), approach(GREEN_NEAR)), HUNGER);
@@ -397,8 +437,19 @@ public class MemoryFilterTest {
         void add(Engram e) { engrams.add(e); }
 
         @Override public List<Engram> getRecentEngrams(int windowSize) {
-            int skip = Math.max(0, engrams.size() - windowSize);
-            return engrams.subList(skip, engrams.size());
+            return last(engrams, windowSize);
+        }
+
+        @Override public List<Engram> getRecentConsummatoryEngrams(int windowSize) {
+            List<Engram> c = engrams.stream()
+                    .filter(e -> e.actionType() != null && e.actionType().isConsummatory())
+                    .toList();
+            return last(c, windowSize);
+        }
+
+        private static List<Engram> last(List<Engram> src, int windowSize) {
+            int skip = Math.max(0, src.size() - windowSize);
+            return src.subList(skip, src.size());
         }
 
         @Override public void addShortTermMemory(ShortTermMemory stm) {}

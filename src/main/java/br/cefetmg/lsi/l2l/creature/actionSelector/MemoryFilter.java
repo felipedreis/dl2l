@@ -39,12 +39,22 @@ import java.util.Set;
  * 3.5-45x less and died sooner than their controls.
  *
  * <h2>How it scores</h2>
- * An object's value is the MEAN of {@code -emotionDelta × eligibility} over the engrams mentioning
- * it (a negative delta means aversive emotion fell — a good outcome). The mean, not the sum:
- * summing tracked how <em>often</em> an object had been engaged rather than how well that went, and
- * since acting lays more engrams the filter reinforced its own past choices regardless of outcome.
- * Eligibility traces already propagate consummatory outcomes back to the APPROACH that preceded
- * them, which is why aggregating across actions is a legitimate estimate of an object's worth.
+ * An object's value is the MEAN of {@code -emotionDelta × eligibility} over the <em>consummatory</em>
+ * engrams mentioning it (a negative delta means aversive emotion fell — a good outcome). The mean,
+ * not the sum: summing tracked how <em>often</em> an object had been engaged rather than how well
+ * that went, and since acting lays more engrams the filter reinforced its own past choices
+ * regardless of outcome.
+ *
+ * <p>Consummatory only, after Mapa (2009), who stores just {@code comer, tocar, brincar}. This
+ * filter originally scored every action on the theory that eligibility traces propagate outcomes
+ * back to the APPROACH that preceded them, so approach credit would be informative too. Measured
+ * over the p84 pilot, it is not: EAT engrams discriminate GREEN/RED/GRAY apples by caloric value at
+ * <b>6.3x</b>, APPROACH engrams at <b>1.09x</b>. Approach credit is object-blind, because an
+ * approach's outcome depends on whatever the creature does next — the trace credits every recent
+ * approach when a drive falls, whichever object was approached. Since approaches outnumber
+ * consummatory acts 114:1, averaging the two together collapsed a 6.3x signal to 1.14x, which under
+ * proportional sampling is barely a preference at all: creatures ate the same worthless
+ * zero-calorie fruit as their no-memory controls and starved at the same rate.
  *
  * <h2>How it chooses</h2>
  * By weighted sampling, not argmax. Both source architectures are stochastic at exactly this
@@ -108,7 +118,7 @@ public class MemoryFilter implements ActionFilter {
             return actions;
         }
 
-        List<Engram> engrams = memory.getRecentEngrams(Constants.MEMORY_FILTER_WINDOW);
+        List<Engram> engrams = memory.getRecentConsummatoryEngrams(Constants.MEMORY_FILTER_WINDOW);
 
         // Gate 2 — no experience yet
         if (engrams.isEmpty()) {

@@ -16,6 +16,12 @@ public class MemorySystemActor implements MemorySystem {
     private final ArrayDeque<ShortTermMemory> all = new ArrayDeque<>();
     private final HashMap<SequentialId, List<ShortTermMemory>> byId = new HashMap<>();
     private final ArrayDeque<Engram> engrams = new ArrayDeque<>();
+    /**
+     * Consummatory engrams get their own FIFO so the flood of approach traces cannot evict them.
+     * Same cap, but it now buys ~1000 feeding memories instead of ~8 — enough to cover a
+     * creature's entire feeding history rather than its last three seconds of it.
+     */
+    private final ArrayDeque<Engram> consummatoryEngrams = new ArrayDeque<>();
 
     private final SequentialId creatureId;
     private final MetricsExtension.Impl metricsExt;
@@ -91,11 +97,30 @@ public class MemorySystemActor implements MemorySystem {
         if (engrams.size() > MAX_ENGRAM_SIZE) {
             engrams.pollFirst();
         }
+        // Consummatory engrams are ALSO kept here, not moved: the general store still backs
+        // consolidation and anything else reading the full trace history, so routing them away
+        // from it would silently change those. This store exists to stop them being evicted, not
+        // to reclassify them.
+        if (engram.actionType() != null && engram.actionType().isConsummatory()) {
+            consummatoryEngrams.addLast(engram);
+            if (consummatoryEngrams.size() > MAX_ENGRAM_SIZE) {
+                consummatoryEngrams.pollFirst();
+            }
+        }
     }
 
     @Override
     public List<Engram> getRecentEngrams(int windowSize) {
-        int skip = Math.max(0, engrams.size() - windowSize);
-        return engrams.stream().skip(skip).collect(Collectors.toList());
+        return lastOf(engrams, windowSize);
+    }
+
+    @Override
+    public List<Engram> getRecentConsummatoryEngrams(int windowSize) {
+        return lastOf(consummatoryEngrams, windowSize);
+    }
+
+    private static List<Engram> lastOf(ArrayDeque<Engram> store, int windowSize) {
+        int skip = Math.max(0, store.size() - windowSize);
+        return store.stream().skip(skip).collect(Collectors.toList());
     }
 }
