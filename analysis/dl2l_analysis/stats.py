@@ -189,3 +189,151 @@ def kruskal_test(groups: list, labels: list) -> None:
         _, pw = scipy_stats.mannwhitneyu(clean[i][0], clean[j][0], alternative="two-sided")
         sig = "***" if pw < alpha else ("*" if pw < 0.05 else "ns")
         print(f"      {clean[i][1]} vs {clean[j][1]}: p={pw:.4f} {sig}")
+
+
+# ---------------------------------------------------------------------------
+# Right-censored survival
+# ---------------------------------------------------------------------------
+#
+# A creature still alive when the run hits maxRuntimeMinutes is CENSORED, not missing: we
+# know it lived at least that long. Dropping it (which is what happens when lifetime_s is
+# NULL and the caller calls .dropna()) throws that information away and biases the
+# comparison against whichever arm survives best, because that arm loses the most rows.
+# In the p84 v3 campaign it was worse than a bias — two arms had zero deaths, so the
+# survival ratio had no denominator at all and P4 was simply uncomputable.
+#
+# These are hand-rolled rather than taken from `lifelines` to avoid adding a dependency for
+# ~50 lines of standard estimator. Both are the textbook forms (Kalbfleisch & Prentice).
+
+
+def kaplan_meier(times, events):
+    """Kaplan-Meier survival curve for right-censored data.
+
+    `times` is the observed duration per subject (lifetime if it died, follow-up if it did
+    not) and `events` is 1 for a death and 0 for a censored observation. Returns
+    (t, S) as arrays stepping down at each distinct death time.
+    """
+    t = np.asarray(times, dtype=float)
+    e = np.asarray(events, dtype=float)
+    keep = ~np.isnan(t)
+    t, e = t[keep], e[keep]
+    if len(t) == 0:
+        return np.array([]), np.array([])
+
+    order = np.argsort(t)
+    t, e = t[order], e[order]
+
+    death_times = np.unique(t[e == 1])
+    surv, out_t, out_s = 1.0, [0.0], [1.0]
+    for dt in death_times:
+        at_risk = np.sum(t >= dt)          # censored subjects are at risk until they leave
+        deaths = np.sum((t == dt) & (e == 1))
+        if at_risk > 0:
+            surv *= 1.0 - deaths / at_risk
+        out_t.append(float(dt))
+        out_s.append(surv)
+    return np.array(out_t), np.array(out_s)
+
+
+def km_median(times, events) -> float:
+    """Median survival from the KM curve, or NaN if the curve never reaches 0.5.
+
+    NaN is the honest answer, not a failure: it means over half the arm was still alive when
+    observation stopped, so the median is beyond the horizon and no cap-dependent number
+    should be quoted for it.
+    """
+    t, s = kaplan_meier(times, events)
+    if len(t) == 0:
+        return float("nan")
+    below = np.where(s <= 0.5)[0]
+    return float(t[below[0]]) if len(below) else float("nan")
+
+
+def logrank_test(times_a, events_a, times_b, events_b) -> tuple:
+    """Two-sample log-rank test. Returns (chi2, p, observed_a, expected_a).
+
+    The right comparison for "does memory extend life?" when runs are capped: it uses every
+    creature, censored ones included, and needs neither arm to be fully observed.
+    """
+    ta, ea = np.asarray(times_a, float), np.asarray(events_a, float)
+    tb, eb = np.asarray(times_b, float), np.asarray(events_b, float)
+    ta, ea = ta[~np.isnan(ta)], ea[~np.isnan(ta)]
+    tb, eb = tb[~np.isnan(tb)], eb[~np.isnan(tb)]
+    if len(ta) == 0 or len(tb) == 0:
+        return float("nan"), float("nan"), 0.0, 0.0
+
+    all_times = np.unique(np.concatenate([ta[ea == 1], tb[eb == 1]]))
+    obs_a = exp_a = var = 0.0
+    for t in all_times:
+        n_a, n_b = np.sum(ta >= t), np.sum(tb >= t)
+        n = n_a + n_b
+        d_a = np.sum((ta == t) & (ea == 1))
+        d_b = np.sum((tb == t) & (eb == 1))
+        d = d_a + d_b
+        if n < 2 or d == 0:
+            continue
+        obs_a += d_a
+        exp_a += d * n_a / n
+        # Hypergeometric variance of d_a under the null.
+        var += d * (n_a / n) * (1 - n_a / n) * (n - d) / (n - 1)
+
+    if var <= 0:
+        return float("nan"), float("nan"), float(obs_a), float(exp_a)
+    chi2 = (obs_a - exp_a) ** 2 / var
+    p = float(scipy_stats.chi2.sf(chi2, df=1))
+    return float(chi2), p, float(obs_a), float(exp_a)
+
+
+def survival_comparison(df, arm_a: str, arm_b: str, arm_col: str = "condition",
+                        time_col: str = "observed_s", event_col: str = "died") -> dict:
+    """Censoring-aware replacement for a mean-lifetime comparison between two arms.
+
+    Reports mortality rate (with Fisher's exact test — "did more of them die?" is a real
+    question in its own right when a cap truncates the study), KM median survival per arm,
+    and the log-rank test. `median_ratio` is NaN whenever either median is beyond the
+    horizon; that is a statement about the cap, not a missing result.
+    """
+    a = df[df[arm_col] == arm_a]
+    b = df[df[arm_col] == arm_b]
+    if a.empty or b.empty:
+        return {}
+
+    ta, ea = a[time_col].values, a[event_col].astype(float).values
+    tb, eb = b[time_col].values, b[event_col].astype(float).values
+
+    deaths_a, deaths_b = int(np.nansum(ea)), int(np.nansum(eb))
+    n_a, n_b = len(ea), len(eb)
+    _, p_mort = scipy_stats.fisher_exact([[deaths_a, n_a - deaths_a],
+                                          [deaths_b, n_b - deaths_b]])
+
+    med_a, med_b = km_median(ta, ea), km_median(tb, eb)
+    chi2, p_lr, _, _ = logrank_test(ta, ea, tb, eb)
+
+    return {
+        "arm_a": arm_a, "arm_b": arm_b,
+        "n_a": n_a, "n_b": n_b,
+        "deaths_a": deaths_a, "deaths_b": deaths_b,
+        "mortality_a": deaths_a / n_a if n_a else float("nan"),
+        "mortality_b": deaths_b / n_b if n_b else float("nan"),
+        "p_mortality": float(p_mort),
+        "km_median_a": med_a, "km_median_b": med_b,
+        "median_ratio": (med_b / med_a) if (med_a and not math.isnan(med_a)
+                                            and not math.isnan(med_b)) else float("nan"),
+        "logrank_chi2": chi2, "p_logrank": p_lr,
+    }
+
+
+def print_survival(res: dict) -> None:
+    if not res:
+        return
+    print(f"    {res['arm_a']} vs {res['arm_b']}")
+    print(f"      mortality   {res['deaths_a']}/{res['n_a']} ({res['mortality_a']:.0%})"
+          f"  vs {res['deaths_b']}/{res['n_b']} ({res['mortality_b']:.0%})"
+          f"   Fisher p={res['p_mortality']:.4f}")
+    med_a, med_b = res["km_median_a"], res["km_median_b"]
+    fmt = lambda m: "beyond cap" if math.isnan(m) else f"{m:.0f}s"
+    print(f"      KM median   {fmt(med_a)} vs {fmt(med_b)}"
+          + (f"   ratio={res['median_ratio']:.2f}x"
+             if not math.isnan(res["median_ratio"]) else "   ratio=n/a (censored)"))
+    if not math.isnan(res["p_logrank"]):
+        print(f"      log-rank    chi2={res['logrank_chi2']:.3f}  p={res['p_logrank']:.4f}")

@@ -34,7 +34,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats as scipy_stats
 
-from analysis.dl2l_analysis.figures import boxplot_by_condition, plt, save, setup
+from analysis.dl2l_analysis.figures import plt, save, setup
 from analysis.dl2l_analysis.loading import (
     attach_born_time_and_ticks,
     interaction_intervals,
@@ -46,9 +46,12 @@ from analysis.dl2l_analysis.stats import (
     compare_arms,
     cohens_d,
     icc1,
+    kaplan_meier,
     kruskal_test,
     print_comparison,
+    print_survival,
     required_n,
+    survival_comparison,
 )
 from analysis.experiments import p84_memory_common
 
@@ -113,8 +116,16 @@ def per_creature_outcomes(intervals, actions, creatures) -> pd.DataFrame:
     """One row per creature: the three quantities the parity claims are argued from."""
     keys = ["condition", "trial", "creature_key"]
 
-    out = creatures[keys + ["lifetime_s"]].drop_duplicates().copy()
+    # observed_s/died carry the right-censoring that lifetime_s silently drops: a creature
+    # still alive at maxRuntimeMinutes has lifetime_s = NaN and disappears from every
+    # .dropna()'d statistic, which biases against exactly the arm that survives best. P4 is
+    # argued from the censored pair; lifetime_s is kept for the uncensored descriptive views.
+    surv_cols = [c for c in ("lifetime_s", "observed_s", "died") if c in creatures.columns]
+    out = creatures[keys + surv_cols].drop_duplicates().copy()
     out["lifetime_s"] = num(out["lifetime_s"])
+    if "observed_s" in out:
+        out["observed_s"] = num(out["observed_s"])
+        out["died"] = out["died"].astype(bool)
 
     if not intervals.empty:
         mi = intervals.groupby(keys)["interval_s"].mean().rename("mean_interval_s")
@@ -322,23 +333,64 @@ def criterion_share_figure(per_creature, cfg) -> None:
 
 
 def lifetime_figure(per_creature, cfg) -> None:
-    data = {c.key: per_creature[per_creature["condition"] == c.key]["lifetime_s"].dropna().values
-            for c in cfg.conditions}
-    if not any(len(v) for v in data.values()):
-        print("  (skipping F5 — no lifetimes; creatures may still have been alive at the cap)")
+    """F5 — survival curves, mortality, and P4's ratio against Campos's 6.7x.
+
+    Kaplan-Meier rather than a lifetime boxplot. A creature alive at maxRuntimeMinutes is
+    censored, not missing, and a boxplot of lifetime_s can only be drawn over the ones that
+    died — which in the v3 campaign meant two arms contributed nothing at all and P4 had no
+    denominator. The KM curve uses every creature and needs neither arm fully observed.
+    """
+    censored = {"observed_s", "died"} <= set(per_creature.columns)
+    if not censored:
+        print("  (skipping F5 — creatures.parquet predates the died/observed_s columns; "
+              "re-extract to compute survival)")
         return
-    fig, ax = plt.subplots(figsize=(10, 5.5))
-    boxplot_by_condition(ax, data, cfg, ylabel="lifetime (s)",
-                         title="F5 — survival, with and without memory")
-    ax.tick_params(axis="x", rotation=20)
-    fig.tight_layout()
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5.5))
+
+    # An arm where nobody died draws as a flat line at S=1 rather than being skipped: "every
+    # creature outlived the cap" is a result, and it is the one the reader most needs to see
+    # when the ratio below comes back n/a.
+    ax = axes[0]
+    for c in cfg.conditions:
+        d = per_creature[per_creature["condition"] == c.key]
+        if d.empty:
+            continue
+        t, s = kaplan_meier(d["observed_s"].values, d["died"].astype(float).values)
+        if len(t) == 0:
+            continue
+        horizon = float(np.nanmax(d["observed_s"].values))
+        ax.step(np.append(t, horizon), np.append(s, s[-1]), where="post",
+                color=c.color, label=c.label)
+    ax.axhline(0.5, color="#999999", ls=":", lw=1)
+    ax.set_xlabel("time alive (s)")
+    ax.set_ylabel("survival probability")
+    ax.set_ylim(0, 1.02)
+    ax.set_title("Kaplan-Meier survival\n(flat to the right edge = still alive at the cap)")
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3)
+
+    ax = axes[1]
+    mort = {c.key: float(per_creature[per_creature["condition"] == c.key]["died"].mean())
+            for c in cfg.conditions
+            if not per_creature[per_creature["condition"] == c.key].empty}
+    ax.bar(range(len(mort)), [mort[k] for k in mort],
+           color=[next(c.color for c in cfg.conditions if c.key == k) for k in mort])
+    ax.set_xticks(range(len(mort)))
+    ax.set_xticklabels([next(c.label for c in cfg.conditions if c.key == k) for k in mort],
+                       rotation=20, ha="right", fontsize=8)
+    ax.set_ylabel("fraction that died before the cap")
+    ax.set_ylim(0, 1.02)
+    ax.set_title("Mortality within the run")
+    ax.grid(axis="y", alpha=0.3)
+
+    fig.suptitle("F5 — survival, with and without memory")
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
     save(fig, "f5_lifetime.png", cfg)
 
-    print(f"\n  F5 — memory/no-memory lifetime ratio (Campos reports {CAMPOS_LIFETIME_RATIO:.1f}x)")
+    print(f"\n  F5 / P4 — survival (Campos reports a {CAMPOS_LIFETIME_RATIO:.1f}x mean-lifetime ratio)")
     for nomem, mem in arm_pairs(cfg):
-        a, b = data.get(nomem, []), data.get(mem, [])
-        if len(a) and len(b) and np.mean(a) > 0:
-            print(f"    {nomem} -> {mem}: {np.mean(b) / np.mean(a):.2f}x")
+        print_survival(survival_comparison(per_creature, nomem, mem))
 
 
 # ---------------------------------------------------------------------------
@@ -386,7 +438,11 @@ def conditioning_figure(conditioning, cfg) -> None:
 # ---------------------------------------------------------------------------
 
 OUTCOMES = [
-    ("lifetime_s", "lifetime (s)"),
+    # Conditional on dying: survivors have lifetime_s = NaN and are dropped here. That makes
+    # this "how long did the ones that died last", NOT "does memory extend life" — P4 is
+    # decided by the censoring-aware survival_comparison in lifetime_figure instead. Kept
+    # because the conditional comparison is still informative once mortality is known.
+    ("lifetime_s", "lifetime (s), among those that died"),
     ("mean_interval_s", "mean interaction interval (s)"),
     ("share_RANDOM", "RANDOM share of chosen"),
     ("share_AFFORDANCE", "AFFORDANCE share of chosen"),

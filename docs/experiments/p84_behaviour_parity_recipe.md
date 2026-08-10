@@ -1,11 +1,25 @@
 # Experiment recipe — behaviour parity with Mapa (2009) and Campos (2015)
 
 Issue: [#84](https://github.com/felipedreis/dl2l/issues/84)
-Plan: [`docs/plans/behaviour-parity-legacy-architectures.md`](../plans/behaviour-parity-legacy-architectures.md)
+Plans: [`behaviour-parity-legacy-architectures.md`](../plans/behaviour-parity-legacy-architectures.md) (the campaign),
+[`memory-architecture-mapa-campos-synthesis.md`](../plans/memory-architecture-mapa-campos-synthesis.md) (the memory rework)
 Report: `docs/reports/<date>_p84_behaviour_parity_report.md` (written against this recipe)
 
 This is the executable protocol. Every number in the report must be traceable to a step
 here; if a step is changed, this file changes with it and the report says so.
+
+> **Revision, 2026-08-10 — all earlier runs are superseded.** The memory architecture was
+> reworked after the v3 campaign (see the synthesis plan): `MemoryFilter` now picks an
+> *object* by weighted sampling and hands every action on it to the operant table, instead of
+> picking a single action by argmax; `MASTER_FILTER_ORDER` puts MEMORY ahead of AFFORDANCE.
+> **Every arm with the MEMORY filter behaves differently, so no memory-arm result from any
+> previous run — including the CCAD campaign of 2026-08-05 — carries into this report.** The
+> `*_nomem` arms are structurally unaffected, but are re-run anyway because the runtime cap
+> also changed (§4.4) and a control must share its treatment's conditions.
+>
+> Three further changes follow from it: the run cap goes to **2 h**, survival becomes
+> **censoring-aware** (§6), and memory's influence is read from `memory_decisions` rather
+> than from `selection_type` (§5).
 
 ---
 
@@ -69,14 +83,17 @@ testable instead of assumed.
 Comparisons are read **within a pair** — the only thing differing across a pair is the
 MEMORY filter. Never compare across stacks or worlds.
 
-| Arm | Stack | Filters | World |
+| Arm | Stack | Filter chain | World |
 |---|---|---|---|
-| `legacy_nomem` | legacy-minimal | TARGET_DISTANCE, AFFORDANCE, RANDOM | mixed |
-| `legacy_mem` | legacy-minimal | + MEMORY | mixed |
-| `current_nomem` | current default | TARGET_DISTANCE, AFFORDANCE, RANDOM | mixed |
-| `current_mem` | current default | + MEMORY | mixed |
-| `legacy_nomem_simple` | legacy-minimal | TARGET_DISTANCE, AFFORDANCE, RANDOM | simple |
-| `legacy_mem_simple` | legacy-minimal | + MEMORY | simple |
+| `legacy_nomem` | legacy-minimal | Tendency → TARGET_DISTANCE → AFFORDANCE → RANDOM | mixed |
+| `legacy_mem` | legacy-minimal | Tendency → TARGET_DISTANCE → **MEMORY** → AFFORDANCE → RANDOM | mixed |
+| `current_nomem` | current default | TARGET_DISTANCE → AFFORDANCE → RANDOM | mixed |
+| `current_mem` | current default | TARGET_DISTANCE → **MEMORY** → AFFORDANCE → RANDOM | mixed |
+| `legacy_nomem_simple` | legacy-minimal | Tendency → TARGET_DISTANCE → AFFORDANCE → RANDOM | simple |
+| `legacy_mem_simple` | legacy-minimal | Tendency → TARGET_DISTANCE → **MEMORY** → AFFORDANCE → RANDOM | simple |
+
+The chain order is `LearningSettings.MASTER_FILTER_ORDER`, not the order `enabledFilters`
+lists — that field is parsed as a set.
 
 - **legacy-minimal** = circadian, consolidation, expectancy, neuromodulation, orexin,
   endocrine all `false`, **`actionTendencyEnabled = true`**. A mismatch here is attributable
@@ -84,6 +101,9 @@ MEMORY filter. Never compare across stacks or worlds.
 - **current** = expectancy + neuromodulation + orexin + endocrine `true`,
   **`actionTendencyEnabled = false`**.
 - **No arm enables `WORLD_MODEL`** — neither source architecture had one.
+- **mixed** world = Campos's 20/20/60 red/green/gray. `GRAY_APPLE` has `caloricValue = 0`,
+  so some interactions are unrewarding.
+- **simple** world = red/green only, 50/50. Every interaction regulates hunger.
 
 ### Why action tendency is ON in legacy and OFF in current
 
@@ -104,11 +124,44 @@ than *how many*.
 Note this is deliberately **not** the shipped production default, which has both enabled.
 That configuration answers a different question (external validity for the JEPA experiment)
 and is out of scope here.
-- **mixed** world = Campos's 20/20/60 red/green/gray. `GRAY_APPLE` has `caloricValue = 0`,
-  so some interactions are unrewarding.
-- **simple** world = red/green only, 50/50. Every interaction regulates hunger.
+
+### What the MEMORY filter does, and why MEMORY < AFFORDANCE in the chain
+
+Memory chooses **what to engage with**; operant conditioning chooses **what to do to it**.
+On consultation `MemoryFilter` scores each candidate `WorldObjectType` as the mean of
+`-emotionDelta x eligibility` over the recent engram window, draws one object with
+probability proportional to that value, and returns **every** candidate action targeting it.
+Unexplored objects carry an optimistic prior (the mean value of the known-good candidates,
+scaled by tonic dopamine); objects remembered as harmful keep a small floor rather than
+being excluded.
+
+That is Mapa's §5.3.2 division of labour and Campos's proportional selection, and it is why
+the order changed. Campos's `Affordances` (Algorithm 1, line 1) is the candidate *generator*
+— our `definePossibleActions` — not our AFFORDANCE filter, which is an operant table; in his
+design the operant mechanism sits *inside* the Memory step. Our AFFORDANCE previously
+occupied a slot found in neither paper. The MEMORY → AFFORDANCE pair now fills his single
+Memory slot, with TARGET_DISTANCE (his `excludeIdenticalTargets`) still ahead of it so memory
+scores one instance per object type.
+
+**The consequence for measurement is the important part.** Memory now seldom ends the filter
+chain, so it seldom receives the `selection_type` credit — AFFORDANCE, running next, usually
+does. `chosen_action_state.actionselectiontype = MEMORY` has therefore become a *structural
+floor*, not a measure of memory's influence, and a low MEMORY share must not be reported as
+memory going unused. Influence is read from `memory_decisions.decided` instead (§5). This is
+the price of keeping the two filters separate rather than merging them as Campos did, and it
+is paid deliberately: merging would make memory's contribution unmeasurable, which is the
+question the experiment exists to answer.
+
 
 At 5 creatures: **1923 × 1610 px, 500 objects** (6192 px²/object, 619,206 px²/creature).
+
+**Run cap: `maxRuntimeMinutes = 120`** (was 90). Two `*_nomem` arms reached the 90-minute cap
+with zero deaths, which left P4 with no denominator. The extra 30 minutes gives slower
+creatures room to die — but it is not expected to be sufficient on its own, and it is not
+relied on: with replenishment on, a successfully foraging creature may never die at any cap.
+That is what §6's censoring-aware survival is for. The cap is a sampling decision, not the
+fix. The pilot configs stay at 45 minutes; their job is schema gates and sizing, not survival.
+
 
 Engrams form in the `*_nomem` arms too — `MemorySystemActor` is created unconditionally
 (`CreatureActor.java:132`) and the MEMORY filter gates only *use*. Formation is therefore
@@ -155,6 +208,9 @@ Its job is to produce the numbers that size the campaign, and to prove the data 
 | G5 | `engrams.parquet` non-empty in **both** arms | the matched-formation control holds |
 | G6 | `creatures.parquet` has one row per creature | the birth+death dedup is applied; otherwise every lifetime statistic is wrong |
 | G7 | every creature reaches ≥ 10 EAT interactions inside `maxRuntimeMinutes` | k = 1..10 is measurable; otherwise shrink the world, preserving density |
+| G8 | `creatures.parquet` has `died` and `observed_s`, and `observed_s` is non-null for **every** creature | the censoring columns exist and cover survivors; without them F5/P4 skips entirely |
+| G9 | `memory_decisions.parquet` has `object_type`, `returned`, `objects`; `returned <= candidates` and `decided == (returned < candidates)` on every row | the influence metric is well-formed — this is the only instrument for memory's effect now |
+| G10 | in `legacy_mem`, `mean(decided) > 0` and at least some rows have `returned > 1` | memory both acts and leaves the action choice open; `returned == 1` everywhere would mean it is still collapsing to a single action |
 
 ### 4.3 Size the campaign
 
@@ -187,15 +243,47 @@ interactions per life, the same threshold Campos reports for memory to start dom
 AFFORDANCE share is the one outcome with a tractable, moderate effect. **`trials` set to
 8** — comfortable margin over AFFORDANCE's requirement, without chasing the others.
 
-### 4.4 Campaign
+### 4.4 Publish the image, then run
+
+`image.source: registry` is required on CCAD (no docker daemon there), and it resolves to
+whatever `dl2l_image` names — by default `:latest`, which CI only rebuilds on push to `main`.
+A branch's Java changes are therefore invisible to a CCAD run unless the image is published
+first. **This is now done by the preview pipeline rather than by hand:**
+
+```bash
+git push origin HEAD:preview/memory-architecture
+```
+
+`.github/workflows/preview-image.yml` triggers on `preview/**`, builds the fat jar, and
+publishes `ghcr.io/felipedreis/dl2l:preview-memory-architecture` plus a `sha-<short>` tag.
+(`docker/metadata-action`'s `type=ref,event=branch` turns the `/` into a `-`, so the branch
+name carries the `preview` prefix itself.) Wait for the run to go green, then pin the
+campaign to it:
 
 ```bash
 cd ansible
-ansible-playbook -i inventories/local run-experiment.yml -e experiment=p84_behaviour_parity -e analyze=true
-# or, on CCAD (requires the CEFET VPN; submit-then-collect):
-ansible-playbook -i inventories/ccad run-experiment.yml -e experiment=p84_behaviour_parity
-ansible-playbook -i inventories/ccad run-experiment.yml -e experiment=p84_behaviour_parity -e rescue=true
+ansible-playbook -i inventories/ccad run-experiment.yml -e experiment=p84_behaviour_parity \
+  -e dl2l_image=ghcr.io/felipedreis/dl2l:preview-memory-architecture
+# later, repeatable, same flag:
+ansible-playbook -i inventories/ccad run-experiment.yml -e experiment=p84_behaviour_parity \
+  -e dl2l_image=ghcr.io/felipedreis/dl2l:preview-memory-architecture -e rescue=true
 ```
+
+Locally, the same image or a plain local build:
+
+```bash
+ansible-playbook -i inventories/local run-experiment.yml -e experiment=p84_behaviour_parity -e analyze=true
+```
+
+Three things to know about the preview image:
+
+1. **It is not test-gated.** The workflow runs `mvn package -DskipTests`, unlike
+   `release.yml`. §4.1's `mvn test` is the gate, and it is not optional.
+2. **It is linux/amd64 only** — the GitHub runner's native architecture, which matches CCAD.
+   It will not run on the arm64 Pi cluster.
+3. **Prefer the `sha-<short>` tag in the report.** `preview-<branch>` moves with every push
+   to that branch, so quoting it does not identify a build. `manifest.json` still does not
+   record the image tag or digest (§9), so the report must state the tag *and* the commit.
 
 Data uploads to `felipedreis/dl2l-experiments` under `p84/`. Never disable that.
 
@@ -209,8 +297,6 @@ PYTHONPATH=analysis python3 -m dl2l_analysis --experiment p84_behaviour_parity
 
 ## 5. Data → figure map
 
-Six tables. Two of them (`conditioning`, `memory_decisions`) were added for this issue.
-
 | Fig | Source | Plotted | Compared to |
 |---|---|---|---|
 | F1 | `mouth_interactions`, `creatures.born_time` | mean seconds between interaction k−1 and k, k = 1..10 | Mapa Fig. 47 |
@@ -218,17 +304,47 @@ Six tables. Two of them (`conditioning`, `memory_decisions`) were added for this
 | F3 | `actions.selection_type` | cumulative selections per criterion, whole life | Campos Fig. 5 |
 | F4 | `actions` | same, first 1000 decisions | Campos Fig. 6 |
 | F3b | `actions` | each criterion's share of a creature's decisions | Campos's frequencies |
-| F5 | `creatures.lifetime_s` | lifetime per arm; memory/no-memory **ratio** | Campos's 6.7× |
-| F6 | `conditioning` *(new)* | normalised APPROACH share over reinforcement events | Mapa's 0.25 / 0.40 / 0.70 |
-| M1 | `engrams` + `actions` | cumulative engrams laid vs cumulative MEMORY-won decisions | Campos's "~150 interactions" |
-| M2 | `memory_decisions` *(new)* | P(memory decides \| consulted) over life deciles | — |
+| F5 | `creatures.observed_s`, `creatures.died` | **Kaplan-Meier survival + mortality per arm** | Campos's 6.7× |
+| F6 | `conditioning` | normalised APPROACH share over reinforcement events | Mapa's 0.25 / 0.40 / 0.70 |
+| M1 | `engrams` + `memory_decisions` | cumulative engrams laid vs cumulative memory-**influenced** decisions | Campos's "~150 interactions" |
+| M2 | `memory_decisions` | P(decides \| consulted); `scored/objects`; `returned/candidates` | — |
 | M3 | `memory_decisions` | winning score and margin over runner-up | — |
 | M4 | `engrams` | eligibility / emotion delta / lay→reinforce gap | — |
 | M5 | `consolidation_*`, `memory_traces` | consolidation activity vs lifetime | — |
-| M6 | `actions` + `creatures` | lifetime against MEMORY-decision count | — |
+| M6 | `memory_decisions` + `creatures` | lifetime against memory-influenced decision count | — |
 
 Criterion names map one-for-one: Nearest → `TARGET_DISTANCE`, Affordances → `AFFORDANCE`,
-Memory → `MEMORY`, Random → `RANDOM`.
+Memory → `MEMORY`, Random → `RANDOM` — but see §3 on why the `MEMORY` share is now a floor.
+
+### What changed in the data, 2026-08-10
+
+Nothing was removed; three columns were added and one renamed. Re-extraction is required —
+these are extraction-query changes, so a raw Arrow dump from any earlier run can be
+re-extracted without re-simulating, **but the memory arms must be re-simulated anyway**
+because the filter itself changed.
+
+| Table | Change | Why |
+|---|---|---|
+| `creatures` | **+`died`** (bool), **+`observed_s`** (s) | `lifetime_s` is NULL for a creature alive at the cap, and every consumer dropped those rows — right-censoring silently treated as missing data, biasing against whichever arm survives best. See §6. |
+| `memory_decisions` | `action` → **`object_type`** | Memory no longer picks an action; it picks an object. |
+| `memory_decisions` | **+`returned`** (int) | Candidate actions passed on. `decided == (returned < candidates)` is the influence signal that replaces `selection_type == MEMORY`. |
+| `memory_decisions` | **+`objects`** (int) | Distinct candidate objects — the denominator for `scored`. Without it `scored/candidates` is objects-over-actions, which is meaningless. |
+
+Reinterpreted, same column name: `scored` now counts candidate **objects** with engram
+evidence (was: candidate actions); `winning_score` is the sampled object's value and
+`runnerUpScore` the best among the objects passed over, so "did memory sample the argmax?"
+is answerable after the fact.
+
+### New measures
+
+| Measure | From | Answers |
+|---|---|---|
+| **memory influence rate** | `mean(memory_decisions.decided)` | how often memory actually constrained the choice — the honest replacement for the MEMORY selection share |
+| **choice-set coverage** | `scored / objects` | how much of what is in view the creature has any experience of |
+| **narrowing factor** | `returned / candidates` | how far memory cut the action set when it did act |
+| **mortality rate** | `mean(creatures.died)` | did they die at all — a real outcome once the cap truncates the study |
+| **KM median survival** | `observed_s`, `died` | median lifetime that survivors do not bias; NaN when over half the arm outlives the cap |
+| **log-rank test** | same | P4's significance test, valid with either arm partly or wholly censored |
 
 **`conditioning.probability` is the raw stored value and must be normalised before
 plotting.** `ActionProbability.varyProbability` clamps at 0 while
@@ -263,6 +379,35 @@ WANDER that `docs/plans/tedium-saturation.md` measured as what prevents tedium s
 exactly the legacy configuration this experiment runs — so it trades a reporting problem for
 a behavioural one.
 
+### Survival is censored, and must be analysed as such
+
+A creature still alive when the run hits `maxRuntimeMinutes` is **right-censored**: we know
+it lived at least that long. `creatures.lifetime_s` is NULL for those creatures and every
+consumer dropped the NaNs, so survivors were silently excluded from every lifetime
+statistic. That is not a rounding issue — it biases in the worst possible direction, because
+the arm that survives best loses the most observations and has its mean dragged toward the
+arm that dies young. In the v3 campaign it was worse still: two `*_nomem` arms had **zero**
+deaths at 90 min, so P4's ratio had no denominator and was simply uncomputable.
+
+Raising the cap to 2 h does **not** fix this on its own, and may not fix it at all: with
+replenishment on, a creature that forages successfully has no reason to die at any cap. So
+P4 is decided by censoring-aware statistics, which work regardless:
+
+| Quantity | Test | Reported when |
+|---|---|---|
+| mortality rate per arm | Fisher's exact | always |
+| KM median survival | — | always; `beyond cap` when >50% outlive the horizon |
+| memory/no-memory median ratio | — | only when **both** medians are reached; `n/a (censored)` otherwise |
+| survival difference | **log-rank** | always, provided at least one death exists |
+
+`analysis/dl2l_analysis/stats.py` (`kaplan_meier`, `km_median`, `logrank_test`,
+`survival_comparison`). Hand-rolled rather than pulling in `lifelines`; the log-rank
+implementation is checked against the Freireich (1963) 6-MP trial, the standard worked
+example (χ² = 16.79, p = 4.2×10⁻⁵).
+
+**The report must state mortality per arm before quoting any survival number.** A ratio
+computed where nobody died is not a small effect; it is an unobserved one.
+
 ### Tests
 
 Lifetimes and intervals are strongly right-skewed, so everything is rank-based. No
@@ -270,7 +415,9 @@ t-tests, no ANOVA.
 
 | Purpose | Test | Unit |
 |---|---|---|
-| Memory vs no-memory, per outcome | Mann-Whitney U | creature |
+| **Memory extends life (P4)** | **mortality (Fisher) + log-rank on `(observed_s, died)`** | **creature** |
+| Lifetime *among those that died* | Mann-Whitney U — a conditional comparison, not P4 | creature |
+| Memory vs no-memory, other outcomes | Mann-Whitney U | creature |
 | Effect size | Cliff's delta (a monotone function of U, so it reports the same comparison the test does) | creature |
 | All arms jointly | Kruskal-Wallis → pairwise Mann-Whitney, Bonferroni | creature |
 | "Memory's advantage grows with k" | Spearman ρ of the (no-mem − mem) gap against k | k |
@@ -299,9 +446,9 @@ Each is reported *confirmed* / *refuted* / *inconclusive*, separately per arm pa
 | ID | Claim | Decided by |
 |---|---|---|
 | **P1** | Memory arm's interaction interval ≤ no-memory's, gap widening with k | F1 + Mann-Whitney on `mean_interval_s` + Spearman of gap vs k |
-| **P2** | With memory, RANDOM is displaced as MEMORY engages; without memory, no trend | F3/F4 + Mann-Whitney on the late/early RANDOM ratio |
-| **P3** | Nearest and Affordances used similarly with and without memory | F3b + Mann-Whitney on their shares |
-| **P4** | Memory extends life; ratio compared to Campos's 6.7× | F5 + Mann-Whitney on `lifetime_s` |
+| **P2** | With memory, RANDOM is displaced as memory engages; without memory, no trend | F3/F4 + Mann-Whitney on the late/early RANDOM ratio. **"as memory engages" is now read from M1's influence curve, not from the MEMORY selection share** (§3) |
+| **P3** | Nearest and Affordances used similarly with and without memory | F3b + Mann-Whitney on their shares. **AFFORDANCE now also absorbs the credit for memory-narrowed decisions, so a rise in its share in the memory arm is expected and is not evidence against P3**; cross-check against M2's narrowing factor before drawing any conclusion |
+| **P4** | Memory extends life; ratio compared to Campos's 6.7× | F5 + mortality (Fisher) + log-rank on `(observed_s, died)`; median ratio only when both medians are reached (§6) |
 | **P5** | Time alive rises with interaction count, memory above no-memory (**shape only**) | F2 |
 | **S1** | In the all-rewarding `simple` world the interval decreases monotonically, unlike the mixed world | F1 + Spearman of interval vs k, `*_simple` vs mixed |
 | **D1** | Learned APPROACH share against Mapa's 0.25/0.40/0.70 (**descriptive**, no pass/fail) | F6 |
@@ -391,6 +538,16 @@ report must distinguish the two, and should present P3 against the *recorded-att
 semantics rather than silently treating our `TARGET_DISTANCE` count as equivalent to his
 Nearest count.
 
+**The 2026-08-05 CCAD campaign is superseded and is not used in the report.** Its memory
+arms ran the pre-rework `MemoryFilter` (single-action argmax, AFFORDANCE before MEMORY), so
+their behaviour is not the behaviour being reported on; its `creatures.parquet` predates
+`died`/`observed_s`, so F5/P4 cannot be computed from it either. Its `*_nomem` arms are
+structurally unchanged and could in principle be reused, but are re-run anyway — the run cap
+changed, and a control that did not share its treatment's conditions is not a control. The
+data stays on HuggingFace under `p84/` as a record; the operational findings it produced
+(quota exhaustion, the `DONE`-sentinel trap, the `sbatch` path bug) are all still live and
+are documented above.
+
 **Lifetime and interval may be near-zero effects, not underpowered ones.** The sizing
 pilot's mean interval (~6 s) and mean lifetime (~900 s) put creatures at only ~150
 interactions per life on average — the same figure Campos cites as roughly when memory
@@ -401,19 +558,13 @@ vs k) and M1 (formation vs use, on a cycle axis) are the figures that test this 
 the report must check whether the campaign's creatures cross ~150 interactions before
 concluding P1/P4/P5 are refuted rather than not-yet-observable at this lifespan.
 
-**CCAD image provenance.** `image.source: registry` always resolves to whatever
-`ghcr.io/felipedreis/dl2l:latest` currently is, and CI only rebuilds that tag on push to
-`main` (`.github/workflows/cd.yml`). A feature branch's Java changes are therefore invisible
-to a CCAD run unless either (a) the branch is merged first, or (b) a distinctly-tagged
-image is built and pushed by hand and the run overrides `dl2l_image` via `-e`. This
-experiment's `ActionProbabilityState`/`MemoryDecisionState` persistence exists only on
-`claude/p84-behaviour-parity`, not `main`, at the time this recipe was executed — the
-campaign run used `-e dl2l_image=ghcr.io/felipedreis/dl2l:p84-behaviour-parity` (built
-`--platform linux/amd64`, matching CCAD's architecture, from commit `eb8d0d8`), not the
-default `:latest`. **`manifest.json` does not record the image tag or digest used** — this
-is a gap, not something to rely on. Until it's fixed, the only record of which image a run
-used is this note plus the ansible invocation itself; a follow-up should add the pulled
-`ref`/digest to the manifest so a dataset is self-describing about its own provenance.
+**CCAD image provenance.** Building and pushing a tagged image by hand — what the
+2026-08-05 campaign did, with `--platform linux/amd64` from commit `eb8d0d8` — is superseded
+by the preview pipeline (§4.4). The underlying gap remains: **`manifest.json` records neither
+the image tag nor its digest**, so a dataset is not self-describing about the build that
+produced it. Until that is fixed the report must state the tag *and* the commit sha, and
+should prefer the immutable `sha-<short>` tag over the moving `preview-<branch>` one. Filed
+as a follow-up.
 
 ---
 
@@ -424,8 +575,10 @@ used is this note plus the ansible invocation itself; a follow-up should add the
 | Worlds | `simulations/p84_{pilot_,}{legacy,current}_{no,}mem{,_simple}.conf` |
 | Specs | `experiments/p84_pilot.yml`, `experiments/p84_behaviour_parity.yml` |
 | Analysis | `analysis/experiments/p84_behaviour_parity.py`, `analysis/experiments/p84_memory_common.py` |
-| Shared stats | `analysis/dl2l_analysis/stats.py` |
-| Extraction | `scripts/dl2l_data/tables.py` (`conditioning`, `memory_decisions`) |
+| Shared stats | `analysis/dl2l_analysis/stats.py` (`compare_arms`, `survival_comparison`, `kaplan_meier`, `logrank_test`) |
+| Extraction | `scripts/dl2l_data/tables.py` (`creatures` censoring cols, `conditioning`, `memory_decisions`) |
 | Persistence | `creature/bd/ActionProbabilityState.java`, `creature/bd/MemoryDecisionState.java` |
+| Selection rule | `creature/actionSelector/MemoryFilter.java`, `cluster/settings/LearningSettings.java` |
+| Image | `.github/workflows/preview-image.yml` → `ghcr.io/felipedreis/dl2l:preview-<branch>` |
 | Data | `ml/data_p84_pilot/`, `ml/data_p84_behaviour_parity/`, HF prefix `p84/` |
 | Figures | `docs/reports/figures/p84_behaviour_parity/` |

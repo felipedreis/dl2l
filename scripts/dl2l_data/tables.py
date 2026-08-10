@@ -8,18 +8,41 @@ in the same shape.
 """
 
 TABLES = {
+    # `lifetime_s` is NULL for a creature still alive when the run hit maxRuntimeMinutes, and
+    # every consumer drops NaNs — so survivors vanish from any lifetime statistic. That is
+    # right-censoring treated as missing data, and it biases in the worst possible direction:
+    # the arm that survives best loses the most observations, so its mean lifetime is dragged
+    # down toward the arm that dies young. In the p84 v3 campaign two *_nomem arms had ZERO
+    # deaths, which left P4's survival ratio with no denominator at all.
+    #
+    # `died` and `observed_s` make the censoring explicit so survival analysis can use it:
+    # observed_s is the lifetime for a creature that died, and the follow-up time (last
+    # recorded activity minus birth) for one that did not. Together they are the (time, event)
+    # pair Kaplan-Meier and log-rank need. `lifetime_s` is kept unchanged so nothing that
+    # already reads it changes meaning.
     "creatures": (
         """
-        SELECT creature_key, creature_sequential,
-               borntime  AS born_time,
-               deadtime  AS dead_time,
-               CASE WHEN deadtime > 0
-                    THEN (deadtime - borntime) / 1000.0
+        WITH last_seen AS (
+            SELECT key AS creature_key, MAX(time) AS last_time
+            FROM data.change_stimulus_state
+            GROUP BY key
+        )
+        SELECT c.creature_key, c.creature_sequential,
+               c.borntime  AS born_time,
+               c.deadtime  AS dead_time,
+               CASE WHEN c.deadtime > 0
+                    THEN (c.deadtime - c.borntime) / 1000.0
                     ELSE NULL
                END AS lifetime_s,
-               gender
-        FROM data.creature_state
-        ORDER BY creature_key
+               c.deadtime > 0 AS died,
+               CASE WHEN c.deadtime > 0
+                    THEN (c.deadtime - c.borntime) / 1000.0
+                    ELSE (COALESCE(l.last_time, c.borntime) - c.borntime) / 1000.0
+               END AS observed_s,
+               c.gender
+        FROM data.creature_state c
+        LEFT JOIN last_seen l ON l.creature_key = c.creature_key
+        ORDER BY c.creature_key
         """,
         None,
     ),
