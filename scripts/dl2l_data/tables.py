@@ -215,7 +215,8 @@ TABLES = {
     ),
     "engrams": (
         """
-        SELECT creature_key, action_type,
+        SELECT creature_key, action_type, object_type,
+               drive, drive_level,
                lay_cycle, reinforced_cycle, cycle_gap,
                eligibility, emotion_delta
         FROM data.engram_state

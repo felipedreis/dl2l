@@ -169,7 +169,10 @@ public class Valuation extends CreatureComponent {
     private void persistEngrams(List<Engram> produced) {
         for (Engram e : produced) {
             persist(new EngramState(id.key, e.actionType(), e.layCycle(), e.reinforcedCycle(),
-                    e.reinforcedCycle() - e.layCycle(), e.eligibility(), e.emotionDelta()));
+                    e.reinforcedCycle() - e.layCycle(), e.eligibility(), e.emotionDelta(),
+                    e.perception() != null ? e.perception().objectType.getOrElse(null) : null,
+                    e.emotionAtDecision() != null ? e.emotionAtDecision().getName() : null,
+                    e.emotionAtDecision() != null ? e.emotionAtDecision().getLevel() : Double.NaN));
         }
     }
 }

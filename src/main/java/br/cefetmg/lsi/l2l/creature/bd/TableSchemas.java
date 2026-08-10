@@ -230,9 +230,12 @@ public final class TableSchemas {
                 col("action_type", ColType.STRING, (EngramState eg) -> eg.getActionType() != null ? eg.getActionType().name() : null),
                 col("creature_key", ColType.INT64, EngramState::getCreatureKey),
                 col("cycle_gap", ColType.INT64, EngramState::getCycleGap),
+                col("drive", ColType.STRING, EngramState::getDrive),
+                col("drive_level", ColType.DOUBLE, EngramState::getDriveLevel),
                 col("eligibility", ColType.DOUBLE, EngramState::getEligibility),
                 col("emotion_delta", ColType.DOUBLE, EngramState::getEmotionDelta),
                 col("lay_cycle", ColType.INT64, EngramState::getLayCycle),
+                col("object_type", ColType.STRING, EngramState::getObjectType),
                 col("reinforced_cycle", ColType.INT64, EngramState::getReinforcedCycle))));
 
         all.add(table("sleep_episode_state", SleepEpisodeState.class, SleepEpisodeState::getId, List.of(

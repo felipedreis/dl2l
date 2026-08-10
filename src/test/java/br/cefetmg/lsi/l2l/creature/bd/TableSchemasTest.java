@@ -77,8 +77,8 @@ class TableSchemasTest {
                 "perceivedobjects", "changestimulusstate_id"));
         t.put("regulation_batch_stat", List.of("batchsize", "drivestouchedmask", "regulatingcount",
                 "samedrivecollision", "changestimulusstate_id"));
-        t.put("engram_state", List.of("action_type", "creature_key", "cycle_gap", "eligibility", "emotion_delta",
-                "lay_cycle", "reinforced_cycle"));
+        t.put("engram_state", List.of("action_type", "creature_key", "cycle_gap", "drive", "drive_level",
+                "eligibility", "emotion_delta", "lay_cycle", "object_type", "reinforced_cycle"));
         t.put("sleep_episode_state", List.of("creature_key", "duration_ticks", "onset_cycle", "wake_cycle"));
         t.put("consolidation_episode_stat", List.of("aborted", "batches_completed", "creature_key",
                 "engram_count", "mean_eligibility", "onset_cycle", "std_eligibility"));
