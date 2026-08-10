@@ -209,6 +209,14 @@ Gates are evaluated **per trial**, and an arm passes only when all of its trials
 checking the concatenation lets one broken trial hide behind its healthy siblings. A table
 that is absent is reported SKIP, never PASS.
 
+**G0 checks that every trial came from the same run**, by mtime spread across the whole data
+dir. A data dir is written trial by trial and never cleared first, so a re-run that dies
+partway leaves fresh and stale trials side by side and every other gate then averages across
+two different builds of the simulator. This is not hypothetical: a mid-run check during the
+2026-08-10 pilot mixed one fresh trial with five from three days earlier and reported a
+confident G7 failure that was really the *previous* architecture's behaviour. **Delete the
+data dir before re-running a pilot.**
+
 | # | Gate | Why it matters |
 |---|---|---|
 | G1 | `conditioning.parquet` non-empty in `legacy_nomem` | expectancy is off there, so `ExpectancyState` writes nothing; this proves the *legacy* `Valuation` hook fires |

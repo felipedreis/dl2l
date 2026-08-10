@@ -21,6 +21,9 @@ import pandas as pd
 
 ACTION_TYPES = 6          # the operant table is snapshotted whole, one row per ActionType
 MIN_EAT_PER_CREATURE = 10  # k = 1..10 must be measurable
+# A whole pilot completes in well under an hour, so trials written hours apart did not come
+# from the same run. See G0.
+MAX_MTIME_SPREAD_H = 6.0
 
 
 class Gates:
@@ -102,6 +105,33 @@ def main() -> int:
 
     g = Gates()
 
+    # G0 — every trial came from the SAME run. A data dir is written trial by trial and
+    # never cleared first, so a re-run that dies partway leaves a directory holding some
+    # fresh trials and some stale ones, and every gate below then silently averages across
+    # two different builds of the simulator. Found the hard way: a checker run partway
+    # through a pilot mixed one fresh trial with five from three days earlier, and reported
+    # a confident G7 failure that was really the *previous* architecture's behaviour.
+    stamps = {}
+    for arm in all_arms:
+        for d in sorted((base / arm).glob("trial_*")):
+            f = d / "creatures.parquet"
+            if f.exists():
+                stamps[f"{arm}/{d.name}"] = f.stat().st_mtime
+    if not stamps:
+        g.check("G0", False, "no extracted trials anywhere")
+    else:
+        spread_h = (max(stamps.values()) - min(stamps.values())) / 3600.0
+        newest = max(stamps, key=stamps.get)
+        oldest = min(stamps, key=stamps.get)
+        # Scoped to the whole data dir, not per arm: an arm whose trials are all equally
+        # stale is internally consistent and would pass a per-arm check while still being
+        # from a different build than the arm it is compared against — which is the
+        # comparison the entire experiment rests on.
+        g.check("G0", spread_h <= MAX_MTIME_SPREAD_H,
+                f"{len(stamps)} trials across {len(all_arms)} arms span {spread_h:.1f}h"
+                + (f" — {oldest} is stale relative to {newest}; "
+                   f"delete {base} and re-run" if spread_h > MAX_MTIME_SPREAD_H else ""))
+
     # G1 — conditioning is written on the LEGACY valuation path too (expectancy is off
     # there, so ExpectancyState records nothing and this is the only evidence).
     for arm in nomem:
@@ -122,9 +152,13 @@ def main() -> int:
         g.check("G2", bad == 0,
                 f"{arm}: {len(per_event)} events, {bad} not exactly {ACTION_TYPES} rows")
 
-    # G3 — one reinforcement per object-directed interaction. Reported as a ratio: the
-    # exact identity depends on which interaction types reach Valuation, so a mismatch is
-    # a prompt to look, not automatically a defect.
+    # G3 — one reinforcement per object-directed interaction, checked as strict equality.
+    # Confirmed on real pilot data (legacy_nomem trial 1: 126 events, 126 EAT, ratio 1.000)
+    # and EAT is the only interaction type that reaches the data at all, since
+    # MouthInteractionState is written solely for EnergeticStimulus (Mouth.java:67). A
+    # tolerance band was the first implementation and is wrong for that reason: it would
+    # swallow a genuine few-percent drift, which is exactly the kind of defect this gate
+    # exists to surface. The ratio stays in the message so a failure is diagnosable.
     for arm in all_arms:
         cond = load(base, arm, "conditioning")
         mouth = load(base, arm, "mouth_interactions")
@@ -134,8 +168,8 @@ def main() -> int:
         n_events = cond.groupby(["_trial", "creature_key", "seq"]).ngroups
         n_eat = int((mouth["interaction_type"] == "EAT").sum())
         ratio = n_events / n_eat if n_eat else float("inf")
-        g.check("G3", 0.9 <= ratio <= 1.1,
-                f"{arm}: {n_events} reinforcements vs {n_eat} EAT (ratio {ratio:.2f})")
+        g.check("G3", n_events == n_eat,
+                f"{arm}: {n_events} reinforcements vs {n_eat} EAT (ratio {ratio:.3f})")
 
     # G4 — the MEMORY filter really is in / out of the chain.
     for arm in nomem:
