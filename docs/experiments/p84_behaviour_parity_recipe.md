@@ -197,7 +197,17 @@ ansible-playbook -i inventories/local run-experiment.yml -e experiment=p84_pilot
 ```
 
 Its job is to produce the numbers that size the campaign, and to prove the data path.
-**Schema gates — all must hold before the campaign is submitted:**
+
+**Schema gates — all must hold before the campaign is submitted.** Run them; do not eyeball
+them:
+
+```bash
+python3 scripts/check_experiment_gates.py ml/data_p84_pilot   # exits 1 if any gate fails
+```
+
+Gates are evaluated **per trial**, and an arm passes only when all of its trials do —
+checking the concatenation lets one broken trial hide behind its healthy siblings. A table
+that is absent is reported SKIP, never PASS.
 
 | # | Gate | Why it matters |
 |---|---|---|
@@ -575,6 +585,7 @@ as a follow-up.
 | Worlds | `simulations/p84_{pilot_,}{legacy,current}_{no,}mem{,_simple}.conf` |
 | Specs | `experiments/p84_pilot.yml`, `experiments/p84_behaviour_parity.yml` |
 | Analysis | `analysis/experiments/p84_behaviour_parity.py`, `analysis/experiments/p84_memory_common.py` |
+| Gates | `scripts/check_experiment_gates.py` |
 | Shared stats | `analysis/dl2l_analysis/stats.py` (`compare_arms`, `survival_comparison`, `kaplan_meier`, `logrank_test`) |
 | Extraction | `scripts/dl2l_data/tables.py` (`creatures` censoring cols, `conditioning`, `memory_decisions`) |
 | Persistence | `creature/bd/ActionProbabilityState.java`, `creature/bd/MemoryDecisionState.java` |
