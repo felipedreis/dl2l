@@ -262,28 +262,50 @@ AFFORDANCE share is the one outcome with a tractable, moderate effect. **`trials
 8** — comfortable margin over AFFORDANCE's requirement, without chasing the others.
 
 **Re-executed 2026-08-10** on the reworked memory architecture, 3 trials x 3 creatures,
-`legacy_nomem` vs `legacy_mem`. All ten gates pass. The earlier table above is superseded —
-it measured the pre-rework filter.
+`legacy_nomem` vs `legacy_mem`. All ten gates pass. Both earlier tables are superseded — the
+first measured the pre-rework filter, the second the object-choice rework before the engram
+store was fixed.
 
 | outcome                              | d      | ICC   | trials needed |
 | ------------------------------------ | ------ | ----- | ------------- |
-| lifetime (s), among those that died  | −0.759 | 0.000 | 11            |
-| mean interaction interval (s)        | −0.311 | 0.000 | 63            |
-| RANDOM share of chosen               | −4.577 | 0.000 | 1             |
-| AFFORDANCE share of chosen           | +4.618 | 0.016 | 1             |
-| TARGET_DISTANCE share of chosen      | +0.577 | 0.048 | 20            |
-| RANDOM late/early ratio              | −0.471 | 0.000 | 28            |
+| lifetime (s), among those that died  | +1.151 | 0.000 | 5             |
+| RANDOM late/early ratio              | −0.653 | 0.000 | 15            |
+| TARGET_DISTANCE share of chosen      | −0.402 | 0.000 | 38            |
+| mean interaction interval (s)        | −0.212 | 0.000 | 134           |
+| RANDOM share of chosen               | −7.417 | 0.000 | 1             |
+| AFFORDANCE share of chosen           | +7.536 | 0.069 | 1             |
 
-Survival (P4, censoring-aware): mortality 9/9 in both arms, KM median 246 s vs 235 s,
-ratio 0.96x, log-rank p = 0.063. **Memory no longer harms survival** — the pre-rework
-campaign had 187 s against 253 s — but it does not yet help either, in this world. Both arms
-die around 240 s, so the ~150-interaction threshold discussion in §9 still applies and P4
-remains the outcome most likely to come back inconclusive.
+**`trials` set to 16** — covers P2's requirement of 15, the largest tractable claim. P1's
+interaction interval needs 134 trials; that is a finding about the size of the effect, not a
+sizing failure, and P1 should be expected to come back inconclusive.
 
-Mechanism check on the same data: memory influences 21-30% of consultations, and **92.5% of
-them return more than one action**, so the operant table really is making the action choice.
-Feeding is unchanged between arms (min 39 vs 38 EAT/creature) where the pre-rework filter cut
-it 3.5x.
+### The memory intervention, measured
+
+Matched before/after on identical configs (the pre-fix run is preserved at
+`ml/data_p84_pilot_baseline_shared_store/`). Memory's effect *within* its arm pair:
+
+| measure | shared store | consummatory + per-key store |
+|---|---|---|
+| gray (0-calorie) share of diet | +3.4 pp **worse**, δ=+0.160 | −6.5 pp **better**, δ=**−0.617** |
+| calories per EAT | −0.014 **worse**, δ=−0.210 | +0.026 **better**, δ=**+0.580** |
+| lifetime | −32 s **worse**, δ=−0.506 | +25 s **better**, δ=**+0.679** |
+
+Survival (P4, censoring-aware): mortality 9/9 both arms; KM median 259 s vs 284 s, ratio
+**1.09x**; log-rank χ² = 8.77, **p = 0.0031**. Compare Campos's published 6.7x — we reproduce
+the direction, not the magnitude.
+
+**This is a pilot signal, not a result.** Every one of these comparisons is
+`cluster-level underpowered`: at 3v3 trials the minimum attainable Mann-Whitney p is 0.100, so
+trial-level significance is arithmetically impossible whatever the effect size. The
+creature-level p-values rest on 9 creatures clustered in 3 worlds, and the diet and calorie
+comparisons would not survive a Bonferroni correction across three tests. What makes it worth
+acting on is that the three measures are causally chained (eat less worthless fruit -> more
+calories per bite -> live longer), the effect sizes are large, and the direction was predicted
+in advance from the 6.3x-vs-1.09x mechanism rather than found by searching.
+
+**Attribution caveat for the report:** this run carried BOTH the consummatory store and
+per-key retention, so their contributions cannot be separated from it. Report them as one
+intervention unless a further pilot isolates them.
 
 ### 4.4 Publish the image, then run
 
