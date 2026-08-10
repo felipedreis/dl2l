@@ -24,6 +24,25 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 
+def _spec_module(experiment: str) -> str | None:
+    """`analysis.module` from experiments/<name>.yml, or None if unset/unreadable.
+
+    Deliberately forgiving: a missing spec, missing key or unparseable YAML just means "fall
+    back to the experiment name". The runner should not fail to start over a field that is
+    optional by design.
+    """
+    try:
+        import yaml
+        spec = _REPO_ROOT / "experiments" / f"{experiment}.yml"
+        if not spec.exists():
+            return None
+        raw = yaml.safe_load(spec.read_text()) or {}
+        analysis = raw.get("analysis") or {}
+        return analysis.get("module")
+    except Exception:
+        return None
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Run a DL2L experiment analysis")
     parser.add_argument("--experiment", required=True,
@@ -33,7 +52,13 @@ def main(argv=None) -> int:
                               "(default: same as --experiment)")
     args = parser.parse_args(argv)
 
-    module_name = args.module or args.experiment
+    # Precedence: --module, then the spec's `analysis.module`, then the experiment name.
+    # Consulting the spec matters because several experiments deliberately share one analysis
+    # module — p84_pilot declares `analysis.module: p84_behaviour_parity`, since a sizing pilot
+    # and its campaign are the same figures over fewer trials. Deriving the module from the
+    # experiment name alone made `-e analyze=true` fail the whole playbook at the very last
+    # step, after every trial had already been simulated and extracted.
+    module_name = args.module or _spec_module(args.experiment) or args.experiment
     full_module = f"analysis.experiments.{module_name}"
     try:
         mod = importlib.import_module(full_module)

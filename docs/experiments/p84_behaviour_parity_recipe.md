@@ -261,6 +261,30 @@ interactions per life, the same threshold Campos reports for memory to start dom
 AFFORDANCE share is the one outcome with a tractable, moderate effect. **`trials` set to
 8** — comfortable margin over AFFORDANCE's requirement, without chasing the others.
 
+**Re-executed 2026-08-10** on the reworked memory architecture, 3 trials x 3 creatures,
+`legacy_nomem` vs `legacy_mem`. All ten gates pass. The earlier table above is superseded —
+it measured the pre-rework filter.
+
+| outcome                              | d      | ICC   | trials needed |
+| ------------------------------------ | ------ | ----- | ------------- |
+| lifetime (s), among those that died  | −0.759 | 0.000 | 11            |
+| mean interaction interval (s)        | −0.311 | 0.000 | 63            |
+| RANDOM share of chosen               | −4.577 | 0.000 | 1             |
+| AFFORDANCE share of chosen           | +4.618 | 0.016 | 1             |
+| TARGET_DISTANCE share of chosen      | +0.577 | 0.048 | 20            |
+| RANDOM late/early ratio              | −0.471 | 0.000 | 28            |
+
+Survival (P4, censoring-aware): mortality 9/9 in both arms, KM median 246 s vs 235 s,
+ratio 0.96x, log-rank p = 0.063. **Memory no longer harms survival** — the pre-rework
+campaign had 187 s against 253 s — but it does not yet help either, in this world. Both arms
+die around 240 s, so the ~150-interaction threshold discussion in §9 still applies and P4
+remains the outcome most likely to come back inconclusive.
+
+Mechanism check on the same data: memory influences 21-30% of consultations, and **92.5% of
+them return more than one action**, so the operant table really is making the action choice.
+Feeding is unchanged between arms (min 39 vs 38 EAT/creature) where the pre-rework filter cut
+it 3.5x.
+
 ### 4.4 Publish the image, then run
 
 `image.source: registry` is required on CCAD (no docker daemon there), and it resolves to
