@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 public class ConsummatoryEngramStoreTest {
 
-    private static final int CAP = 1000;   // MemorySystemActor.MAX_ENGRAM_SIZE
+    private static final int CAP = 64;   // Constants.MAX_ENGRAMS_PER_KEY — per key, not global
 
     @Test
     void approach_traces_cannot_evict_consummatory_memories() {
@@ -34,10 +34,17 @@ public class ConsummatoryEngramStoreTest {
             memory.addEngram(engram(ActionType.APPROACH, FruitType.GRAY_APPLE));
         }
 
-        assertTrue(memory.getRecentEngrams(CAP).stream().noneMatch(e -> e.actionType() == ActionType.EAT),
-                "the shared store has been flushed — that is the behaviour being worked around");
+        // Per-key retention means the GENERAL store now survives the flood too — APPROACH-GRAY
+        // and EAT-GREEN are different keys and are capped independently. That is the retention
+        // half of the fix, and it makes this store's contents stop tracking behaviour frequency.
+        assertTrue(memory.getRecentEngrams(Integer.MAX_VALUE).stream()
+                        .anyMatch(e -> e.actionType() == ActionType.EAT),
+                "per-key retention must keep the rare feeding memory in the general store");
 
-        List<Engram> consummatory = memory.getRecentConsummatoryEngrams(CAP);
+        // The consummatory store is the SELECTION half and remains necessary: per-key retention
+        // equalises counts, but approach credit is object-blind whatever its count, so including
+        // it in valuation still halves the discrimination (6.3x -> ~3.5x on pilot values).
+        List<Engram> consummatory = memory.getRecentConsummatoryEngrams(Integer.MAX_VALUE);
         assertEquals(1, consummatory.size(), "the feeding memory must survive the flood");
         assertEquals(FruitType.GREEN_APPLE, consummatory.get(0).perception().objectType.getOrElse(null));
     }
@@ -45,11 +52,11 @@ public class ConsummatoryEngramStoreTest {
     @Test
     void the_consummatory_store_is_bounded_too() {
         MemorySystemActor memory = new MemorySystemActor();
-        for (int i = 0; i < CAP * 2; i++) {
+        for (int i = 0; i < CAP * 20; i++) {
             memory.addEngram(engram(ActionType.EAT, FruitType.RED_APPLE));
         }
-        assertEquals(CAP, memory.getRecentConsummatoryEngrams(CAP * 5).size(),
-                "unbounded growth would just move the leak, not fix it");
+        assertEquals(CAP, memory.getRecentConsummatoryEngrams(Integer.MAX_VALUE).size(),
+                "one key, one cap — unbounded growth would just move the leak, not fix it");
     }
 
     @Test
@@ -59,7 +66,7 @@ public class ConsummatoryEngramStoreTest {
         for (ActionType t : ActionType.values()) {
             memory.addEngram(engram(t, FruitType.RED_APPLE));
         }
-        List<ActionType> kept = memory.getRecentConsummatoryEngrams(CAP)
+        List<ActionType> kept = memory.getRecentConsummatoryEngrams(Integer.MAX_VALUE)
                 .stream().map(Engram::actionType).toList();
         assertEquals(ActionType.CONSUMMATORY, java.util.EnumSet.copyOf(kept));
     }
@@ -71,8 +78,8 @@ public class ConsummatoryEngramStoreTest {
         MemorySystemActor memory = new MemorySystemActor();
         memory.addEngram(engram(ActionType.EAT, FruitType.GREEN_APPLE));
 
-        assertEquals(1, memory.getRecentEngrams(CAP).size());
-        assertEquals(1, memory.getRecentConsummatoryEngrams(CAP).size());
+        assertEquals(1, memory.getRecentEngrams(Integer.MAX_VALUE).size());
+        assertEquals(1, memory.getRecentConsummatoryEngrams(Integer.MAX_VALUE).size());
     }
 
     @Test

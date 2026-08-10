@@ -91,6 +91,15 @@ public interface Constants {
     int CONSOLIDATION_WINDOW = 128;
 
     int MEMORY_FILTER_WINDOW = 256;
+    // Engrams retained per (action, object) key, in BOTH engram stores. Bounding per key rather
+    // than globally is what stops the commonest behaviour from evicting the rarest evidence: a
+    // flat FIFO's composition converges on whatever the creature does most, which is exactly what
+    // carries the least information (p84 pilot: 116,501 APPROACH-on-GRAY engrams discriminating
+    // objects at 1.09x, against 1,021 EAT-on-GRAY engrams discriminating at 6.3x).
+    //
+    // 64 x the ~14 keys a mixed world produces lands near the 1000 the flat store used to hold,
+    // so total footprint is unchanged; what changes is its composition.
+    int MAX_ENGRAMS_PER_KEY = 64;
 
     double MEMORY_CONSOLIDATION_THRESHOLD = 0.1;
 
