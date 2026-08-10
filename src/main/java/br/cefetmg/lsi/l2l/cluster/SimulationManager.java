@@ -43,6 +43,8 @@ public class SimulationManager extends UntypedActor {
     private long holdersCount;
     private final long maxHolders;
     private final int repositionDelaySeconds;
+    /** Guards maybeStartSimulation() — every registration probes it, only the last one starts. */
+    private boolean started;
 
     private MetricsExtension.Impl metricsExt;
 
@@ -143,12 +145,6 @@ public class SimulationManager extends UntypedActor {
 
                 if (holdersCount == maxHolders) {
                     logger.info("Holders count achieved the expected value");
-                    try {
-                        Thread.sleep(5000);
-                        startSimulation();
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
                 }
                 break;
 
@@ -163,6 +159,43 @@ public class SimulationManager extends UntypedActor {
 
         }
 
+        maybeStartSimulation();
+    }
+
+    /**
+     * Starts the simulation once every role the startup sequence depends on has registered.
+     *
+     * <p>Registration order across nodes is not deterministic, and this used to start as soon as
+     * the last <em>holder</em> registered — from inside the {@code case "holder"} branch, so a
+     * later {@code idProvider} registration could not trigger it. {@link #startSimulation()} asks
+     * {@code idProvider} for object ids immediately, so when the holder won that race the ask went
+     * to a null ref: {@code IllegalArgumentException: Unsupported recipient type, question not sent
+     * to [null]}, the manager died in {@code onReceive}, and the holders then waited forever for a
+     * {@code CreateCreature} that was never coming.
+     *
+     * <p>That failure is silent and total. {@code maxRuntimeMinutes} cannot rescue it, because the
+     * {@code MaxRuntimeExpired} the watchdog schedules is addressed to this actor — it fires on
+     * time and lands in dead letters, so the run hangs until someone kills it by hand. Observed
+     * live on 2026-08-10: the p84 pilot's second trial sat idle for 47 minutes past a 45-minute cap
+     * while its first trial, same config, had completed normally in four.
+     *
+     * <p>A {@code Thread.sleep(5000)} used to stand in for this check, which is what made the race
+     * rare enough to look like flakiness rather than a bug. Blocking an actor's dispatcher thread
+     * is its own anti-pattern, and it is removed: waiting for the registrations we actually need is
+     * both correct and faster.
+     */
+    private void maybeStartSimulation() {
+        if (started) return;
+        if (holdersCount < maxHolders) return;
+        // stopSimulation() needs both of these as well, so neither is optional.
+        if (idProvider == null || collisionDetector == null) {
+            logger.info("Holders ready; still waiting for "
+                    + (idProvider == null ? "idProvider " : "")
+                    + (collisionDetector == null ? "collisionDetector" : ""));
+            return;
+        }
+        started = true;
+        startSimulation();
     }
 
     private void startSimulation() throws IllegalStateException {
