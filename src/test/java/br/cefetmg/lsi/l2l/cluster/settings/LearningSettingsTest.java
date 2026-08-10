@@ -34,8 +34,10 @@ public class LearningSettingsTest {
         List<ActionSelectionType> filters = new LearningSettings().getEnabledFilters();
         assertEquals(5, filters.size());
         assertEquals(ActionSelectionType.TARGET_DISTANCE, filters.get(0));
-        assertEquals(ActionSelectionType.AFFORDANCE,      filters.get(1));
-        assertEquals(ActionSelectionType.MEMORY,          filters.get(2));
+        // MEMORY before AFFORDANCE: memory picks the object, the operant table picks the action
+        // to take on it (Mapa 2009 §5.3.2), and the pair occupies Campos's single Memory slot.
+        assertEquals(ActionSelectionType.MEMORY,          filters.get(1));
+        assertEquals(ActionSelectionType.AFFORDANCE,      filters.get(2));
         assertEquals(ActionSelectionType.WORLD_MODEL,     filters.get(3));
         assertEquals(ActionSelectionType.RANDOM,          filters.get(4));
     }

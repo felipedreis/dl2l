@@ -93,9 +93,9 @@ class TableSchemasTest {
         // Added since the port (issue #84).
         t.put("action_probability_state", List.of("action", "creature_key", "cycle", "delta",
                 "probability", "reinforced_action", "seq", "target", "time_ms"));
-        t.put("memory_decision_state", List.of("action", "candidates", "creature_key", "cycle",
-                "decided", "engram_window", "runnerup_score", "scored", "seq", "time_ms",
-                "winning_score", "key", "sequential"));
+        t.put("memory_decision_state", List.of("candidates", "creature_key", "cycle",
+                "decided", "engram_window", "object_type", "objects", "returned",
+                "runnerup_score", "scored", "seq", "time_ms", "winning_score", "key", "sequential"));
         return t;
     }
 

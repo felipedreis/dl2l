@@ -101,6 +101,32 @@ public class MemoryDecisionPersistenceTest {
     }
 
     @Test
+    void decided_rows_are_exactly_the_ones_that_narrowed_the_candidates() {
+        // This is the invariant analyses rely on to measure memory's influence. It cannot be read
+        // off chosen_action_state any more: memory now hands the surviving actions to the operant
+        // table instead of returning one, so AFFORDANCE usually takes the selection credit.
+        TestingHarness h = TestingHarness.builder().learningSettings(withMemory()).build();
+
+        showTwoApples(h);
+        for (int i = 0; i < 5; i++) {
+            h.tick();
+        }
+
+        List<MemoryDecisionState> decisions = h.bdSink().ofType(MemoryDecisionState.class);
+        assertFalse(decisions.isEmpty(), "the filter must have been consulted for this to mean anything");
+        for (MemoryDecisionState d : decisions) {
+            assertTrue(d.getReturned() <= d.getCandidates(),
+                    "a filter cannot return more actions than it was given");
+            assertEquals(d.getReturned() < d.getCandidates(), d.isDecided(),
+                    "decided must mean, and only mean, that memory narrowed the candidate set");
+            assertEquals(d.isDecided(), d.getObjectType() != null,
+                    "a decision names the object it chose; a pass-through names nothing");
+            assertTrue(d.getScored() <= d.getObjects(),
+                    "only candidate objects can be scored, so `objects` is `scored`'s denominator");
+        }
+    }
+
+    @Test
     void logged_consultations_carry_distinct_sequence_numbers() {
         TestingHarness h = TestingHarness.builder().learningSettings(withMemory()).build();
 

@@ -11,9 +11,15 @@ never their formation. So the *_nomem arms form engrams at the same rate as the 
 and simply never consult them, which makes formation a matched control and isolates
 evocation as the single difference between an arm pair.
 
+Every "was memory used?" quantity here comes from memory_decisions, never from
+chosen_action_state.actionselectiontype. Memory narrows the candidates to one object and
+hands the surviving actions to the operant table instead of returning a single action, so it
+seldom ends the filter chain and seldom receives the selection credit — AFFORDANCE usually
+does. Reading memory's influence off selection_type would report it as near zero.
+
 Figures:
-  M1  formation vs use          — cumulative engrams laid against cumulative MEMORY-won
-                                  decisions, on one cycle axis
+  M1  formation vs use          — cumulative engrams laid against cumulative
+                                  memory-influenced decisions, on one cycle axis
   M2  consultation outcome      — how often memory has an opinion, over life deciles
   M3  decision confidence       — winning score and margin over the runner-up
   M4  engram quality            — eligibility / emotion_delta / cycle_gap over life deciles
@@ -38,6 +44,12 @@ def _mem_arms(cfg) -> list:
     break if an arm gains a suffix.
     """
     return [c for c in cfg.conditions if "nomem" not in c.key]
+
+
+def _decile_mean(df: pd.DataFrame, col: str = "frac"):
+    """(x, y) of the per-life-decile mean of `col`, ready to hand to ax.plot."""
+    series = df.groupby("life_decile")[col].mean()
+    return series.index, series.values
 
 
 ENGRAM_COLUMNS = ["creature_key", "reinforced_cycle", "eligibility", "emotion_delta", "cycle_gap"]
@@ -127,15 +139,21 @@ def attach_engram_life_decile(engrams: pd.DataFrame, creatures: pd.DataFrame) ->
 # M1 — formation vs use
 # ---------------------------------------------------------------------------
 
-def formation_vs_use(engrams: pd.DataFrame, actions: pd.DataFrame, cfg, bins: int = 60) -> None:
-    """Cumulative engrams formed and cumulative MEMORY-won decisions, per arm.
+def formation_vs_use(engrams: pd.DataFrame, decisions: pd.DataFrame, cfg, bins: int = 60) -> None:
+    """Cumulative engrams formed and cumulative memory-influenced decisions, per arm.
 
     Campos observed that memories begin forming immediately but are not used to select an
     action until roughly interaction 150, after which random choice stops being needed.
     That is a statement about the *gap* between these two curves, which is why they belong
     on one axis rather than in separate figures.
+
+    Use is counted from memory_decisions, NOT from selection_type == MEMORY. Memory now
+    narrows to an object and hands the surviving actions to the operant table rather than
+    returning one, so it seldom ends the filter chain and seldom takes the selection credit —
+    AFFORDANCE usually does. `decided` is the honest influence signal; selection_type would
+    read near zero and be mistaken for memory not being used at all.
     """
-    if engrams.empty and actions.empty:
+    if engrams.empty and decisions.empty:
         return
 
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
@@ -163,23 +181,24 @@ def formation_vs_use(engrams: pd.DataFrame, actions: pd.DataFrame, cfg, bins: in
     ax.grid(alpha=0.3)
 
     ax = axes[1]
+    influenced = decisions[decisions["decided"] == True] if not decisions.empty else decisions  # noqa: E712
     for c in cfg.conditions:
-        a = actions[(actions["condition"] == c.key) & (actions["selection_type"] == "MEMORY")]
-        if a.empty:
+        d = influenced[influenced["condition"] == c.key] if not influenced.empty else influenced
+        if d.empty:
             continue
         per_trial = []
         grid = None
-        for _, g in a.groupby("trial"):
-            gr = np.sort(num(g["tick_rank"]).dropna().values) if "tick_rank" in g else None
-            if gr is None or len(gr) == 0:
+        for _, g in d.groupby("trial"):
+            gr = np.sort(num(g["cycle"]).dropna().values)
+            if len(gr) == 0:
                 continue
             if grid is None:
                 grid = np.linspace(0, gr.max(), bins)
             per_trial.append(np.searchsorted(gr, grid, side="right"))
         if per_trial and grid is not None:
             ax.plot(grid, np.mean(per_trial, axis=0), color=c.color, label=c.label)
-    ax.set_xlabel("decision index")
-    ax.set_ylabel("cumulative decisions won by MEMORY")
+    ax.set_xlabel("decision cycle")
+    ax.set_ylabel("cumulative memory-influenced decisions")
     ax.set_title("Memory use\n(zero by construction without the filter)")
     ax.legend(fontsize=8)
     ax.grid(alpha=0.3)
@@ -199,6 +218,11 @@ def consultation_outcome(decisions: pd.DataFrame, cfg) -> None:
     early once a filter narrows to one candidate), so `decided` is a rate over genuine
     opportunities, not over all cycles. Rising with experience is the signature of a
     mechanism that is working rather than merely wired up.
+
+    The three panels use the three denominators the filter records, which are deliberately
+    not interchangeable: `decided` is per consultation, `scored` is per candidate OBJECT
+    (memory scores objects, not actions), and `returned` is per candidate ACTION. Dividing
+    `scored` by `candidates` would be objects-over-actions and is meaningless.
     """
     if decisions.empty:
         return
@@ -207,7 +231,7 @@ def consultation_outcome(decisions: pd.DataFrame, cfg) -> None:
     if not arms:
         return
 
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+    fig, axes = plt.subplots(1, 3, figsize=(17, 4.8))
 
     for c in arms:
         d = decisions[decisions["condition"] == c.key]
@@ -216,13 +240,17 @@ def consultation_outcome(decisions: pd.DataFrame, cfg) -> None:
         rate = d.groupby("life_decile")["decided"].mean()
         axes[0].plot(rate.index, rate.values, marker="o", color=c.color, label=c.label)
 
-        share = d.assign(frac=num(d["scored"]) / num(d["candidates"]).clip(lower=1))
-        frac = share.groupby("life_decile")["frac"].mean()
-        axes[1].plot(frac.index, frac.values, marker="o", color=c.color, label=c.label)
+        known = d.assign(frac=num(d["scored"]) / num(d["objects"]).clip(lower=1))
+        axes[1].plot(*_decile_mean(known), marker="o", color=c.color, label=c.label)
+
+        # How far memory narrowed the action set. 1.0 means it passed everything through.
+        narrowed = d.assign(frac=num(d["returned"]) / num(d["candidates"]).clip(lower=1))
+        axes[2].plot(*_decile_mean(narrowed), marker="o", color=c.color, label=c.label)
 
     for ax, ylabel, title in (
         (axes[0], "P(memory decides | consulted)", "Does memory have an opinion?"),
-        (axes[1], "scored / candidates", "How much of the choice set is remembered?"),
+        (axes[1], "scored / objects", "How much of the choice set is remembered?"),
+        (axes[2], "returned / candidates", "How far does memory narrow the choice?"),
     ):
         ax.set_xlabel("life decile")
         ax.set_ylabel(ylabel)
@@ -374,23 +402,28 @@ def consolidation(episodes: pd.DataFrame, traces: pd.DataFrame, creatures: pd.Da
 # M6 — is memory helpful?
 # ---------------------------------------------------------------------------
 
-def memory_use_vs_survival(actions: pd.DataFrame, creatures: pd.DataFrame, cfg) -> dict:
+def memory_use_vs_survival(decisions: pd.DataFrame, creatures: pd.DataFrame, cfg) -> dict:
     """Lifetime against how much the creature actually used memory, pooled across arms.
 
     The between-arm contrast (P4) answers "does having memory help?". This answers the
     finer question "does *using* it help?", using the spread within and across arms as
     natural variation. Reported with Spearman, since neither axis is expected to be normal
     and lifetime is heavily right-skewed.
+
+    Counted from memory_decisions rather than selection_type, for the reason given in
+    formation_vs_use: memory rarely takes the chain credit any more. The denominator is
+    consultations, so mem_frac reads "of the cycles where memory got a say, how often did it
+    use it" — a cleaner quantity than the old share of all decisions.
     """
-    if actions.empty or creatures.empty:
+    if decisions.empty or creatures.empty:
         return {}
 
     per_trial = (
-        actions.groupby(["condition", "trial", "creature_key"])
-        .agg(total=("selection_type", "size"),
-             mem=("selection_type", lambda s: (s == "MEMORY").sum()))
+        decisions.groupby(["condition", "trial", "creature_key"])
+        .agg(total=("decided", "size"), mem=("decided", "sum"))
         .reset_index()
     )
+    per_trial["mem"] = num(per_trial["mem"])
     per_trial["mem_frac"] = per_trial["mem"] / per_trial["total"].clip(lower=1)
 
     life = creatures[["condition", "trial", "creature_key", "lifetime_s"]].drop_duplicates()
@@ -409,8 +442,8 @@ def memory_use_vs_survival(actions: pd.DataFrame, creatures: pd.DataFrame, cfg) 
         axes[1].scatter(d["mem_frac"], d["lifetime_s"], color=c.color, label=c.label, alpha=0.75)
 
     stats = {}
-    for ax, col, xlabel in ((axes[0], "mem", "decisions won by MEMORY"),
-                            (axes[1], "mem_frac", "MEMORY share of all decisions")):
+    for ax, col, xlabel in ((axes[0], "mem", "memory-influenced decisions"),
+                            (axes[1], "mem_frac", "influenced share of consultations")):
         sub = df[df[col] > 0]
         if len(sub) >= 3:
             rho, p = scipy_stats.spearmanr(sub[col], sub["lifetime_s"])
@@ -435,13 +468,18 @@ def memory_use_vs_survival(actions: pd.DataFrame, creatures: pd.DataFrame, cfg) 
 # Driver
 # ---------------------------------------------------------------------------
 
-def run_all(cfg, *, engrams, actions, decisions, creatures,
+def run_all(cfg, *, engrams, decisions, creatures,
             episodes=None, traces=None) -> dict:
-    """Draws every memory figure that the supplied frames can support."""
+    """Draws every memory figure that the supplied frames can support.
+
+    `actions` is no longer a parameter: every memory-use quantity now comes from
+    memory_decisions, because memory stopped ending the filter chain and so stopped being
+    visible in chosen_action_state.actionselectiontype.
+    """
     print("\n  Memory mechanism figures")
-    formation_vs_use(engrams, actions, cfg)
+    formation_vs_use(engrams, decisions, cfg)
     consultation_outcome(decisions, cfg)
     decision_confidence(decisions, cfg)
     engram_quality(engrams, cfg)
     consolidation(episodes, traces, creatures, cfg)
-    return memory_use_vs_survival(actions, creatures, cfg)
+    return memory_use_vs_survival(decisions, creatures, cfg)

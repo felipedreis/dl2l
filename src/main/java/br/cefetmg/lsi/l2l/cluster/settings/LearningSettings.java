@@ -20,11 +20,30 @@ import java.util.Set;
  */
 public class LearningSettings implements Serializable {
 
-    /** Canonical priority order for all known action filters. */
+    /**
+     * Canonical priority order for all known action filters, following Campos et al. (2015)
+     * Algorithm 1: {@code Affordances → ∩ActionTendency → excludeIdenticalTargets → Memory → Random}.
+     *
+     * <p>The mapping is not one-to-one with our filter names. His "Affordances" step is the
+     * candidate <em>generator</em> — our {@code FullAppraisal.definePossibleActions} — not our
+     * AFFORDANCE filter, which is an operant-conditioning table; in his design the operant
+     * mechanism lives <em>inside</em> the Memory step ("LTM is the operant conditioning
+     * mechanism"). We keep the two separate so memory's contribution stays measurable
+     * (see {@code MemoryDecisionState}), which means his single Memory slot is occupied here by
+     * the MEMORY → AFFORDANCE pair: memory picks the object, the operant table picks the action,
+     * which is also Mapa's (2009) §5.3.2 division of labour.
+     *
+     * <p>TARGET_DISTANCE (his {@code excludeIdenticalTargets}) must stay ahead of MEMORY: it keeps
+     * only the nearest instance of each (object type, action type), so by the time memory scores
+     * per object type there is no ambiguity about which instance it meant.
+     *
+     * <p>{@code ActionTendencyFilter} is prepended separately in {@code FullAppraisal.preStart},
+     * gated by its own flag; WORLD_MODEL has no counterpart in either source architecture.
+     */
     public static final List<ActionSelectionType> MASTER_FILTER_ORDER = List.of(
             ActionSelectionType.TARGET_DISTANCE,
-            ActionSelectionType.AFFORDANCE,
             ActionSelectionType.MEMORY,
+            ActionSelectionType.AFFORDANCE,
             ActionSelectionType.WORLD_MODEL,
             ActionSelectionType.RANDOM
     );

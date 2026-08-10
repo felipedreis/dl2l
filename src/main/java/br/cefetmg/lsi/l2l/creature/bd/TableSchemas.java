@@ -308,13 +308,14 @@ public final class TableSchemas {
 
         all.add(table("memory_decision_state", MemoryDecisionState.class, MemoryDecisionState::getId, concat(
                 List.of(
-                        col("action", ColType.STRING, (MemoryDecisionState md) ->
-                                md.getAction() != null ? md.getAction().name() : null),
                         col("candidates", ColType.INT32, MemoryDecisionState::getCandidates),
                         col("creature_key", ColType.INT64, MemoryDecisionState::getCreatureKey),
                         col("cycle", ColType.INT64, MemoryDecisionState::getCycle),
                         col("decided", ColType.BOOLEAN, MemoryDecisionState::isDecided),
                         col("engram_window", ColType.INT32, MemoryDecisionState::getEngramWindow),
+                        col("object_type", ColType.STRING, MemoryDecisionState::getObjectType),
+                        col("objects", ColType.INT32, MemoryDecisionState::getObjects),
+                        col("returned", ColType.INT32, MemoryDecisionState::getReturned),
                         col("runnerup_score", ColType.DOUBLE, MemoryDecisionState::getRunnerUpScore),
                         col("scored", ColType.INT32, MemoryDecisionState::getScored),
                         col("seq", ColType.INT64, MemoryDecisionState::getSeq),

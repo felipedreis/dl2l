@@ -252,9 +252,9 @@ TABLES = {
     "memory_decisions": (
         """
         SELECT creature_key, seq, time_ms, cycle,
-               engram_window, candidates, scored,
+               engram_window, candidates, objects, scored, returned,
                winning_score, runnerup_score, decided,
-               action,
+               object_type,
                key        AS target_key,
                sequential AS target_sequential
         FROM data.memory_decision_state

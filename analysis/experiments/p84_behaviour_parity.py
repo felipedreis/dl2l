@@ -54,6 +54,16 @@ from analysis.experiments import p84_memory_common
 
 MAX_K = 10
 # Campos's four reported selection criteria, mapped one-for-one onto ours.
+#
+# CAVEAT on the MEMORY share. Since the memory-architecture rework, MemoryFilter narrows the
+# candidates to one OBJECT and hands the surviving actions to the operant table rather than
+# returning a single action, so it seldom ends the chain and seldom takes the selection
+# credit — AFFORDANCE, running next, usually does. The MEMORY share here is therefore a
+# structural floor, not a measure of memory's influence, and a low value must NOT be read as
+# memory going unused. The honest influence rate is `decided` in memory_decisions (M1/M2/M6 in
+# p84_memory_common). This is the price of keeping the two filters separate rather than
+# merging them as Campos did, and it is paid deliberately: merging would make memory's
+# contribution unmeasurable, which is the whole point of the study.
 CRITERIA = ["TARGET_DISTANCE", "AFFORDANCE", "MEMORY", "RANDOM"]
 CRITERION_LABEL = {"TARGET_DISTANCE": "Nearest", "AFFORDANCE": "Affordances",
                    "MEMORY": "Memory", "RANDOM": "Random"}
@@ -513,7 +523,7 @@ def run(cfg) -> None:
         interval_trend(intervals, cfg)
 
     run_tests(per_creature, cfg)
-    p84_memory_common.run_all(cfg, engrams=engrams, actions=actions, decisions=decisions,
+    p84_memory_common.run_all(cfg, engrams=engrams, decisions=decisions,
                               creatures=creatures, episodes=episodes, traces=traces)
     sizing_report(per_creature, cfg)
 
