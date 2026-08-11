@@ -114,16 +114,58 @@ the source architecture. An earlier run of this experiment had it `false` in the
 arms, which wrongly *removed* a mechanism both sources had — that run's legacy results
 should not be compared against these.
 
-The modern layer that stands in for it is neuromodulation.
+The modern layer nominally standing in for it is neuromodulation.
 `docs/plans/tedium-saturation.md` measured the two as independently sufficient for the same
-job (tendency alone held tedium at 0.18–0.42; neuromodulation alone at 0.18–0.22), which is
-what licenses treating them as a substitution rather than as an addition. So the arms carry
-exactly one emotion→action mechanism each, and the pair isolates *which* mechanism rather
-than *how many*.
+job (tendency alone held tedium at 0.18–0.42; neuromodulation alone at 0.18–0.22), which was
+taken as licensing a substitution rather than an addition.
+
+> **That justification does not hold, and the report must not repeat it (measured 2026-08-11,
+> issue #90).** The tedium result is about *drive regulation*; the two mechanisms are not
+> substitutes for *chain arbitration*, which is what actually drives the behavioural
+> difference between the arms.
+>
+> `ActionTendencyFilter` **narrows the candidate set** — it intersects with the drive-relevant
+> actions, which is what leaves a single target group and so lets `ActionProbabilityFilter`
+> narrow to one candidate and take the decision. `setModulation` **reweights within** each
+> target group and returns the same number of actions (one per group); it can never turn
+> three surviving groups into one. Measured: AFFORDANCE decides **51.7%** of choices in
+> `legacy_nomem` against **23.1%** in `current_nomem`, with RANDOM taking **66.1%** there.
+>
+> Worse, dopamine pushes the *opposite* way from a steering mechanism. It raises the softmax
+> temperature `T = 1 + DA_EXPLORATION_GAIN·tanh(max(0, daTonic))`; measured tonics give mean
+> T = 1.51, p95 = 2.39, which flattens a learned table of [0.40 0.25 0.15 0.10 0.06 0.04] to
+> [0.26 0.21 0.17 0.14 0.12 0.10] — close to uniform. Neuromodulation *amplifies* the
+> fall-through to RANDOM rather than compensating for the missing tendency filter.
+>
+> **Consequence for P1–P5.** The legacy/current pair does not isolate *which*
+> emotion→action mechanism. It compares a stack where a learned policy arbitrates against one
+> where random choice does — and the latter feeds better: `current_nomem` emits EAT on 4.7% of
+> decisions against `legacy_nomem`'s 0.7%, never exceeds hunger 1.07/7, and does not die.
+> Report the arms as confounded on arbitration, not as matched.
 
 Note this is deliberately **not** the shipped production default, which has both enabled.
 That configuration answers a different question (external validity for the JEPA experiment)
 and is out of scope here.
+
+### The current stack has no hunger pressure, so it cannot test P4
+
+`current_*` creatures never die because they are never hungry — not marginally, structurally:
+
+| | `legacy_nomem` | `current_nomem` |
+|---|---|---|
+| hunger, mean | 2.44 | 0.26 |
+| hunger, **max** | **7.00** (lethal) | **1.07** |
+| fraction of time > 6.5 | 4.6% | 0.0% |
+| EAT share of decisions | 0.7% | 4.7% |
+| EAT per second | 0.19 | 1.27 |
+
+Memory's benefit in the legacy arms — better diet, more calories per bite, longer life —
+exists *because hunger binds there*. At a lifetime maximum of 1.07/7 a creature can eat
+zero-calorie `GRAY_APPLE` indefinitely and never suffer, so there is no selection pressure for
+memory to act on. **A null result for memory in the `current_*` arms is therefore
+uninformative about memory**, and must not be reported as evidence against it. Either make
+hunger bind in the current stack (a calibration question in its own right — see issue #90) or
+restrict P4 to the legacy pair and say so.
 
 ### What the MEMORY filter does, and why MEMORY < AFFORDANCE in the chain
 
