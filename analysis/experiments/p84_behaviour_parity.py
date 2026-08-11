@@ -131,6 +131,16 @@ def per_creature_outcomes(intervals, actions, creatures) -> pd.DataFrame:
         mi = intervals.groupby(keys)["interval_s"].mean().rename("mean_interval_s")
         out = out.merge(mi, on=keys, how="left")
 
+    # Feeding as a RATE, not a count. Arms terminate differently — the legacy pair runs to
+    # death (~250 s), while the simple and current pairs never die and are cut off at their
+    # maxRuntimeMinutes — so an EAT *count* measures "rate x observation window" and is
+    # comparable only between arms sharing a window. Dividing by observed_s makes it
+    # comparable everywhere, which is what any cross-pair statement must use.
+    if "observed_s" in out.columns and not intervals.empty:
+        n_eat = intervals.groupby(keys).size().rename("n_eat")
+        out = out.merge(n_eat, on=keys, how="left")
+        out["eat_per_min"] = out["n_eat"] / (out["observed_s"] / 60.0).clip(lower=1e-9)
+
     if not actions.empty:
         counts = actions.groupby(keys)["selection_type"].value_counts().unstack(fill_value=0)
         n_all = counts.sum(axis=1)
@@ -438,6 +448,9 @@ def conditioning_figure(conditioning, cfg) -> None:
 # ---------------------------------------------------------------------------
 
 OUTCOMES = [
+    # A rate, so it is comparable across arms with different termination conditions; the raw
+    # count is not. See per_creature_outcomes.
+    ("eat_per_min", "feeding rate (EAT/min)"),
     # Conditional on dying: survivors have lifetime_s = NaN and are dropped here. That makes
     # this "how long did the ones that died last", NOT "does memory extend life" — P4 is
     # decided by the censoring-aware survival_comparison in lifetime_figure instead. Kept

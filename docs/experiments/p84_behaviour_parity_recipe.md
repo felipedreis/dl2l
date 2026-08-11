@@ -514,6 +514,36 @@ example (χ² = 16.79, p = 4.2×10⁻⁵).
 **The report must state mortality per arm before quoting any survival number.** A ratio
 computed where nobody died is not a small effect; it is an unobserved one.
 
+### Arms terminate differently — what may and may not be compared
+
+The three pairs do not share an observation window, and this constrains the analysis:
+
+| pair | cap | do creatures die? |
+|---|---|---|
+| `legacy_nomem` / `legacy_mem` | 120 min | **yes**, 80/80 each at ~250 s — fully observed |
+| `legacy_nomem_simple` / `legacy_mem_simple` | 30 min | no |
+| `current_nomem` / `current_mem` | 30 min | no |
+
+**Both members of every pair share a cap**, so the within-pair comparisons the recipe is built
+on remain valid. The rules for everything else:
+
+1. **Survival is claimable only in the legacy pair.** Elsewhere mortality is 0 in both arms:
+   Fisher p = 1, both Kaplan-Meier medians "beyond cap", log-rank undefined for want of events.
+   This is *not* an artefact of the 30-minute cap — creatures are still alive at 95 minutes, so
+   **no practical cap produces survival data in those arms**. The cap decides only how much rate
+   data is collected. P4 therefore rests on the legacy pair, and the others report mortality = 0
+   as the finding it is (see issue #90).
+2. **Use rates, never counts, for anything spanning pairs.** An EAT *count* measures
+   `rate x window`, so it is comparable only between arms sharing a window. `eat_per_min` is in
+   `OUTCOMES` for this reason. The distinction is not pedantic: in the legacy pair the count
+   rises 30.5% while the rate rises 18.2% and lifetime 10.2% — the count silently folds
+   "ate more often" together with "lived longer to eat", which are separate claims.
+3. **Shares and intervals are already window-invariant** — diet composition, calories per
+   interaction, selection-criterion shares and interaction intervals may be compared directly.
+4. **A common 30-minute analysis window works for every arm** should a cross-pair statement
+   need one: the legacy pair dies at ~250 s, comfortably inside it, so truncating changes
+   nothing there.
+
 ### Tests
 
 Lifetimes and intervals are strongly right-skewed, so everything is rank-based. No
