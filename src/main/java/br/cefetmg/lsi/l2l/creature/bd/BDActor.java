@@ -162,14 +162,21 @@ public class BDActor extends UntypedActor {
     private void expand(PersistenceState ps, Set<PersistenceState> working) {
         if (ps == null || !working.add(ps)) return; // null-safe; add() false => already queued
 
-        if (ps instanceof ChangeStimulusState css) {
-            if (css.getReceivedStimulus() != null) {
-                for (StimulusState s : css.getReceivedStimulus()) expand(s, working);
-            }
-            if (css.getEmittedStimulus() != null) {
-                for (StimulusState s : css.getEmittedStimulus()) expand(s, working);
-            }
-        } else if (ps instanceof InternalDynamicState ids) {
+        // StimulusState is DELIBERATELY not expanded: nothing reads it, and it is by a wide
+        // margin the most expensive thing we write. Measured on a p84 current_nomem trial,
+        // stimulus_state.arrow was 3.2 GB of a 5.6 GB dump — 60% of the raw output — while
+        // scripts/dl2l_data/tables.py references it in exactly zero of its 20 queries. It is
+        // what exhausted the CCAD disk quota and lost four of six arms of the campaign.
+        //
+        // The one remaining reference is scripts/pg_extract.py, the legacy CSV extractor,
+        // which reads a PostgreSQL database that no longer exists anywhere (issue #79 removed
+        // the write path entirely) — so it cannot be run against new data by construction.
+        //
+        // The table stays registered in TableSchemas so the ported-schema block there remains
+        // an accurate record of the original 22; it simply never receives rows, and
+        // ArrowIpcBackend creates a file only for tables that do. Restoring the behaviour is
+        // re-adding the two loops below.
+        if (ps instanceof InternalDynamicState ids) {
             expand(ids.getInitialEmotionalState(), working);
             expand(ids.getFinalEmotionalState(), working);
             expand(ids.getChangeStimulusState(), working);
