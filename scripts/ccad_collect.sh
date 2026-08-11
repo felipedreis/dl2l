@@ -26,12 +26,17 @@ H="$CU@login.ccad.cefetmg.br"
 SSH="ssh -o ConnectTimeout=20 -o BatchMode=yes -o ServerAliveInterval=15"
 REMOTE_BASE="l2l/data/p84_rerun_${COND}/${COND}"
 
+# Space-delimited set rather than an associative array: macOS ships bash 3.2, where
+# `declare -A` does not exist, and this script has to run from the developer's Mac.
 collected=0
-declare -A have
+have=" "
 mkdir -p "$OUT/$COND"
 for d in "$OUT/$COND"/trial_*; do
-  [ -d "$d" ] && { have[$(basename "$d")]=1; collected=$((collected+1)); }
+  [ -d "$d" ] || continue
+  have="$have$(basename "$d") "
+  collected=$((collected+1))
 done
+already() { case "$have" in *" $1 "*) return 0;; *) return 1;; esac; }
 
 idle=0
 while [ "$collected" -lt "$EXPECTED" ]; do
@@ -48,12 +53,12 @@ while [ "$collected" -lt "$EXPECTED" ]; do
   fi
   idle=0
   for t in $ready; do
-    [ -n "${have[$t]:-}" ] && continue
+    already "$t" && continue
     if rsync -a --partial -e "$SSH" "$H:~/$REMOTE_BASE/$t/" "$OUT/$COND/$t/" 2>/dev/null; then
       n=$(ls "$OUT/$COND/$t"/*.parquet 2>/dev/null | wc -l | tr -d ' ')
       if [ "$n" -ge "$MIN_TABLES" ]; then
         $SSH "$H" "rm -rf ~/$REMOTE_BASE/$t" 2>/dev/null
-        have[$t]=1; collected=$((collected+1))
+        have="$have$t "; collected=$((collected+1))
         echo "collected $COND/$t ($n tables) — $collected/$EXPECTED, remote cleared"
       else
         echo "WARN $COND/$t synced only $n tables (<$MIN_TABLES) — left on remote for retry"
