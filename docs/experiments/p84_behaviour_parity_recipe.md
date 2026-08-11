@@ -664,6 +664,42 @@ vs k) and M1 (formation vs use, on a cycle axis) are the figures that test this 
 the report must check whether the campaign's creatures cross ~150 interactions before
 concluding P1/P4/P5 are refuted rather than not-yet-observable at this lifespan.
 
+**Disk quota is per-user, and `df` does not show it.** The 2026-08-11 campaign lost four of six
+arms to quota exhaustion after `df -h $HOME` reported "35 GB of 1.0 TB, 4% used" — that is the
+*filesystem*, shared across users. The per-user limit is ~50 GB. Check `du -sh ~/` instead, and
+budget against that.
+
+Three changes address the cause rather than the symptom:
+
+1. **`stimulus_state` is no longer written** (commit `218de16`). It was 3.2 GB of a 5.6 GB dump
+   — 60% of the raw output — and referenced by none of `tables.py`'s 20 queries. A
+   `current_nomem` trial drops from ~5.6 GB to ~2.4 GB.
+2. **A truncated dump no longer aborts extraction** (commit `a9f63eb`). `read_all()` raised on
+   the partial trailing batch and lost the whole file; batches are now read one at a time and
+   only the truncated tail discarded.
+3. **`dl2l_data.recover` salvages a trial whose `creature_state` was lost.** `ArrowIpcBackend`
+   batches at 4096 rows, so a killed trial loses each table's buffered remainder — negligible
+   for high-volume tables, total for `creature_state` (~2 rows per creature), and
+   `extract.main` then aborts on "No creatures found". It reconstructs the registry from
+   observed activity and tags every table `recovered = True`.
+
+**Re-running an arm: `scripts/ccad_collect.sh`.** The shared rescue flow syncs only once every
+trial of every condition has finished, so a whole arm's output sits on the remote until then. A
+`current_nomem` arm is ~38 GB against ~23 GB of headroom, and capping SLURM array concurrency
+does **not** help, because completed trials accumulate regardless of how many run at once. The
+collector polls for finished trials, syncs each, verifies it locally, and only then deletes the
+remote copy — bounding remote usage to the trials in flight. It requires ≥13 parquet files, not
+just a `DONE` sentinel, since `DONE` is written unconditionally by the job script's EXIT trap.
+
+```bash
+cd ansible && ansible-playbook -i inventories/ccad run-experiment.yml \
+  -e experiment=p84_rerun_<arm> -e dl2l_image=ghcr.io/felipedreis/dl2l:sha-<commit>
+scripts/ccad_collect.sh <arm> 16 ml/data_p84_rerun     # run alongside, not after
+```
+
+Single-arm specs are generated from the campaign spec (see `experiments/p84_rerun_*.yml`);
+regenerate rather than hand-edit so the arm definitions cannot drift from the campaign's.
+
 **CCAD image provenance.** Building and pushing a tagged image by hand — what the
 2026-08-05 campaign did, with `--platform linux/amd64` from commit `eb8d0d8` — is superseded
 by the preview pipeline (§4.4). The underlying gap remains: **`manifest.json` records neither

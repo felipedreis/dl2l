@@ -1,0 +1,23 @@
+# AUTO-GENERATED single-arm rerun spec (issue #84).
+# The 2026-08-11 CCAD campaign lost four arms to disk-quota exhaustion; they are re-run
+# one at a time, with completed trials synced and cleared from the remote DURING the run
+# so peak remote usage is the in-flight trials rather than the whole arm. See
+# docs/experiments/p84_behaviour_parity_recipe.md §9 and scripts/ccad_collect.sh.
+# Regenerate with the snippet in that recipe rather than hand-editing.
+
+name: p84_rerun_legacy_mem_simple
+trials: 16
+conditions:
+- key: legacy_mem_simple
+  simulation: simulations/p84_legacy_mem_simple.conf
+  label: Legacy+Mem (simple world)
+  color: '#c4622d'
+image:
+  source: registry
+data_dir: ml/data_p84_rerun_legacy_mem_simple
+extract:
+  format: parquet
+  backup: true
+  tables: all
+upload:
+  enabled: false
