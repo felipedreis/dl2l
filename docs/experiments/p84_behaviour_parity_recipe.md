@@ -381,6 +381,15 @@ Locally, the same image or a plain local build:
 ansible-playbook -i inventories/local run-experiment.yml -e experiment=p84_behaviour_parity -e analyze=true
 ```
 
+**Simulation configs are baked into the image.** `docker/Dockerfile` does
+`COPY simulations/ ./simulations/`, so editing a `simulations/*.conf` has NO effect on a run
+that pins an image built before the edit — the container carries its own copy. Confirmed the
+expensive way on 2026-08-12: `maxRuntimeMinutes` was cut 120 → 30 for four arms, the run was
+pinned to an image built two commits earlier, and every trial ran the old 120-minute cap to a
+quota-exhaustion failure at 1h36m. **After changing any `.conf`, push and rebuild before
+running, and pin the new `sha-` tag.** The tag is the only thing that says which configs
+actually ran.
+
 Three things to know about the preview image:
 
 1. **It is not test-gated.** The workflow runs `mvn package -DskipTests`, unlike
