@@ -595,11 +595,38 @@ Each is reported *confirmed* / *refuted* / *inconclusive*, separately per arm pa
 | **P3** | Nearest and Affordances used similarly with and without memory | F3b + Mann-Whitney on their shares. **AFFORDANCE now also absorbs the credit for memory-narrowed decisions, so a rise in its share in the memory arm is expected and is not evidence against P3**; cross-check against M2's narrowing factor before drawing any conclusion |
 | **P4** | Memory extends life; ratio compared to Campos's 6.7× | F5 + mortality (Fisher) + log-rank on `(observed_s, died)`; median ratio only when both medians are reached (§6) |
 | **P5** | Time alive rises with interaction count, memory above no-memory (**shape only**) | F2 |
-| **S1** | In the all-rewarding `simple` world the interval decreases monotonically, unlike the mixed world | F1 + Spearman of interval vs k, `*_simple` vs mixed |
+| **S1** | In the all-rewarding `simple` world the interval decreases monotonically, unlike the mixed world | F1 + Spearman of interval vs k, `*_simple` vs mixed. **Measured 2026-08-12: untestable under replenishment — see below.** |
 | **D1** | Learned APPROACH share against Mapa's 0.25/0.40/0.70 (**descriptive**, no pass/fail) | F6 |
 | **D2** | Memory forms, is increasingly used and increasingly decisive; use tracks survival | M1–M6 |
 
 ---
+
+### S1 is untestable in a replenished world
+
+Measured across all four legacy arms (n=80 creatures each): no monotonic trend in interaction
+interval against k anywhere, and the all-rewarding world is no cleaner than the mixed one.
+
+| world | arm | k=1 | k=3 | k=5 | k=7 | k=10 | Spearman |
+|---|---|---|---|---|---|---|---|
+| mixed | `legacy_nomem` | 6.24 | 1.78 | 1.83 | 1.73 | 1.78 | ρ=−0.006, p=0.99 |
+| mixed | `legacy_mem` | 6.02 | 1.88 | 1.94 | 2.58 | 1.75 | ρ=−0.345, p=0.33 |
+| simple | `legacy_nomem_simple` | 6.04 | 2.29 | 2.43 | 2.99 | 2.07 | ρ=−0.430, p=0.21 |
+| simple | `legacy_mem_simple` | 6.62 | 2.39 | 1.76 | 1.38 | 2.10 | ρ=−0.261, p=0.47 |
+
+The only real structure is k=1 (~6 s, birth to first food) against a flat ~1.8–2.4 s thereafter.
+
+**This follows from a design decision, not from the architecture.** Mapa ran *without*
+replenishment: in a depleting world each consumed object makes the next harder to find, so the
+interval grows across k — that IS the shape of her Fig. 47, and the unrewarding interactions
+she credits for the oscillation modulate a trend that depletion creates. We replenish
+(§2 — it is what makes several creatures per trial sound), so density is stationary and the
+expected search time after the first find is constant. There is nothing for the curve to trend
+with, in either world.
+
+So S1 as written cannot be decided by this campaign, and a null result here is **not** evidence
+against the architecture. Testing it needs a depleting arm (`reposition = false`), which is a
+separate, single-creature experiment — the same reason Mapa's world had one organism. The same
+applies more weakly to P1, whose "gap widens with k" clause has the same dependency.
 
 ## 8. Assumptions the report must restate
 
