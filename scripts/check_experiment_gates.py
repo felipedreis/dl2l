@@ -27,6 +27,9 @@ ARROW_BATCH_ROWS = 4096
 # A whole pilot completes in well under an hour, so trials written hours apart did not come
 # from the same run. See G0.
 MAX_MTIME_SPREAD_H = 6.0
+# Arms are run one at a time so peak remote disk stays bounded, so a whole campaign
+# legitimately spans many hours; only days indicate an arm left over from a previous build.
+MAX_CAMPAIGN_SPAN_H = 48.0
 
 
 class Gates:
@@ -114,26 +117,42 @@ def main() -> int:
     # two different builds of the simulator. Found the hard way: a checker run partway
     # through a pilot mixed one fresh trial with five from three days earlier, and reported
     # a confident G7 failure that was really the *previous* architecture's behaviour.
-    stamps = {}
+    # Scoped per arm, with a looser cross-arm bound. A campaign is now assembled by running
+    # arms one at a time (scripts/ccad_run_arm.sh) so that peak remote disk stays bounded, which
+    # means hours legitimately separate the first arm from the last — a data-dir-wide window
+    # would fail every such campaign. Within an arm, though, trials still come from one array
+    # job minutes apart, so a stale trial there is exactly the corruption G0 exists to catch:
+    # a mid-run check once mixed one fresh trial with five written three days earlier and
+    # reported a confident G7 failure that was really the previous architecture's behaviour.
+    all_stamps = {}
     for arm in all_arms:
+        stamps = {}
         for d in sorted((base / arm).glob("trial_*")):
             f = d / "creatures.parquet"
             if f.exists():
-                stamps[f"{arm}/{d.name}"] = f.stat().st_mtime
-    if not stamps:
-        g.check("G0", False, "no extracted trials anywhere")
-    else:
+                stamps[d.name] = f.stat().st_mtime
+        if not stamps:
+            g.check("G0", False, f"{arm}: no extracted trials")
+            continue
+        all_stamps.update({f"{arm}/{k}": v for k, v in stamps.items()})
         spread_h = (max(stamps.values()) - min(stamps.values())) / 3600.0
-        newest = max(stamps, key=stamps.get)
         oldest = min(stamps, key=stamps.get)
-        # Scoped to the whole data dir, not per arm: an arm whose trials are all equally
-        # stale is internally consistent and would pass a per-arm check while still being
-        # from a different build than the arm it is compared against — which is the
-        # comparison the entire experiment rests on.
+        newest = max(stamps, key=stamps.get)
         g.check("G0", spread_h <= MAX_MTIME_SPREAD_H,
-                f"{len(stamps)} trials across {len(all_arms)} arms span {spread_h:.1f}h"
-                + (f" — {oldest} is stale relative to {newest}; "
-                   f"delete {base} and re-run" if spread_h > MAX_MTIME_SPREAD_H else ""))
+                f"{arm}: {len(stamps)} trials span {spread_h:.1f}h"
+                + (f" — {oldest} is stale relative to {newest}; re-run the arm"
+                   if spread_h > MAX_MTIME_SPREAD_H else ""))
+
+    # Cross-arm: hours are expected, days are not — an arm left over from a previous campaign
+    # would be a different build entirely.
+    if all_stamps:
+        span_h = (max(all_stamps.values()) - min(all_stamps.values())) / 3600.0
+        g.check("G0-campaign", span_h <= MAX_CAMPAIGN_SPAN_H,
+                f"all arms span {span_h:.1f}h"
+                + (f" — {min(all_stamps, key=all_stamps.get)} predates "
+                   f"{max(all_stamps, key=all_stamps.get)} by more than "
+                   f"{MAX_CAMPAIGN_SPAN_H}h; verify they share an image"
+                   if span_h > MAX_CAMPAIGN_SPAN_H else ""))
 
     # G1 — conditioning is written on the LEGACY valuation path too (expectancy is off
     # there, so ExpectancyState records nothing and this is the only evidence).
