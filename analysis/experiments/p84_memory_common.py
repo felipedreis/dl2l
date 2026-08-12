@@ -402,6 +402,43 @@ def consolidation(episodes: pd.DataFrame, traces: pd.DataFrame, creatures: pd.Da
 # M6 — is memory helpful?
 # ---------------------------------------------------------------------------
 
+def _trend(ax, x, y, bins: int = 6) -> None:
+    """Draw the association the scatter is claiming: a binned-median trend and an OLS line.
+
+    Both, because they answer different questions and disagreeing is informative. The reported
+    statistic is Spearman — a RANK correlation, chosen because lifetime is heavily right-skewed
+    — so an OLS line alone would quietly assert a linearity the statistic never tested, and a
+    couple of long-lived outliers can swing it. The binned medians show the monotone trend
+    Spearman actually measures and are robust to those outliers.
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    ok = ~(np.isnan(x) | np.isnan(y))
+    x, y = x[ok], y[ok]
+    if len(x) < 3 or np.ptp(x) == 0:
+        return
+
+    # OLS, dashed — descriptive only.
+    slope, intercept = np.polyfit(x, y, 1)
+    xs = np.linspace(x.min(), x.max(), 50)
+    ax.plot(xs, slope * xs + intercept, ls="--", lw=1.4, color="#555555",
+            label=f"OLS (slope {slope:+.3g})", zorder=3)
+
+    # Binned medians, solid — the monotone trend Spearman tests, robust to skew.
+    edges = np.quantile(x, np.linspace(0, 1, bins + 1))
+    edges = np.unique(edges)
+    if len(edges) >= 3:
+        centres, meds = [], []
+        for lo, hi in zip(edges[:-1], edges[1:]):
+            m = (x >= lo) & (x <= hi if hi == edges[-1] else x < hi)
+            if m.sum() >= 2:
+                centres.append(np.median(x[m]))
+                meds.append(np.median(y[m]))
+        if len(centres) >= 2:
+            ax.plot(centres, meds, "-o", lw=1.8, ms=4, color="#111111",
+                    label="binned median", zorder=4)
+
+
 def memory_use_vs_survival(decisions: pd.DataFrame, creatures: pd.DataFrame, cfg) -> dict:
     """Lifetime against how much the creature actually used memory, pooled across arms.
 
@@ -448,10 +485,11 @@ def memory_use_vs_survival(decisions: pd.DataFrame, creatures: pd.DataFrame, cfg
         if len(sub) >= 3:
             rho, p = scipy_stats.spearmanr(sub[col], sub["lifetime_s"])
             stats[col] = (rho, p, len(sub))
-            ax.set_title(f"Spearman rho={rho:.3f}, p={p:.4f} (n={len(sub)}, memory-using trials)")
+            ax.set_title(f"Spearman rho={rho:.3f}, p={p:.4f} (n={len(sub)}, memory-using creatures)")
+            _trend(ax, sub[col].values, sub["lifetime_s"].values)
         ax.set_xlabel(xlabel)
         ax.set_ylabel("lifetime (s)")
-        ax.legend(fontsize=8)
+        ax.legend(fontsize=7)
         ax.grid(alpha=0.3)
 
     fig.suptitle("M6 — does using memory track survival?")

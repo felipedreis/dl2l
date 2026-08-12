@@ -43,16 +43,16 @@ Restated from the recipe because several of them determine what the results can 
 
 ## Hypothesis
 
-| ID | Claim |
-|---|---|
-| **P1** | Memory shortens the interaction interval, and the gap widens with k (Mapa Fig. 47) |
-| **P2** | With memory, RANDOM is displaced as memory engages (Campos Fig. 5/6) |
-| **P3** | Nearest and Affordances are used similarly with and without memory |
-| **P4** | Memory extends life; ratio compared against Campos's 6.7× |
-| **P5** | Time alive rises with interaction count, memory above no-memory (shape only) |
+| ID     | Claim                                                                                   |
+| ------ | --------------------------------------------------------------------------------------- |
+| **P1** | Memory shortens the interaction interval, and the gap widens with k (Mapa Fig. 47)      |
+| **P2** | With memory, RANDOM is displaced as memory engages (Campos Fig. 5/6)                    |
+| **P3** | Nearest and Affordances are used similarly with and without memory                      |
+| **P4** | Memory extends life; ratio compared against Campos's 6.7×                               |
+| **P5** | Time alive rises with interaction count, memory above no-memory (shape only)            |
 | **S1** | In the all-rewarding world the interval decreases monotonically, unlike the mixed world |
-| **D1** | Learned APPROACH share against Mapa's 0.25/0.40/0.70 |
-| **D2** | Memory forms, is increasingly used and increasingly decisive; use tracks survival |
+| **D1** | Learned APPROACH share against Mapa's 0.25/0.40/0.70                                    |
+| **D2** | Memory forms, is increasingly used and increasingly decisive; use tracks survival       |
 
 ---
 
@@ -62,11 +62,11 @@ Restated from the recipe because several of them determine what the results can 
 
 Rate, not count, because the arms terminate differently (assumption 5).
 
-| pair | no-memory | memory | Cliff's δ | creature-level | trial-level |
-|---|---|---|---|---|---|
-| legacy | 11.31 | **13.37** | +0.718 | p=4.4e-15 | p=1.5e-06 ✓ |
-| current | 73.50 | **88.68** | — | p<1e-15 | p=1.5e-06 ✓ |
-| simple | 39.07 | **41.01** | — | p=0.001 | p=0.004 ✓ |
+| pair    | no-memory | memory    | Cliff's δ | creature-level | trial-level |
+| ------- | --------- | --------- | --------- | -------------- | ----------- |
+| legacy  | 11.31     | **13.37** | +0.718    | p=4.4e-15      | p=1.5e-06 ✓ |
+| current | 73.50     | **88.68** | —         | p<1e-15        | p=1.5e-06 ✓ |
+| simple  | 39.07     | **41.01** | —         | p=0.001        | p=0.004 ✓   |
 
 All `consistent` — creature-level and trial-level agree, so this is not within-trial
 pseudo-replication.
@@ -75,11 +75,11 @@ pseudo-replication.
 
 RANDOM collapses to near zero wherever memory is enabled, and the operant table absorbs it:
 
-| pair | RANDOM (no-mem → mem) | AFFORDANCE (no-mem → mem) |
-|---|---|---|
-| legacy | 0.283 → **0.008** | 0.536 → 0.748 |
-| current | 0.668 → **0.003** | 0.228 → 0.873 |
-| simple | 0.668 → **0.048** | 0.288 → 0.773 |
+| pair    | RANDOM (no-mem → mem) | AFFORDANCE (no-mem → mem) |
+| ------- | --------------------- | ------------------------- |
+| legacy  | 0.283 → **0.008**     | 0.536 → 0.748             |
+| current | 0.668 → **0.003**     | 0.228 → 0.873             |
+| simple  | 0.668 → **0.048**     | 0.288 → 0.773             |
 
 This is Campos's central claim — random choice stops being needed once memory engages — and it
 reproduces in every pair, `consistent` at both levels.
@@ -110,11 +110,11 @@ which is P3; the collapse of red RANDOM into orange AFFORDANCE is P2.*
 
 ### P4 — confirmed in the only pair that can test it
 
-| pair | mortality | KM median | log-rank |
-|---|---|---|---|
-| legacy | 80/80 vs 80/80 | 243 s → **269 s** (1.11×) | χ²=15.8, **p=0.0001** |
-| current | 0/80 vs 0/80 | beyond cap | no events |
-| simple | 0/80 vs 0/80 | beyond cap | no events |
+| pair    | mortality      | KM median                 | log-rank              |
+| ------- | -------------- | ------------------------- | --------------------- |
+| legacy  | 80/80 vs 80/80 | 243 s → **269 s** (1.11×) | χ²=15.8, **p=0.0001** |
+| current | 0/80 vs 0/80   | beyond cap                | no events             |
+| simple  | 0/80 vs 0/80   | beyond cap                | no events             |
 
 Memory extends life, but at **1.11×** against Campos's published **6.7×** — we reproduce the
 direction, not the magnitude. The other two pairs cannot test P4 at any cap: their creatures do
@@ -203,9 +203,21 @@ deciles.*
 
 ![Memory use vs survival](figures/p84_behaviour_parity/m6_memory_use_vs_survival.png)
 
-*M6 — lifetime against how much the creature actually used memory, pooled across arms. This is
-the plot that most directly asks whether **using** memory (not merely having it) tracks
-survival, using the spread across arms as natural variation.*
+*M6 — lifetime against how much the creature actually used memory. This is the plot that most
+directly asks whether **using** memory, not merely having it, tracks survival:
+**Spearman ρ=+0.667 (count) and +0.512 (share), both p<0.0001, n=80**.*
+
+*Two trend lines, because they disagree in an informative way. The dashed OLS line is
+descriptive only — the reported statistic is Spearman, a rank correlation chosen because
+lifetime is right-skewed. The solid binned-median line shows the monotone trend Spearman
+actually tests, and it **plateaus** at roughly 2,800 influenced decisions (~0.40 of
+consultations) while OLS keeps climbing. So the benefit of using memory **saturates**: the first
+increments of memory use buy most of the extra lifetime and further use adds little. An OLS line
+alone would have implied a linear benefit that continues indefinitely.*
+
+*Scope: only `legacy_mem` contributes. M6 needs a real lifetime, and the other two memory arms
+have no deaths at all (0/80), so their `lifetime_s` is null by construction. This is the same
+restriction that limits P4, for the same reason.*
 
 M5 (consolidation) is absent: no arm enables `consolidationEnabled`, and the campaign spec has
 no `*_consol` arm. Separately, `MEMORY_CONSOLIDATION_THRESHOLD = 0.1` is unreachable at the
