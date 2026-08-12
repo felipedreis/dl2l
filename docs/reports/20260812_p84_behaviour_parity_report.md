@@ -56,6 +56,135 @@ Restated from the recipe because several of them determine what the results can 
 
 ---
 
+---
+
+## How the memory system works
+
+The results below are hard to read without knowing what a creature actually does with memory,
+so this section describes the implemented mechanism. It is the same in both stacks except where
+noted — the arms differ in which *other* filters are enabled, not in how memory itself works.
+
+### The decision chain
+
+Every cognitive cycle, `FullAppraisal` builds the set of actions the situation affords and runs
+it through a fixed cascade. `ActionSelection.selectOne` stops at the first filter that narrows
+the set to a single action, and credits that filter in `chosen_action_state`.
+
+```mermaid
+flowchart LR
+    P["perceived objects<br/>→ candidate actions"] --> AT
+    AT["ActionTendency<br/><i>legacy arms only</i><br/>keep drive-relevant actions"] --> TD
+    TD["TARGET_DISTANCE<br/>keep nearest of each<br/>(type, action)"] --> MEM
+    MEM["<b>MEMORY</b><br/>pick ONE object<br/>return all its actions"] --> AFF
+    AFF["AFFORDANCE<br/>operant table picks<br/>the action"] --> RND
+    RND["RANDOM<br/>uniform fallback"] --> A["chosen action"]
+```
+
+Two things about this order matter for the results:
+
+- **MEMORY sits before AFFORDANCE.** Memory chooses *what to engage with*; the operant table
+  chooses *what to do to it*. This is Mapa's division of labour, and the pair occupies the
+  single "Memory" slot of Campos's Algorithm 1.
+- **Memory rarely ends the chain**, because it returns *several* actions (all those targeting
+  the object it picked). AFFORDANCE almost always makes the final narrowing. This is why the
+  MEMORY share in F3 is a structural floor and not a measure of memory's influence.
+
+**Arm differences.** The legacy arms enable `ActionTendency` (Campos 2006 innate tendencies)
+and no neuromodulation. The current arms drop `ActionTendency` and enable
+neuromodulation/expectancy/orexin/endocrine — dopamine raises the AFFORDANCE softmax
+temperature and the MEMORY novelty prior. These are *not* substitutes (issue #90): tendency
+narrows the candidate set, neuromodulation only reweights within it.
+
+### How a memory is formed
+
+Memory is written in two stages — a trace at decision time, and a value later, when the outcome
+is known. `MemorySystemActor` is created *unconditionally*, so the no-memory arms form engrams
+identically and simply never consult them. That is what makes formation a matched control.
+
+```mermaid
+flowchart TD
+    A["action chosen"] --> B["ShortTermMemory laid<br/>(action, perception, emotion, cycle)"]
+    B --> C{"outcome arrives<br/>Valuation.evaluate*"}
+    C --> D["for every warm trace:<br/>gap = now − trace.cycle<br/>eligibility = e^(−λ·gap)"]
+    D --> E{"eligibility ≥ 0.01?"}
+    E -- no --> F["trace too old, skipped"]
+    E -- yes --> G["Engram(<br/>delta := emotionDelta × eligibility,<br/>eligibility, drive, objectType)"]
+    G --> H["general store<br/>(all actions)"]
+    G --> I["consummatory store<br/>(EAT/TOUCH/PLAY only)"]
+```
+
+λ = ln2 / `TRACE_DECAY_HALF_LIFE` (5 cycles), so a trace five cycles old carries half the credit
+and one older than ~33 cycles is dropped. **An engram's `emotionDelta` is measured against
+whichever drive was dominant at decision time** — the cause of issue #91.
+
+> **Eligibility is applied twice.** The stored `emotionDelta` is *already* `rawDelta ×
+> eligibility`, and `MemoryFilter` then scores `-emotionDelta × eligibility` — so the effective
+> weighting is **eligibility²**, not eligibility. Consummatory engrams have median eligibility
+> 0.08–0.22 (median gap 11–18 cycles), so this is not a rounding effect: two engrams that should
+> weigh 5:1 actually weigh 25:1, sharply over-favouring the most recent. It does not invalidate
+> the results here — every comparison in this report is between objects scored the same way — but
+> it is a real defect ([#93](https://github.com/felipedreis/dl2l/issues/93)), and the persisted
+> `engrams.emotion_delta` column carries the pre-weighted value, which any future analysis must
+> know.
+
+Both stores bound retention **per (action, object) key** at `MAX_ENGRAMS_PER_KEY = 64` rather
+than globally, so common experience expires against itself and a rare experience survives as
+long as it stays rare.
+
+### What MemoryFilter does when consulted
+
+```
+filter(candidate actions):
+  # four gates, each passing everything through to the next filter
+  1. fewer than 2 candidates                  -> pass through
+  2. consummatory store empty                 -> pass through
+  3. all candidates target the same object    -> pass through   (no object choice to make)
+
+  score[obj] = mean( -emotionDelta x eligibility )      over CONSUMMATORY engrams for obj
+                                                        (negative delta = aversive drive fell)
+
+  base  = mean of positive candidate scores, else mean |score|, else 0
+  prior = MEMORY_NOVELTY_OPTIMISM x base x (1 + DA_NOVELTY_GAIN x tanh(max(0, dopamine)))
+
+  weight[obj] = prior                          if obj unknown        (optimistic initialisation)
+              = score[obj]                     if score > 0          (Herrnstein matching)
+              = MEMORY_NEGATIVE_FLOOR x prior  if score <= 0         (punished, not excluded)
+
+  4. all weights zero                          -> pass through
+
+  sample ONE object with probability proportional to weight
+  return EVERY candidate action targeting it   -> AFFORDANCE picks the action
+```
+
+Four properties of this are load-bearing for the results:
+
+1. **Consummatory engrams only.** EAT/TOUCH/PLAY, per Mapa. Approach traces are excluded because
+   an approach's outcome depends on what happens next, so eligibility credits every recent
+   approach indiscriminately — measured, they discriminate objects at **1.09×** against EAT's
+   **6.3×**.
+2. **Sampling, not argmax.** An argmax over a store written by its own choices has a fixed point:
+   whatever wins gets reinforced and keeps winning. Both source papers are stochastic here.
+3. **Unknown beats punished.** An unexplored object carries the optimistic prior; a
+   remembered-harmful one keeps 1% of it. Campos excludes negative-valued options outright,
+   which is an absorbing state that can never be revised.
+4. **Memory returns a set, not an action.** This is what stopped it crowding out EAT, and what
+   makes AFFORDANCE absorb the selection credit in F3.
+
+### What gets recorded
+
+| table | one row per | used for |
+|---|---|---|
+| `engrams` | reinforced trace | M1, M4; `drive`/`object_type` support #91 |
+| `memory_decisions` | **consultation** | M2, M3, M6 — the honest influence rate |
+| `conditioning` | reinforcement event (6 rows, one per action) | F6 |
+| `actions` | decision, with the crediting filter | F3, F4, F3b |
+
+`memory_decisions` exists because `selection_type` cannot answer "was memory used" once memory
+stops ending the chain. `decided = returned < candidates` is the influence signal used
+throughout this report.
+
+---
+
 ## Results
 
 ### Memory raises the feeding rate in all three pairs
@@ -309,4 +438,6 @@ A null result on any of these is **not** evidence against the architecture.
 - **S1 needs a depleting single-creature arm** (`reposition = false`) to be testable at all
 - `MEMORY_CONSOLIDATION_THRESHOLD = 0.1` is **unreachable** at the current delta scale (largest
   observed group mean 0.031), so consolidation is silently dead code
+- [#93](https://github.com/felipedreis/dl2l/issues/93) — eligibility applied twice, so the
+  effective trace half-life is 2.5 cycles rather than the declared 5
 - `manifest.json` now records the image tag and commit; the ansible pipeline still does not
