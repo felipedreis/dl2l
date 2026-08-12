@@ -19,7 +19,12 @@
 # a trial that died mid-extraction still carries one (recipe §9, confirmed live).
 set -u
 COND="${1:?condition}"; EXPECTED="${2:?expected trials}"; OUT="${3:?local out dir}"
-MIN_TABLES="${4:-13}"
+# 0 = derive the expected table count from the arm itself (see below). A fixed default is
+# wrong: how many tables a trial writes depends on the ARM, because a table with no rows is
+# never created. legacy_nomem writes 13; legacy_mem_simple writes 12. Hard-coding 13 made the
+# collector reject all 16 trials of a perfectly good arm — every one complete, 65 MB, DONE —
+# because it was one table short of a number borrowed from a different arm.
+MIN_TABLES="${4:-0}"
 cd /Users/felipeduarte/IdeaProjects/dl2l || exit 1
 CU=$(grep -o 'CCAD_USERNAME=.*' .env.local | cut -d= -f2 | tr -d '" ')
 H="$CU@login.ccad.cefetmg.br"
@@ -38,8 +43,26 @@ for d in "$OUT/$COND"/trial_*; do
 done
 already() { case "$have" in *" $1 "*) return 0;; *) return 1;; esac; }
 
+# Derive the threshold from the arm's own output: the MODE of the per-trial table count over
+# trials that have finished. Trials of one arm write the same set, so the mode is that set's
+# size, and a trial short of it really is incomplete. Falls back to 1 until something finishes.
+derive_min_tables() {
+  [ "$MIN_TABLES" -gt 0 ] 2>/dev/null && return
+  local counts
+  counts=$($SSH "$H" "for t in ~/$REMOTE_BASE/trial_*; do [ -f \$t/DONE ] || continue; ls \$t/*.parquet 2>/dev/null | wc -l; done" 2>/dev/null)
+  [ -z "$counts" ] && return
+  local mode
+  mode=$(echo "$counts" | sort -n | uniq -c | sort -rn | head -1 | awk '{print $2}')
+  if [ -n "$mode" ] && [ "$mode" -gt 0 ] 2>/dev/null; then
+    MIN_TABLES="$mode"
+    echo "expected table count for $COND derived as $MIN_TABLES (mode over finished trials)"
+  fi
+}
+
 idle=0
 while [ "$collected" -lt "$EXPECTED" ]; do
+  derive_min_tables
+  [ "$MIN_TABLES" -gt 0 ] 2>/dev/null || { sleep 60; continue; }
   ready=$($SSH "$H" "for t in ~/$REMOTE_BASE/trial_*; do [ -f \$t/DONE ] || continue; n=\$(ls \$t/*.parquet 2>/dev/null | wc -l); [ \$n -ge $MIN_TABLES ] && basename \$t; done" 2>/dev/null)
   if [ -z "$ready" ]; then
     # Nothing new. If the queue is empty too, the arm is finished and whatever is missing
