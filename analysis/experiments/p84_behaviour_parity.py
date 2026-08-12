@@ -112,7 +112,7 @@ def arm_pairs(cfg) -> list:
 # Per-creature outcome table — the unit every test operates on
 # ---------------------------------------------------------------------------
 
-def per_creature_outcomes(intervals, actions, creatures) -> pd.DataFrame:
+def per_creature_outcomes(intervals, actions, creatures, mouth=None) -> pd.DataFrame:
     """One row per creature: the three quantities the parity claims are argued from."""
     keys = ["condition", "trial", "creature_key"]
 
@@ -136,8 +136,15 @@ def per_creature_outcomes(intervals, actions, creatures) -> pd.DataFrame:
     # maxRuntimeMinutes — so an EAT *count* measures "rate x observation window" and is
     # comparable only between arms sharing a window. Dividing by observed_s makes it
     # comparable everywhere, which is what any cross-pair statement must use.
-    if "observed_s" in out.columns and not intervals.empty:
-        n_eat = intervals.groupby(keys).size().rename("n_eat")
+    #
+    # Counted from `mouth`, NOT from `intervals`: the latter is truncated to max_k=MAX_K for
+    # Mapa's k=1..10 figure, so counting it caps every creature at 10. That is not merely an
+    # undercount, it INVERTS the result — both arms saturate at the cap, leaving only the
+    # observed_s denominator, and the arm that lives longer then shows the LOWER feeding rate.
+    # Caught by a dry run reporting 2.457 vs 2.245 where the true values are 11.31 vs 13.37.
+    if "observed_s" in out.columns and mouth is not None and not mouth.empty:
+        eats = mouth[mouth["interaction_type"] == "EAT"]
+        n_eat = eats.groupby(keys).size().rename("n_eat")
         out = out.merge(n_eat, on=keys, how="left")
         out["eat_per_min"] = out["n_eat"] / (out["observed_s"] / 60.0).clip(lower=1e-9)
 
@@ -579,7 +586,7 @@ def run(cfg) -> None:
     engrams = p84_memory_common.attach_engram_life_decile(engrams, creatures)
 
     intervals = interaction_intervals(mouth, creatures, max_k=MAX_K)
-    per_creature = per_creature_outcomes(intervals, actions, creatures)
+    per_creature = per_creature_outcomes(intervals, actions, creatures, mouth=mouth)
     print(f"  {len(per_creature)} creatures across {per_creature['trial'].nunique()} trials "
           f"x {len(cfg.conditions)} arms")
 
