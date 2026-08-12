@@ -84,10 +84,29 @@ RANDOM collapses to near zero wherever memory is enabled, and the operant table 
 This is Campos's central claim — random choice stops being needed once memory engages — and it
 reproduces in every pair, `consistent` at both levels.
 
+![Cumulative selections per criterion, whole life](figures/p84_behaviour_parity/f3_cumulative_selections.png)
+
+*Campos Fig. 5 equivalent. Each panel is one arm; the RANDOM curve (red) rises steadily without
+memory and flattens almost immediately with it, while AFFORDANCE (orange) takes the slope. The
+MEMORY curve (blue) stays low **by construction** — memory narrows to an object and hands the
+action choice on, so it rarely ends the filter chain and rarely takes the credit. Read memory's
+influence from M2 below, not from this curve.*
+
+![Cumulative selections, first 1000 decisions](figures/p84_behaviour_parity/f4_cumulative_first1000.png)
+
+*Campos Fig. 6 equivalent — the same curves zoomed to the first 1000 decisions, where the
+displacement of RANDOM happens. Campos reports memory taking over around interaction 150.*
+
 ### P3 — confirmed
 
 `TARGET_DISTANCE` share is essentially unchanged by memory: 0.180 → 0.176 (legacy, p=0.34),
 0.104 → 0.124 (current). Nearest is used the same way with and without memory, as Campos reports.
+
+![Criterion shares per arm](figures/p84_behaviour_parity/f3b_criterion_shares.png)
+
+*Each criterion's share of the decisions where a criterion actually chose (tendency-determined
+decisions excluded — see recipe §6). The green Nearest bars are near-identical within each pair,
+which is P3; the collapse of red RANDOM into orange AFFORDANCE is P2.*
 
 ### P4 — confirmed in the only pair that can test it
 
@@ -101,6 +120,13 @@ Memory extends life, but at **1.11×** against Campos's published **6.7×** — 
 direction, not the magnitude. The other two pairs cannot test P4 at any cap: their creatures do
 not die (#90).
 
+![Kaplan-Meier survival and mortality](figures/p84_behaviour_parity/f5_lifetime.png)
+
+*Left: survival curves. The legacy pair separates cleanly, memory above no-memory. The other four
+arms are the flat lines at S=1 — every creature outlived the observation, which is what "beyond
+cap" means in the table and why those pairs cannot test P4. Right: mortality per arm, 100% in the
+legacy pair and 0% everywhere else.*
+
 ### Diet composition — memory helps where hunger binds, and harms where it does not
 
 | arm | gray (0 cal) share | calories per EAT |
@@ -113,16 +139,78 @@ not die (#90).
 In the legacy stack memory cuts worthless-fruit intake and raises nutrition. In the current
 stack it does the opposite — see Analysis.
 
+### D1 — the learned conditioning trajectory
+
+![Normalised operant probabilities over reinforcement events](figures/p84_behaviour_parity/f6_conditioning.png)
+
+*Each action's **normalised** share of the operant table over reinforcement events, per target
+type, with reference lines at Mapa's low/medium/high initial-conditioning levels
+(0.25 / 0.40 / 0.70). Descriptive only: our conditioning mechanism evaluates experiences via
+expectancy/RPE rather than her fixed step, so divergence here is a finding rather than a defect.
+Normalised because `ActionProbability.varyProbability` clamps at 0 while the compensating
+`-delta/(n-1)` is applied unconditionally, so raw values drift off 100 — `ActionProbabilityFilter`
+normalises at selection time and this figure does the same.*
+
 ### P1, P5, S1 — not decidable in this design
 
 Mean interaction interval is flat: 2.204 vs 2.217 s (legacy, p=0.64). The simple pair shows
 2.708 vs 2.317 but reads **clustering-sensitive**, so it is not claimed.
+
+![Interval to find and eat the k-th object](figures/p84_behaviour_parity/f1_interaction_interval.png)
+
+*Mapa Fig. 47 equivalent — the average time to encounter and consume the k-th object. The only
+real structure is k=1 (~6 s, birth to first food) against a flat ~1.8–2.4 s thereafter, in every
+arm. Mapa's curve grows and oscillates across k because her world **depleted**; ours replenishes,
+so the search difficulty never changes and the curve has nothing to trend with. This is the
+figure that shows S1 is untestable here rather than refuted.*
+
+![Time alive at the k-th interaction](figures/p84_behaviour_parity/f2_time_alive.png)
+
+*Mapa Fig. 50 equivalent, shape only. Cumulative time alive against interaction count. The
+memory arm sits above its control in the legacy pair; the non-terminating arms cannot contribute
+a lifetime axis.*
 
 ### D2 — memory forms, is used, and is decisive
 
 Memory influences 27–41% of consultations in the legacy pair, 60–64% in the simple pair and
 **65–67%** in the current pair, with >90% of consultations returning more than one action —
 i.e. memory narrows to an object and leaves the action to the operant table, as designed.
+
+![Engram formation vs memory use](figures/p84_behaviour_parity/m1_formation_vs_use.png)
+
+*M1 — cumulative engrams laid (left) against cumulative memory-**influenced** decisions (right).
+Formation is a matched control: `MemorySystemActor` is created unconditionally, so the no-memory
+arms lay engrams at the same rate and simply never consult them. This is the direct test of
+Campos's "memories form from the start but are not used until ~interaction 150".*
+
+![Consultation outcome over life deciles](figures/p84_behaviour_parity/m2_consultation_outcome.png)
+
+*M2 — the honest measure of memory's influence, and the one to read instead of the MEMORY curve
+in F3. Left: how often a consultation ends in a decision rather than a pass-through. Middle:
+`scored/objects` — how much of what is in view the creature has experience of. Right:
+`returned/candidates` — how far memory narrows the choice, where 1.0 means it passed everything
+through.*
+
+![Decision confidence](figures/p84_behaviour_parity/m3_decision_confidence.png)
+
+*M3 — the winning object's value and its margin over the runner-up, per life decile. Separates
+"decided confidently on broad evidence" from "decided on one weak engram".*
+
+![Engram quality](figures/p84_behaviour_parity/m4_engram_quality.png)
+
+*M4 — eligibility, emotional delta and lay→reinforce gap of the engrams being laid, over life
+deciles.*
+
+![Memory use vs survival](figures/p84_behaviour_parity/m6_memory_use_vs_survival.png)
+
+*M6 — lifetime against how much the creature actually used memory, pooled across arms. This is
+the plot that most directly asks whether **using** memory (not merely having it) tracks
+survival, using the spread across arms as natural variation.*
+
+M5 (consolidation) is absent: no arm enables `consolidationEnabled`, and the campaign spec has
+no `*_consol` arm. Separately, `MEMORY_CONSOLIDATION_THRESHOLD = 0.1` is unreachable at the
+current delta scale (largest observed group mean 0.031), so consolidation is dead code either
+way — see Follow-ups.
 
 ---
 
@@ -199,17 +287,6 @@ A null result on any of these is **not** evidence against the architecture.
 | **S1** | **Untestable** under replenishment |
 | **D1** | Descriptive — see `f6_conditioning.png` |
 | **D2** | **Confirmed** — memory forms, is consulted, and is decisive on 27–67% of consultations |
-
----
-
-## Figures
-
-All in `docs/reports/figures/p84_behaviour_parity/`:
-
-`f1_interaction_interval.png` · `f2_time_alive.png` · `f3_cumulative_selections.png` ·
-`f3b_criterion_shares.png` · `f4_cumulative_first1000.png` · `f5_lifetime.png` ·
-`f6_conditioning.png` · `m1_formation_vs_use.png` · `m2_consultation_outcome.png` ·
-`m3_decision_confidence.png` · `m4_engram_quality.png` · `m6_memory_use_vs_survival.png`
 
 ---
 
