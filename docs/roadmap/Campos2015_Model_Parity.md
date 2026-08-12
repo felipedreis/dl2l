@@ -2,7 +2,7 @@
 
 **Primary sources** (all in `docs/bib/`):
 - **Campos (2006)** — *Dissertação de Mestrado, Luciana Campos* (`Dissertacao_Mestrado_Luciana_Versao_Final-20061124.pdf`). Origin of the ARTÍFICE architecture: the situated cognitive-emotional process, Buck's evolutionary emotion taxonomy, per-emotion **action tendencies**, affordances, behavioural efficiency.
-- **Mapa (2009)** — *Modelagem de organismos artificiais cognitivo-emocionais dotados de memória experiencial de longo prazo* (`suelenmapa.pdf`). Deep literature review; introduces **complex (derived) emotions**, the **Yerkes-Dodson/Diamond** behavioural-efficiency curves (simple vs complex tasks), the sympathetic/parasympathetic regulation loop, and the MEE/ECQ memory-valuation model.
+- **Mapa (2009)** — *Modelagem de organismos artificiais cognitivo-emocionais dotados de memória experiencial de longo prazo* (`2009_Mapa_Modelagem_Organismos_Artificiais_Memoria_Experiencial.pdf`). Deep literature review; introduces **complex (derived) emotions**, the **Yerkes-Dodson/Diamond** behavioural-efficiency curves (simple vs complex tasks), the sympathetic/parasympathetic regulation loop, and the MEE/ECQ memory-valuation model.
 - **Campos et al. (2015)** — *A concurrent, minimalist model for an embodied nervous system* (`2015_Campos_Concurrent_Minimalist_Agent.pdf`). The concise, published realisation with the Action-Selection cascade (Algorithm 1).
 
 **What we are modelling.** The target is the **cognitive-emotional process** of the ARTÍFICE lineage,

@@ -35,8 +35,9 @@ interaction relieves tedium, matching how eating relieves hunger," and added `EA
 magnitudes. Measurably insufficient both times — a forager's cycle count is dominated by
 pursuit, and each guess left a small but real net-positive drift that would still
 eventually saturate. **Also wrong**, and for a more basic reason discovered when the guessing
-was abandoned in favour of reading the source directly: Mapa's dissertation (`docs/bib/
-suelenmapa.pdf`, p.135, "Comportamentos emergentes") specifies tedium relief as **playing
+was abandoned in favour of reading the source directly: Mapa's dissertation
+(`docs/bib/2009_Mapa_Modelagem_Organismos_Artificiais_Memoria_Experiencial.pdf`, p.135,
+"Comportamentos emergentes") specifies tedium relief as **playing
 with a toy/ball**, not "any interaction":
 
 > *"do tédio quando o ASCS não interagir com brinquedos"* — tedium rises when the agent

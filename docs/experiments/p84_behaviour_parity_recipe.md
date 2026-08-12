@@ -40,7 +40,13 @@ Three source figures:
 Plus one number: Campos reports mean lifetime **1.4×10⁴ s** with memory against
 **2.1×10³ s** without — a **6.7×** ratio.
 
-Sources: `docs/bib/suelenmapa.pdf`, `docs/bib/2015_Campos_Concurrent_Minimalist_Agent.pdf`.
+Sources:
+- Mapa (2009), `docs/bib/2009_Mapa_Modelagem_Organismos_Artificiais_Memoria_Experiencial.pdf`
+- Campos et al. (2015), `docs/bib/2015_Campos_Concurrent_Minimalist_Agent.pdf`
+- Campos (2006), `docs/bib/2006_Campos_Modelagem_Processo_Cognitivo_Emocional_Dinamico_Interacionista.pdf`
+  — the dissertation `ActionTendencyFilter` and `LearningSettings.DEFAULT_ACTION_TENDENCIES`
+  cite for the innate action tendencies. Same author as the 2015 paper (Luciana Maria de Assis
+  Campos), so "Campos 2006" and "Campos 2015" in this codebase are one line of work, not two.
 
 ---
 

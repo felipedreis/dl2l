@@ -13,7 +13,7 @@ architecture still behaves like the published versions it descends from — Mapa
 Campos et al. (2015). We have neither their code nor their data, so the comparison is
 qualitative in shape and, where they published numbers, quantitative in ratio.
 
-Reading both papers back (`docs/bib/suelenmapa.pdf` §6.4–6.5,
+Reading both papers back (`docs/bib/2009_Mapa_Modelagem_Organismos_Artificiais_Memoria_Experiencial.pdf` §6.4–6.5,
 `docs/bib/2015_Campos_Concurrent_Minimalist_Agent.pdf` §V–VI) against our data path shows the
 issue actually contains **three** source figures, not two:
 

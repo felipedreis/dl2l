@@ -2,7 +2,7 @@
 
 Issues: [#88](https://github.com/felipedreis/dl2l/issues/88) (proximate bug),
 [#84](https://github.com/felipedreis/dl2l/issues/84) (the parity study that exposed it)
-Sources: `docs/bib/suelenmapa.pdf` §5.3.2, `docs/bib/2015_Campos_Concurrent_Minimalist_Agent.pdf` §III-C/III-D
+Sources: `docs/bib/2009_Mapa_Modelagem_Organismos_Artificiais_Memoria_Experiencial.pdf` §5.3.2, `docs/bib/2015_Campos_Concurrent_Minimalist_Agent.pdf` §III-C/III-D
 Supersedes the narrower `docs/plans/memoryfilter-mean-not-sum.md` (PR #89).
 
 ## Context
