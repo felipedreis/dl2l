@@ -18,6 +18,7 @@ import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
 import br.cefetmg.lsi.l2l.creature.bd.ChosenActionState;
+import br.cefetmg.lsi.l2l.creature.bd.MemoryDecisionState;
 import br.cefetmg.lsi.l2l.creature.common.Action;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.creature.common.Perception;
@@ -56,7 +57,11 @@ public class FullAppraisal extends CreatureComponent {
     private MemorySystem memorySystem;
     private WorldModelEngine worldModelEngine;
     private WorldModelFilter worldModelFilter;
+    private MemoryFilter memoryFilter;
     private ModelContract contract;
+
+    /** Orders {@link MemoryDecisionState} rows within a creature. */
+    private long memoryDecisionSeq = 0;
 
     // Neuromodulation: eventually-consistent tonic snapshots broadcast by NeuromodulatorSystem.
     private ActionProbabilityFilter affordanceFilter;
@@ -108,7 +113,10 @@ public class FullAppraisal extends CreatureComponent {
                     affordanceFilter = new ActionProbabilityFilter(creature.operantConditioning());
                     filterList.add(affordanceFilter);
                 }
-                case MEMORY          -> filterList.add(new MemoryFilter(memorySystem));
+                case MEMORY          -> {
+                    memoryFilter = new MemoryFilter(memorySystem);
+                    filterList.add(memoryFilter);
+                }
                 case WORLD_MODEL     -> {
                     if (worldModelAvailable) {
                         worldModelFilter = new WorldModelFilter(worldModelEngine, contract);
@@ -201,8 +209,10 @@ public class FullAppraisal extends CreatureComponent {
      *
      * <p>Before selection the JEPA world model (if loaded) is supplied with the creature's
      * current homeostatic state so the internal encoder can condition predictions on it.
-     * The affordance filter is re-modulated by the latest dopamine and serotonin tonics so
-     * neuromodulation influences the exploration-exploitation balance at selection time.
+     * The affordance and memory filters are re-modulated by the latest neuromodulator tonics so
+     * neuromodulation influences the exploration-exploitation balance at selection time: dopamine
+     * raises the affordance softmax temperature, and makes unexplored objects more attractive to
+     * the memory filter.
      * The orexin gate in {@link #definePossibleActions} removes SLEEP from the candidate
      * set when the creature is too alert, ensuring sleep is only possible under genuine
      * sleep pressure.
@@ -211,8 +221,13 @@ public class FullAppraisal extends CreatureComponent {
         if (worldModelFilter != null) {
             worldModelFilter.updateInternalState(encodeInternalState());
         }
-        if (learningSettings.isNeuromodulationEnabled() && affordanceFilter != null) {
-            affordanceFilter.setModulation(daTonic, serotoninTonic);
+        if (learningSettings.isNeuromodulationEnabled()) {
+            if (affordanceFilter != null) {
+                affordanceFilter.setModulation(daTonic, serotoninTonic);
+            }
+            if (memoryFilter != null) {
+                memoryFilter.setModulation(daTonic);
+            }
         }
         List<Action> possibleActions = definePossibleActions(emotional.getPerceptions());
         return actionSelection.selectOne(possibleActions, emotional.getMaxEmotion());
@@ -311,6 +326,22 @@ public class FullAppraisal extends CreatureComponent {
                 actionSelection.getLastUsedFilterType(), action.type, action.perception.id,
                 inferenceMs);
         persist(change, chosenActionState);
+        persistMemoryDecision();
+    }
+
+    /**
+     * Logs what the episodic-memory filter had to go on this cycle, if it was consulted at all.
+     * {@code takeLastDecision()} clears the record, so a cycle where an earlier filter decided on
+     * its own (and memory therefore never ran) writes nothing rather than re-logging a stale one.
+     */
+    private void persistMemoryDecision() {
+        if (memoryFilter == null) return;
+        memoryFilter.takeLastDecision().ifPresent(d -> persist(new MemoryDecisionState(
+                id.key, memoryDecisionSeq++, System.currentTimeMillis(),
+                memorySystem.currentDecisionCycle(),
+                d.engramWindow(), d.candidates(), d.objects(), d.scored(), d.returned(),
+                d.winningScore(), d.runnerUpScore(), d.decided(),
+                d.objectType(), d.target())));
     }
 
     private static final class SleepEpisode {

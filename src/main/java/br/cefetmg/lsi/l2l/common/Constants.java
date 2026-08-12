@@ -91,6 +91,15 @@ public interface Constants {
     int CONSOLIDATION_WINDOW = 128;
 
     int MEMORY_FILTER_WINDOW = 256;
+    // Engrams retained per (action, object) key, in BOTH engram stores. Bounding per key rather
+    // than globally is what stops the commonest behaviour from evicting the rarest evidence: a
+    // flat FIFO's composition converges on whatever the creature does most, which is exactly what
+    // carries the least information (p84 pilot: 116,501 APPROACH-on-GRAY engrams discriminating
+    // objects at 1.09x, against 1,021 EAT-on-GRAY engrams discriminating at 6.3x).
+    //
+    // 64 x the ~14 keys a mixed world produces lands near the 1000 the flat store used to hold,
+    // so total footprint is unchanged; what changes is its composition.
+    int MAX_ENGRAMS_PER_KEY = 64;
 
     double MEMORY_CONSOLIDATION_THRESHOLD = 0.1;
 
@@ -171,6 +180,25 @@ public interface Constants {
     double DA_EXPLORATION_GAIN = 2.0;
     // Tonic serotonin up-weights quieting actions (SLEEP/OBSERVE/WANDER): factor = 1 + gain·satiety.
     double SEROTONIN_REST_GAIN = 1.0;
+    // Tonic dopamine makes unexplored objects more attractive to MemoryFilter:
+    // prior *= 1 + gain·tanh(daTonic). Coupled to the novelty PRIOR rather than to a sampling
+    // temperature: a temperature flattens everything, including options remembered as harmful,
+    // whereas the dopaminergic finding (Bunzeck & Duzel 2006) is that novelty is itself rewarding.
+    double DA_NOVELTY_GAIN = 1.0;
+
+    // --- MemoryFilter object valuation (see docs/plans/memory-architecture-mapa-campos-synthesis.md) ---
+    // How attractive a never-encountered object is, as a multiple of the mean value of the
+    // known-good objects currently in view. 1.0 = "assume an unknown object is as good as the
+    // average thing that has worked out so far" — optimistic initialisation. Expressed as a ratio
+    // rather than an absolute so it needs no calibration against the engram value scale, and so
+    // that when nothing is known the weights are equal and selection degenerates to uniform
+    // (which is exactly Campos's Random() fall-through, without a special case).
+    double MEMORY_NOVELTY_OPTIMISM = 1.0;
+    // Weight retained by an object remembered as harmful, as a fraction of the novelty prior.
+    // Campos excludes negative-valued options outright; that is an absorbing state which can never
+    // be revised if the world changes. A small floor keeps his ordering in practice (an unknown
+    // object is 100x likelier than a punished one) while leaving a path back.
+    double MEMORY_NEGATIVE_FLOOR = 0.01;
 
     // --- Tedium as a reward-absence affect (regulated by the neuromodulator system) ---
     // Passive boredom accrual per cognitive cycle when no reward arrives. Kept below the metabolic

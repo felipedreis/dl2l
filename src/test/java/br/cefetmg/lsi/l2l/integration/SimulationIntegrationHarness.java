@@ -100,18 +100,15 @@ public final class SimulationIntegrationHarness implements AutoCloseable {
         Cluster cluster = Cluster.get(system);
         cluster.join(cluster.selfAddress());
 
-        // The holder is created last, and only after a settle, because its registration is
-        // what triggers SimulationManager.startSimulation(). The manager does not wait for
-        // the idProvider - it starts as soon as the expected holder count is reached (after
-        // a fixed 5 s sleep), and then asks whatever is in its idProvider field for creature
-        // ids. If registration has not landed by then that field is null and the whole run
-        // dies with "question not sent to [null]". SequentialIdProvider.handleNewMember makes
-        // this worse by blocking its own dispatcher thread on a 5 s Await while resolving
-        // /user/manager. In deployment the roles are separate JVMs started seconds apart
-        // (scripts/manager.sh, then provider, detector, holder), which hides the race; in one
-        // JVM this settle plus the manager's own 5 s sleep reproduces that ordering. The
-        // underlying startup race is a production fragility in its own right, not something
-        // this harness can fix.
+        // The holder is created last, and after a settle, so this harness boots in the same
+        // order deployment does. It is no longer load-bearing: the manager used to start as
+        // soon as the expected holder count was reached (after a fixed 5 s sleep) and then ask
+        // whatever was in its idProvider field for ids, so losing that race killed the run with
+        // "question not sent to [null]". SimulationManager.maybeStartSimulation now waits for
+        // every role it depends on, and SimulationManagerStartupTest pins both orderings. The
+        // settle stays because SequentialIdProvider.handleNewMember still blocks its own
+        // dispatcher thread on a 5 s Await while resolving /user/manager, which is a separate
+        // fragility this harness cannot fix.
         sleep(1000);
         system.actorOf(Props.create(Holder.class, simulation, saveDir.toString())
                 .withDispatcher("cluster-dispatcher"), "holder");

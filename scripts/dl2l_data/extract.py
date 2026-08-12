@@ -75,22 +75,41 @@ def _open_raw_views(raw_dir: Path):
 
     for path in arrow_files:
         table = path.stem
+        # A trial killed mid-batch (watchdog halt, OOM, SIGKILL, disk quota) truncates the
+        # stream after its last complete record batch by design - ArrowStreamWriter never
+        # seeks back to patch a footer. Batches are read ONE AT A TIME and the truncated tail
+        # discarded, so a killed trial yields everything that was flushed.
+        #
+        # read_all() cannot do this: it raises on the partial trailing batch and loses the
+        # whole file. That cost most of a CCAD campaign - a 1.8 GB dump with 14 intact tables
+        # aborted extraction outright with "Expected to be able to read 534192 bytes for
+        # message body, got 187360". Note the exception is OSError, not ArrowInvalid, so the
+        # previous handler did not even catch it.
+        batches = []
+        schema = None
         try:
-            # RecordBatchStreamReader.read_all() deserializes into owned buffers (unlike
-            # the random-access File format's zero-copy reads), so the memory map need not
+            # RecordBatchStreamReader deserializes into owned buffers (unlike the
+            # random-access File format's zero-copy reads), so the memory map need not
             # outlive this call.
             with pa.memory_map(str(path), "r") as source:
-                arrow_table = pa.ipc.open_stream(source).read_all()
-        except pa.lib.ArrowInvalid as e:
-            # A trial killed mid-batch (watchdog halt, OOM, SIGKILL) truncates the stream
-            # after its last complete record batch by design (ArrowStreamWriter never
-            # seeks back to patch a footer) - pyarrow.ipc.open_stream still reads every
-            # complete batch before the truncation point, so this only fires for a file
-            # with literally zero valid batches (e.g. killed before the schema message
-            # itself was flushed). Treat as an empty/missing table, not a hard failure.
-            print(f"  WARNING: {path.name} unreadable ({e}) - "
-                  f"treating data.{table} as missing", file=sys.stderr)
-            continue
+                reader = pa.ipc.open_stream(source)
+                schema = reader.schema
+                while True:
+                    try:
+                        batches.append(reader.read_next_batch())
+                    except StopIteration:
+                        break
+        except (pa.lib.ArrowInvalid, OSError) as e:
+            if schema is None:
+                # Killed before even the schema message was flushed - nothing to salvage.
+                print(f"  WARNING: {path.name} unreadable ({e}) - "
+                      f"treating data.{table} as missing", file=sys.stderr)
+                continue
+            print(f"  NOTE: {path.name} truncated - kept {len(batches)} complete "
+                  f"batch(es), discarded the partial tail", file=sys.stderr)
+
+        arrow_table = pa.Table.from_batches(batches, schema) if batches \
+            else schema.empty_table()
         # DuckDB scans a registered Arrow object zero-copy (no data duplicated into
         # DuckDB's own storage) and keeps its own reference for the registration's
         # lifetime - no extra keep-alive bookkeeping needed here.

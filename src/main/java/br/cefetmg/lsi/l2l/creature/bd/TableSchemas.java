@@ -230,9 +230,12 @@ public final class TableSchemas {
                 col("action_type", ColType.STRING, (EngramState eg) -> eg.getActionType() != null ? eg.getActionType().name() : null),
                 col("creature_key", ColType.INT64, EngramState::getCreatureKey),
                 col("cycle_gap", ColType.INT64, EngramState::getCycleGap),
+                col("drive", ColType.STRING, EngramState::getDrive),
+                col("drive_level", ColType.DOUBLE, EngramState::getDriveLevel),
                 col("eligibility", ColType.DOUBLE, EngramState::getEligibility),
                 col("emotion_delta", ColType.DOUBLE, EngramState::getEmotionDelta),
                 col("lay_cycle", ColType.INT64, EngramState::getLayCycle),
+                col("object_type", ColType.STRING, EngramState::getObjectType),
                 col("reinforced_cycle", ColType.INT64, EngramState::getReinforcedCycle))));
 
         all.add(table("sleep_episode_state", SleepEpisodeState.class, SleepEpisodeState::getId, List.of(
@@ -288,6 +291,40 @@ public final class TableSchemas {
                 col("creature_key", ColType.INT64, EndocrineStateLog::getCreatureKey),
                 col("seq", ColType.INT64, EndocrineStateLog::getSeq),
                 col("stress_level", ColType.DOUBLE, EndocrineStateLog::getStressLevel))));
+
+        // --- Added after the ParquetBackend port (issue #84). Appended rather than slotted in
+        // next to their thematic neighbours so the 22 ported tables above stay a contiguous,
+        // verbatim block - see TableSchemasTest, which golden-checks them separately.
+
+        all.add(table("action_probability_state", ActionProbabilityState.class, ActionProbabilityState::getId, List.of(
+                col("action", ColType.STRING, (ActionProbabilityState ap) ->
+                        ap.getAction() != null ? ap.getAction().name() : null),
+                col("creature_key", ColType.INT64, ActionProbabilityState::getCreatureKey),
+                col("cycle", ColType.INT64, ActionProbabilityState::getCycle),
+                col("delta", ColType.DOUBLE, ActionProbabilityState::getDelta),
+                col("probability", ColType.DOUBLE, ActionProbabilityState::getProbability),
+                col("reinforced_action", ColType.STRING, (ActionProbabilityState ap) ->
+                        ap.getReinforcedAction() != null ? ap.getReinforcedAction().name() : null),
+                col("seq", ColType.INT64, ActionProbabilityState::getSeq),
+                col("target", ColType.STRING, ActionProbabilityState::getTarget),
+                col("time_ms", ColType.INT64, ActionProbabilityState::getTimeMs))));
+
+        all.add(table("memory_decision_state", MemoryDecisionState.class, MemoryDecisionState::getId, concat(
+                List.of(
+                        col("candidates", ColType.INT32, MemoryDecisionState::getCandidates),
+                        col("creature_key", ColType.INT64, MemoryDecisionState::getCreatureKey),
+                        col("cycle", ColType.INT64, MemoryDecisionState::getCycle),
+                        col("decided", ColType.BOOLEAN, MemoryDecisionState::isDecided),
+                        col("engram_window", ColType.INT32, MemoryDecisionState::getEngramWindow),
+                        col("object_type", ColType.STRING, MemoryDecisionState::getObjectType),
+                        col("objects", ColType.INT32, MemoryDecisionState::getObjects),
+                        col("returned", ColType.INT32, MemoryDecisionState::getReturned),
+                        col("runnerup_score", ColType.DOUBLE, MemoryDecisionState::getRunnerUpScore),
+                        col("scored", ColType.INT32, MemoryDecisionState::getScored),
+                        col("seq", ColType.INT64, MemoryDecisionState::getSeq),
+                        col("time_ms", ColType.INT64, MemoryDecisionState::getTimeMs),
+                        col("winning_score", ColType.DOUBLE, MemoryDecisionState::getWinningScore)),
+                seqCols("key", "sequential", MemoryDecisionState::getTarget))));
 
         return List.copyOf(all);
     }

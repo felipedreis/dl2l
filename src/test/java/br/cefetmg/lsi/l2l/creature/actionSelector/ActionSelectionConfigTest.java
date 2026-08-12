@@ -92,11 +92,17 @@ public class ActionSelectionConfigTest {
     // -----------------------------------------------------------------------
 
     @Test
-    void master_order_is_target_distance_affordance_memory_world_model_random() {
+    void master_order_is_target_distance_memory_affordance_world_model_random() {
+        // Campos et al. (2015) Algorithm 1: excludeIdenticalTargets → Memory → Random, with the
+        // operant mechanism inside the Memory step. We keep memory and the operant table as
+        // separate filters so memory's contribution stays measurable, so his single Memory slot is
+        // the MEMORY → AFFORDANCE pair here: memory picks the object, the operant table picks the
+        // action (Mapa 2009 §5.3.2). TARGET_DISTANCE stays first so memory scores one instance
+        // per object type.
         List<ActionSelectionType> expected = List.of(
                 ActionSelectionType.TARGET_DISTANCE,
-                ActionSelectionType.AFFORDANCE,
                 ActionSelectionType.MEMORY,
+                ActionSelectionType.AFFORDANCE,
                 ActionSelectionType.WORLD_MODEL,
                 ActionSelectionType.RANDOM
         );

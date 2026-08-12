@@ -12,7 +12,12 @@
   ansible.builtin.command:
     argv:
       - sbatch
-      - "--array=1-{{ experiment_cfg.trials }}"
+      # %N caps how many array tasks run at once. Each in-flight trial holds its raw dump
+      # AND the raw_backup copy of it on the quota-limited $HOME, so peak usage is
+      # concurrency x 2 x per-trial size — 16 concurrent x 1.9 GB x 2 = ~60 GB against ~23 GB
+      # of headroom is what lost the 2026-08-11 campaign twice. Capping this bounds peak only
+      # when completed trials are also removed; scripts/ccad_collect.sh does that.
+      - "--array=1-{{ experiment_cfg.trials }}{% if ccad_max_concurrent_trials | default(0) | int > 0 %}%{{ ccad_max_concurrent_trials }}{% endif %}"
       - "{{ remote_work_dir }}/jobs/run_trial_{{ experiment_cfg.name }}_{{ cond.key }}.sh"
   register: _submit
   changed_when: true

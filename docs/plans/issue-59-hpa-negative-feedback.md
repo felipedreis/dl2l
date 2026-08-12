@@ -2,7 +2,7 @@
 
 ## Context
 
-The p59 validation run (see `docs/reports/EXP_P59_OREXIN_ENDOCRINE.md`) confirmed the **orexin gate** works (mean orexin 32.4 ≈ fixed point; SLEEP suppressed to 0.019%) but showed the **cortisol/HPA axis is pathologically miscalibrated**: mean cortisol 40.2 (13× the 3.0 stress threshold) and STRESS pinned at MAX (7.0) from early in the run.
+The p59 validation run (see `docs/reports/20260708_p59_orexin_endocrine_report.md`) confirmed the **orexin gate** works (mean orexin 32.4 ≈ fixed point; SLEEP suppressed to 0.019%) but showed the **cortisol/HPA axis is pathologically miscalibrated**: mean cortisol 40.2 (13× the 3.0 stress threshold) and STRESS pinned at MAX (7.0) from early in the run.
 
 Root causes, confirmed in code:
 
@@ -92,7 +92,7 @@ Rewrite **Component 2 — Cortisol**: document negative-feedback synthesis, smoo
    - Figure 1(d): STRESS is near floor except during genuine deprivation episodes, not pinned at MAX.
    - Summary: mean cortisol in single digits; max stress < MAX.
    - Orexin/SLEEP results should be unchanged (H1/H2 still confirmed).
-5. **Report:** append a "v2 (HPA recalibration)" section to `docs/reports/EXP_P59_OREXIN_ENDOCRINE.md` with the before/after cortisol figures.
+5. **Report:** append a "v2 (HPA recalibration)" section to `docs/reports/20260708_p59_orexin_endocrine_report.md` with the before/after cortisol figures.
 6. **HuggingFace:** upload the new run under `p59/` (append; never discard the prior run's data).
 
 ## Out of scope

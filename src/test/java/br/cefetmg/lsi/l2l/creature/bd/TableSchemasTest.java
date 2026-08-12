@@ -7,26 +7,44 @@ import org.junit.jupiter.api.Test;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Golden-parity test for {@link TableSchemas} against the 22-table/column-list shape it
- * replaced (the former {@code ParquetBackend.TABLE_COLUMNS} + {@code DEHYDRATOR} switch,
- * {@code BDActor.tableFor()}'s switch, and {@code PersistenceExtension.Impl.TABLES} - see
- * docs/plans/arrow-ipc-write-path.md, W1). The expected table/column shape below is transcribed
- * from that code (still visible in git history at the commit before this file was added) - a
- * change here should be treated as a real schema change, not a routine test update.
+ * Golden-parity test for {@link TableSchemas}. The 22 ported tables are checked against the
+ * table/column-list shape they replaced (the former {@code ParquetBackend.TABLE_COLUMNS} +
+ * {@code DEHYDRATOR} switch, {@code BDActor.tableFor()}'s switch, and
+ * {@code PersistenceExtension.Impl.TABLES} - see docs/plans/arrow-ipc-write-path.md, W1). Their
+ * expected shape below is transcribed from that code (still visible in git history at the commit
+ * before this file was added) - a change there should be treated as a real schema change, not a
+ * routine test update.
+ *
+ * <p>Tables added since the port are listed separately in {@link #ADDED_SINCE_PORT} and appended
+ * after the ported block, so "we deliberately added a table" and "the ported schema drifted" stay
+ * distinguishable failures.
  */
 class TableSchemasTest {
 
-    private static final List<String> EXPECTED_TABLE_ORDER = List.of(
+    /** The 22 tables transcribed from ParquetBackend. This block must never change. */
+    private static final List<String> PORTED_TABLE_ORDER = List.of(
             "change_stimulus_state", "stimulus_state", "creature_state", "emotional_state",
             "internal_dynamic_state", "eye_state", "object_seen_state", "mouth_interactions_state",
             "nose_state", "object_smelt_state", "chosen_action_state", "body_state",
             "behavioural_efficiency_state", "regulation_batch_stat", "engram_state",
             "sleep_episode_state", "consolidation_episode_stat", "consolidation_batch_stat",
             "memory_trace_stat", "expectancy_state", "neuromodulator_state_log", "endocrine_state_log");
+
+    /**
+     * Tables added after the port, appended in {@code buildAll()} so the ported block above stays
+     * contiguous. Growing this list is a deliberate schema change; changing
+     * {@link #PORTED_TABLE_ORDER} is a regression.
+     */
+    private static final List<String> ADDED_SINCE_PORT = List.of(
+            "action_probability_state", "memory_decision_state");
+
+    private static final List<String> EXPECTED_TABLE_ORDER =
+            Stream.concat(PORTED_TABLE_ORDER.stream(), ADDED_SINCE_PORT.stream()).toList();
 
     /** Non-"id" column names, in order, per table - mirrors ParquetBackend's old TABLE_COLUMNS. */
     private static final Map<String, List<String>> EXPECTED_COLUMNS = expectedColumns();
@@ -59,8 +77,8 @@ class TableSchemasTest {
                 "perceivedobjects", "changestimulusstate_id"));
         t.put("regulation_batch_stat", List.of("batchsize", "drivestouchedmask", "regulatingcount",
                 "samedrivecollision", "changestimulusstate_id"));
-        t.put("engram_state", List.of("action_type", "creature_key", "cycle_gap", "eligibility", "emotion_delta",
-                "lay_cycle", "reinforced_cycle"));
+        t.put("engram_state", List.of("action_type", "creature_key", "cycle_gap", "drive", "drive_level",
+                "eligibility", "emotion_delta", "lay_cycle", "object_type", "reinforced_cycle"));
         t.put("sleep_episode_state", List.of("creature_key", "duration_ticks", "onset_cycle", "wake_cycle"));
         t.put("consolidation_episode_stat", List.of("aborted", "batches_completed", "creature_key",
                 "engram_count", "mean_eligibility", "onset_cycle", "std_eligibility"));
@@ -72,6 +90,12 @@ class TableSchemasTest {
         t.put("neuromodulator_state_log", List.of("circadian_phase", "creature_key", "dopamine", "orexin", "seq",
                 "serotonin"));
         t.put("endocrine_state_log", List.of("cortisol_tonic", "creature_key", "seq", "stress_level"));
+        // Added since the port (issue #84).
+        t.put("action_probability_state", List.of("action", "creature_key", "cycle", "delta",
+                "probability", "reinforced_action", "seq", "target", "time_ms"));
+        t.put("memory_decision_state", List.of("candidates", "creature_key", "cycle",
+                "decided", "engram_window", "object_type", "objects", "returned",
+                "runnerup_score", "scored", "seq", "time_ms", "winning_score", "key", "sequential"));
         return t;
     }
 
@@ -97,13 +121,16 @@ class TableSchemasTest {
             Map.entry("memory_trace_stat", MemoryTraceStat.class),
             Map.entry("expectancy_state", ExpectancyState.class),
             Map.entry("neuromodulator_state_log", NeuromodulatorStateLog.class),
-            Map.entry("endocrine_state_log", EndocrineStateLog.class));
+            Map.entry("endocrine_state_log", EndocrineStateLog.class),
+            Map.entry("action_probability_state", ActionProbabilityState.class),
+            Map.entry("memory_decision_state", MemoryDecisionState.class));
 
     @Test
-    void has22TablesInDependencyIrrelevantOrder() {
-        assertEquals(22, TableSchemas.ALL.size());
+    void tablesAreThePorted22FollowedByAnyLaterAdditions() {
         List<String> actualOrder = TableSchemas.ALL.stream().map(TableSchemas.TableDef::table).toList();
         assertEquals(EXPECTED_TABLE_ORDER, actualOrder);
+        assertEquals(PORTED_TABLE_ORDER, actualOrder.subList(0, PORTED_TABLE_ORDER.size()),
+                "the 22 tables ported from ParquetBackend must stay a contiguous, unchanged prefix");
     }
 
     @Test

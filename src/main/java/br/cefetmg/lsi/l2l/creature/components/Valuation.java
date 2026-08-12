@@ -2,10 +2,14 @@ package br.cefetmg.lsi.l2l.creature.components;
 
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.common.SequentialId;
+import br.cefetmg.lsi.l2l.creature.bd.ActionProbabilityState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
 import br.cefetmg.lsi.l2l.creature.bd.EngramState;
 import br.cefetmg.lsi.l2l.creature.bd.ExpectancyState;
+import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
+import br.cefetmg.lsi.l2l.creature.common.ActionType;
+import br.cefetmg.lsi.l2l.creature.conditioning.ActionProbability;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
 import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyContext;
 import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyPredictor;
@@ -15,6 +19,7 @@ import br.cefetmg.lsi.l2l.creature.memory.ShortTermMemory;
 import br.cefetmg.lsi.l2l.stimuli.DopaminergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.EvaluationStimulus;
 import br.cefetmg.lsi.l2l.stimuli.Stimulus;
+import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -37,6 +42,9 @@ public class Valuation extends CreatureComponent {
     private ExpectancyPredictor expectancy;
 
     private MemorySystem memorySystem;
+
+    /** Orders {@link ActionProbabilityState} events within a cycle, which can hold several. */
+    private long conditioningSeq = 0;
 
     public Valuation(SequentialId id, LearningSettings learningSettings) {
         super(id);
@@ -85,6 +93,7 @@ public class Valuation extends CreatureComponent {
                 evaluation.arousalVariation, valence ? "positive" : "negative"));
 
         operantConditioning.varyProbability(evaluation.type, evaluation.executedAction, 1, valence);
+        persistConditioning(evaluation.type, evaluation.executedAction, valence ? 1 : -1);
 
         List<Engram> produced = memorySystem.reinforceWarmTraces(
                 evaluation.arousalVariation, memorySystem.currentDecisionCycle());
@@ -117,6 +126,8 @@ public class Valuation extends CreatureComponent {
         // Graded reinforcement: magnitude |rpe|, direction from the sign of the surprise.
         operantConditioning.varyProbability(
                 evaluation.type, evaluation.executedAction, Math.abs(rpe), rpe > 0);
+        persistConditioning(evaluation.type, evaluation.executedAction,
+                rpe > 0 ? Math.abs(rpe) : -Math.abs(rpe));
 
         List<Engram> produced = memorySystem.reinforceWarmTraces(
                 -rpe, memorySystem.currentDecisionCycle());
@@ -128,10 +139,40 @@ public class Valuation extends CreatureComponent {
                 expected, reward, rpe));
     }
 
+    /**
+     * Snapshots the affected target's whole action-probability table right after it changed —
+     * one {@link ActionProbabilityState} per action, all in a single {@code persist(...)} call so
+     * the six rows always land in one batch. Called from both evaluation paths: the legacy one
+     * writes no {@link ExpectancyState}, so this is the only record of conditioning the
+     * legacy-minimal experiment arms produce.
+     *
+     * <p>Only the evaluated target is written. The other targets' tables are untouched by this
+     * event, so re-emitting them would be pure duplication — readers forward-fill instead.
+     */
+    private void persistConditioning(WorldObjectType target, ActionType reinforced, double delta) {
+        List<ActionProbability> probabilities = operantConditioning.getProbabilities(target).orElse(null);
+        if (probabilities == null || probabilities.isEmpty()) return;
+
+        long seq = conditioningSeq++;
+        long cycle = memorySystem.currentDecisionCycle();
+        long now = System.currentTimeMillis();
+
+        PersistenceState[] rows = new PersistenceState[probabilities.size()];
+        for (int i = 0; i < probabilities.size(); i++) {
+            ActionProbability ap = probabilities.get(i);
+            rows[i] = new ActionProbabilityState(id.key, seq, now, cycle, target.name(),
+                    ap.getAction(), ap.getProbability(), reinforced, delta);
+        }
+        persist(rows);
+    }
+
     private void persistEngrams(List<Engram> produced) {
         for (Engram e : produced) {
             persist(new EngramState(id.key, e.actionType(), e.layCycle(), e.reinforcedCycle(),
-                    e.reinforcedCycle() - e.layCycle(), e.eligibility(), e.emotionDelta()));
+                    e.reinforcedCycle() - e.layCycle(), e.eligibility(), e.emotionDelta(),
+                    e.perception() != null ? e.perception().objectType.getOrElse(null) : null,
+                    e.emotionAtDecision() != null ? e.emotionAtDecision().getName() : null,
+                    e.emotionAtDecision() != null ? e.emotionAtDecision().getLevel() : Double.NaN));
         }
     }
 }

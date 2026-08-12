@@ -195,7 +195,7 @@ New package `creature/conditioning/expectancy/`:
 4. **Experiment (CLAUDE.md §5 protocol):** 3 arms (baseline / discrete / continuous), n=50 each.
    Extract via `python3 scripts/pg_extract.py`. Analyse: prediction MSE (expected vs reward),
    RPE convergence, mean lifetime, action-selection distribution vs Campos/2015 Fig 4.
-   Report `docs/reports/issue-57-neuromodulatory-expectancy.md` (Purpose, Assumptions, Hypothesis,
+   Report `docs/reports/20260707_p57_neuromodulatory_expectancy_report.md` (Purpose, Assumptions, Hypothesis,
    Results, Analysis + figures). Upload all data to HF `felipedreis/dl2l-experiments` under `p57/`.
 
 **Hypotheses:** (H1) CONTINUOUS achieves lower prediction MSE than DISCRETE (captures magnitude);

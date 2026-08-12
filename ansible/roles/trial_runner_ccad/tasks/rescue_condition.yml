@@ -12,6 +12,14 @@
     mode: pull
     src: "{{ remote_work_dir }}/data/{{ experiment_cfg.name }}/{{ cond.key }}/"
     dest: "{{ experiment_data_dir }}/{{ cond.key }}/"
+  # CONFIRMED LIVE: a condition whose array tasks are still queued (e.g. throttled by
+  # QOSMaxCpuPerUserLimit while an earlier condition's tasks occupy the whole per-user CPU
+  # quota) has no remote directory at all yet — the first trial's own run_trial.sh.j2 is
+  # what creates it, and DONE-sentinel-checking above tolerates that (stat on a missing
+  # path just reports absent), but this rsync doesn't. Mirrors the same guard the
+  # experiment-level manifest.json sync below already has, and for the same reason: "not
+  # there yet" is the expected, common case on an early rescue check, not a real failure.
+  failed_when: false
 
 - name: "Report status for {{ cond.key }}"
   ansible.builtin.debug:
