@@ -58,6 +58,118 @@ Restated from the recipe because several of them determine what the results can 
 
 ---
 
+---
+
+## Experimental design
+
+### Arms
+
+Six arms, three matched pairs. **Within a pair the only difference is the MEMORY filter** —
+every comparison in this report is read within a pair, never across them.
+
+| | `legacy_nomem` | `legacy_mem` | `current_nomem` | `current_mem` | `legacy_nomem_simple` | `legacy_mem_simple` |
+|---|---|---|---|---|---|---|
+| **MEMORY filter** | ✗ | **✓** | ✗ | **✓** | ✗ | **✓** |
+| filter chain | TD→AFF→RND | TD→**MEM**→AFF→RND | TD→AFF→RND | TD→**MEM**→AFF→RND | TD→AFF→RND | TD→**MEM**→AFF→RND |
+| actionTendency | ✓ | ✓ | ✗ | ✗ | ✓ | ✓ |
+| neuromodulation | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ |
+| expectancy | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ |
+| circadian | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ |
+| orexin / endocrine | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ |
+| consolidation | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| world | mixed | mixed | mixed | mixed | **simple** | **simple** |
+| runtime cap | 120 min | 120 min | 30 min | 30 min | 30 min | 30 min |
+
+No arm enables `WORLD_MODEL` — neither source architecture has one — and none enables
+consolidation, which is why M5 is absent.
+
+**Worlds.** Both are 1923 × 1610 px with 5 creatures and replenishment on
+(`reposition = true`), holding Campos's published densities: 6,192 px² per object and
+619,200 px² per creature.
+
+| world | RED (0.2 cal) | GREEN (0.5 cal) | GRAY (**0 cal**) |
+|---|---|---|---|
+| **mixed** | 100 | 100 | **300** |
+| **simple** | 250 | 250 | — |
+
+The mixed world is Campos's 20/20/60 ratio, where 60% of the food is worthless — that is what
+makes diet composition a measurable outcome. The simple world removes `GRAY_APPLE` so every
+interaction is rewarding, which is Mapa's stated explanation for Silva's (2008) monotonically
+decreasing interval curve.
+
+**Why the caps differ.** The legacy pair terminates on its own — creatures die at ~250 s, well
+inside 120 min. The other four do not: on the reworked build their creatures never die, so a
+120-minute trial costs 3.6 GB and an arm costs 58 GB against a ~35 GB quota at the time. They
+were capped at 30 min, which **right-censors** them rather than observing them to death.
+Kaplan-Meier and log-rank handle that directly, and nothing claimable is lost, because each of
+those arms' partners never dies at *any* cap (issue #90). Both members of every pair share a
+cap, so within-pair comparisons remain valid.
+
+### How many runs
+
+**16 trials per arm × 5 creatures = 80 creatures per arm, 480 in total, 96 trials.**
+
+`trials = 16` was set from the pilot's own effect sizes rather than chosen: at α=0.05,
+power=0.80 and 5 creatures/trial, lifetime needed 5 trials and P2's RANDOM late/early ratio
+needed 15 — the largest tractable requirement. (P1's interaction interval needed 134, which is
+a statement about the size of that effect, not a sizing failure.)
+
+The creature is the replication unit, but creatures within a trial share a world, a food supply
+and an RNG stream. Every primary test is therefore run **twice** — at creature level (n=80/arm,
+all the data) and at trial level (n=16/arm, immune to clustering but low-powered) — and a
+result is reported as real only when the two agree (`consistent`). Intra-class correlation and
+the design effect `1 + (m−1)·ICC` are reported alongside.
+
+### What was collected
+
+Per trial, one Parquet file per table. Volumes actually collected:
+
+| arm | trials | creatures | died | mean observed | decisions | EAT | engrams | on disk |
+|---|---|---|---|---|---|---|---|---|
+| `legacy_nomem` | 16 | 80 | **80** | 248 s | 588,800 | 3,728 | 5.7 M | 101 MB |
+| `legacy_mem` | 16 | 80 | **80** | 273 s | 649,860 | 4,866 | 6.3 M | 116 MB |
+| `current_nomem` | 16 | 80 | 0 | 1796 s | 4,336,573 | 176,000 | 7.0 M | 1131 MB |
+| `current_mem` | 16 | 80 | 0 | 1796 s | 4,337,992 | 212,352 | 8.2 M | 1182 MB |
+| `legacy_nomem_simple` | 16 | 80 | 0 | 1796 s | 4,335,390 | 93,568 | 49.4 M | 753 MB |
+| `legacy_mem_simple` | 16 | 80 | 0 | 1798 s | 4,341,330 | 98,304 | 50.7 M | 806 MB |
+| **total** | **96** | **480** | 160 | | **18,589,945** | **588,818** | **127 M** | **4.1 GB** |
+
+The `died` column is the whole reason survival is claimable in one pair only. The `observed`
+column is why counts cannot be compared across pairs: the legacy arms were observed for 248 s
+and the rest for ~1796 s, so an EAT *count* measures `rate × window`. Every cross-pair quantity
+in this report is a rate or a share.
+
+### Which tables feed which result
+
+| table | rows/arm (order) | feeds |
+|---|---|---|
+| `creatures` | 80 | P4 survival, `observed_s`/`died` censoring |
+| `actions` | 0.6–4.3 M | P2, P3 — F3, F4, F3b |
+| `mouth_interactions` | 4 K–212 K | feeding rate, diet composition, P1 intervals |
+| `memory_decisions` | 0.5–3.8 M | **memory's influence rate** — M1, M2, M3, M6 |
+| `engrams` | 5.7–50.7 M | M1, M4; `drive`/`object_type` are what issue #91 rests on |
+| `conditioning` | 6 rows/event | D1 — F6 |
+| `drives` | per cycle | hunger/sleep levels behind #90 and #91 |
+
+`memory_decisions` exists because `selection_type` cannot answer "was memory used" once memory
+stops ending the filter chain — see the mechanism section above.
+
+### Data integrity
+
+All ten schema gates pass on the assembled campaign (`scripts/check_experiment_gates.py`),
+covering: every trial of an arm coming from one run (G0), conditioning written on the legacy
+valuation path (G1), exactly 6 conditioning rows per reinforcement event (G2), reinforcements
+matching EAT within the Arrow batch bound (G3), `memory_decisions` present iff the MEMORY filter
+is in the chain (G4), engrams forming in the no-memory arms too (G5, the matched-formation
+control), one creature row per creature (G6), ≥10 EAT per creature (G7), censoring columns
+complete (G8), memory-decision invariants (G9), and memory both acting and leaving the action
+choice open (G10).
+
+Data and manifest: `felipedreis/dl2l-experiments`, prefix `p84/`, built from
+`ghcr.io/felipedreis/dl2l:sha-da1763c`.
+
+---
+
 ## How the memory system works
 
 The results below are hard to read without knowing what a creature actually does with memory,
