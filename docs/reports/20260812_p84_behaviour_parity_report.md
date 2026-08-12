@@ -71,14 +71,42 @@ it through a fixed cascade. `ActionSelection.selectOne` stops at the first filte
 the set to a single action, and credits that filter in `chosen_action_state`.
 
 ```mermaid
-flowchart LR
-    P["perceived objects<br/>→ candidate actions"] --> AT
-    AT["ActionTendency<br/><i>legacy arms only</i><br/>keep drive-relevant actions"] --> TD
-    TD["TARGET_DISTANCE<br/>keep nearest of each<br/>(type, action)"] --> MEM
-    MEM["<b>MEMORY</b><br/>pick ONE object<br/>return all its actions"] --> AFF
-    AFF["AFFORDANCE<br/>operant table picks<br/>the action"] --> RND
-    RND["RANDOM<br/>uniform fallback"] --> A["chosen action"]
+flowchart TD
+    P(["<b>Perception</b><br/>objects in the sensory field<br/>→ candidate actions"])
+
+    P --> AT
+    AT["<b>ActionTendency</b><br/><i>legacy arms only</i><br/>keep only actions that regulate<br/>the dominant drive"]
+    AT --> TD
+    TD["<b>1 · TARGET_DISTANCE</b><br/>keep the nearest instance of<br/>each (object type, action)"]
+    TD --> MEM
+    MEM["<b>2 · MEMORY</b><br/>sample ONE object,<br/>weighted by remembered value<br/>→ returns ALL its actions"]
+    MEM --> AFF
+    AFF["<b>3 · AFFORDANCE</b><br/>operant table samples<br/>WHICH action to take"]
+    AFF --> RND
+    RND["<b>4 · RANDOM</b><br/>uniform fallback"]
+    RND --> OUT(["<b>Chosen action</b>"])
+
+    NM(["neuromodulation<br/><i>current arms only</i>"]) -. "dopamine → novelty prior" .-> MEM
+    NM -. "dopamine → softmax temperature" .-> AFF
+
+    classDef src fill:#eef2f7,stroke:#5b6b7d,stroke-width:1.5px,color:#22303f
+    classDef nearest fill:#e8f4ec,stroke:#4c9f70,stroke-width:2px,color:#1b3a26
+    classDef memory fill:#e4ecfb,stroke:#2b5eb8,stroke-width:3px,color:#12305e
+    classDef afford fill:#fdf1e5,stroke:#e08a3c,stroke-width:2px,color:#6b3d10
+    classDef rand fill:#fbeaea,stroke:#b04a4a,stroke-width:2px,color:#5c1c1c
+    classDef optional fill:#f7f7f7,stroke:#9aa0a6,stroke-width:1.5px,stroke-dasharray:5 4,color:#4a4a4a
+
+    class P,OUT src
+    class TD nearest
+    class MEM memory
+    class AFF afford
+    class RND rand
+    class AT,NM optional
 ```
+
+*Node colours match the criterion colours used in every figure below — green Nearest, blue
+Memory, orange Affordances, red Random. Dashed boxes are enabled in only one stack.*
+
 
 Two things about this order matter for the results:
 
@@ -88,6 +116,46 @@ Two things about this order matter for the results:
 - **Memory rarely ends the chain**, because it returns *several* actions (all those targeting
   the object it picked). AFFORDANCE almost always makes the final narrowing. This is why the
   MEMORY share in F3 is a structural floor and not a measure of memory's influence.
+
+The two stacks differ in *which* filters surround memory, never in how memory itself works:
+
+```mermaid
+flowchart LR
+    subgraph L ["🟦 LEGACY arms — Mapa/Campos minimal"]
+        direction TB
+        L0(["candidates"]) --> L1["ActionTendency<br/><i>narrows the SET</i>"]
+        L1 --> L2["TARGET_DISTANCE"] --> L3["MEMORY"] --> L4["AFFORDANCE"] --> L5["RANDOM"]
+    end
+
+    subgraph C ["🟧 CURRENT arms — modern subsystems"]
+        direction TB
+        C0(["candidates"]) --> C2["TARGET_DISTANCE"] --> C3["MEMORY"] --> C4["AFFORDANCE"] --> C5["RANDOM"]
+        C6(["neuromodulation<br/><i>reweights WITHIN a group</i>"]) -. dopamine .-> C3
+        C6 -. dopamine + serotonin .-> C4
+    end
+
+    L ~~~ C
+
+    classDef legacyBox fill:#eef3fc,stroke:#5c85d6,stroke-width:2px,color:#12305e
+    classDef currentBox fill:#fdf3e8,stroke:#c4622d,stroke-width:2px,color:#5c2d0c
+    classDef step fill:#ffffff,stroke:#6b7684,stroke-width:1.2px,color:#22303f
+    classDef memStep fill:#e4ecfb,stroke:#2b5eb8,stroke-width:2.5px,color:#12305e
+    classDef nm fill:#f7f7f7,stroke:#9aa0a6,stroke-dasharray:5 4,color:#4a4a4a
+
+    class L legacyBox
+    class C currentBox
+    class L0,L1,L2,L4,L5,C0,C2,C4,C5 step
+    class L3,C3 memStep
+    class C6 nm
+```
+
+**This is the confound behind [#90](https://github.com/felipedreis/dl2l/issues/90).** The two
+mechanisms act at different points and are not substitutes. `ActionTendency` **narrows the
+candidate set**, which is what leaves a single target group and lets AFFORDANCE narrow to one
+action and take the decision. Neuromodulation only **reweights within** a group and returns one
+action per group regardless, so it can never turn three groups into one. Measured: AFFORDANCE
+decides **51.7%** of choices in `legacy_nomem` against **23.1%** in `current_nomem`, with RANDOM
+taking 66.1% there.
 
 **Arm differences.** The legacy arms enable `ActionTendency` (Campos 2006 innate tendencies)
 and no neuromodulation. The current arms drop `ActionTendency` and enable
@@ -103,15 +171,39 @@ identically and simply never consult them. That is what makes formation a matche
 
 ```mermaid
 flowchart TD
-    A["action chosen"] --> B["ShortTermMemory laid<br/>(action, perception, emotion, cycle)"]
-    B --> C{"outcome arrives<br/>Valuation.evaluate*"}
-    C --> D["for every warm trace:<br/>gap = now − trace.cycle<br/>eligibility = e^(−λ·gap)"]
-    D --> E{"eligibility ≥ 0.01?"}
-    E -- no --> F["trace too old, skipped"]
-    E -- yes --> G["Engram(<br/>delta := emotionDelta × eligibility,<br/>eligibility, drive, objectType)"]
-    G --> H["general store<br/>(all actions)"]
-    G --> I["consummatory store<br/>(EAT/TOUCH/PLAY only)"]
+    A(["<b>Action chosen</b><br/>cycle t"]) --> B
+    B["<b>ShortTermMemory laid</b><br/>action · perception · dominant emotion · t"]
+    B -.->|"time passes<br/>more actions chosen"| C
+    C{{"<b>Outcome arrives</b><br/>Valuation.evaluate*<br/>cycle t+g"}}
+
+    C --> D["for every warm trace:<br/><code>gap = (t+g) − t</code><br/><code>eligibility = e^(−λ·gap)</code><br/>λ = ln2 / 5 cycles"]
+    D --> E{"eligibility<br/>≥ 0.01?"}
+    E -->|no| F(["trace too old —<br/>no credit assigned"])
+    E -->|yes| G["<b>Engram</b> stored with<br/>delta = rawDelta × eligibility<br/>eligibility · drive · driveLevel<br/>actionType · objectType"]
+
+    G --> H[("<b>general store</b><br/>every action type")]
+    G --> I[("<b>consummatory store</b><br/>EAT · TOUCH · PLAY only")]
+    I ==>|"read by"| J(["<b>MemoryFilter</b>"])
+    H -.->|"read by"| K(["consolidation<br/><i>disabled in all arms</i>"])
+
+    classDef act fill:#eef2f7,stroke:#5b6b7d,stroke-width:1.5px,color:#22303f
+    classDef calc fill:#fdf1e5,stroke:#e08a3c,stroke-width:1.5px,color:#6b3d10
+    classDef gate fill:#fffbe6,stroke:#c9a227,stroke-width:1.5px,color:#5b4708
+    classDef engram fill:#e4ecfb,stroke:#2b5eb8,stroke-width:2.5px,color:#12305e
+    classDef store fill:#f0e9f8,stroke:#7a51b5,stroke-width:2px,color:#331a52
+    classDef dead fill:#f7f7f7,stroke:#9aa0a6,stroke-width:1.5px,stroke-dasharray:5 4,color:#4a4a4a
+
+    class A,B,J act
+    class C,D calc
+    class E gate
+    class G engram
+    class H,I store
+    class F,K dead
 ```
+
+*The double arrow is the path that drives behaviour: only the consummatory store feeds object
+valuation. The general store exists for consolidation, which no arm enables.*
+
 
 λ = ln2 / `TRACE_DECAY_HALF_LIFE` (5 cycles), so a trace five cycles old carries half the credit
 and one older than ~33 cycles is dropped. **An engram's `emotionDelta` is measured against
