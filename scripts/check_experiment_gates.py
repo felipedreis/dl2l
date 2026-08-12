@@ -21,6 +21,9 @@ import pandas as pd
 
 ACTION_TYPES = 6          # the operant table is snapshotted whole, one row per ActionType
 MIN_EAT_PER_CREATURE = 10  # k = 1..10 must be measurable
+# ArrowIpcBackend.DEFAULT_BATCH_ROWS — a trial cut off at its runtime cap loses up to this
+# many rows per table, so cross-table counts cannot be expected to agree exactly.
+ARROW_BATCH_ROWS = 4096
 # A whole pilot completes in well under an hour, so trials written hours apart did not come
 # from the same run. See G0.
 MAX_MTIME_SPREAD_H = 6.0
@@ -152,13 +155,20 @@ def main() -> int:
         g.check("G2", bad == 0,
                 f"{arm}: {len(per_event)} events, {bad} not exactly {ACTION_TYPES} rows")
 
-    # G3 — one reinforcement per object-directed interaction, checked as strict equality.
-    # Confirmed on real pilot data (legacy_nomem trial 1: 126 events, 126 EAT, ratio 1.000)
-    # and EAT is the only interaction type that reaches the data at all, since
-    # MouthInteractionState is written solely for EnergeticStimulus (Mouth.java:67). A
-    # tolerance band was the first implementation and is wrong for that reason: it would
-    # swallow a genuine few-percent drift, which is exactly the kind of defect this gate
-    # exists to surface. The ratio stays in the message so a failure is diagnosable.
+    # G3 — every EAT produces exactly one reinforcement, so reinforcements >= EAT always, with
+    # any excess bounded by how much buffered data the trial lost when it ended.
+    #
+    # Strict equality holds ONLY for a trial that ends by all creatures dying: that shuts down
+    # cleanly and flushes every table. A trial cut off at maxRuntimeMinutes loses each table's
+    # buffered remainder (ArrowIpcBackend batches at 4096 rows), and the two tables lose
+    # DIFFERENT amounts — conditioning writes 6 rows per event so it fills batches ~6x faster
+    # than mouth_interactions and loses proportionally less. Measured on legacy_mem_simple,
+    # which never dies: 103,588 reinforcements against 98,304 EAT rows, and 98,304 is exactly
+    # 24 x 4096 — the truncation is visible in the number itself.
+    #
+    # This gate was briefly strict, generalised from the one arm that does terminate cleanly
+    # (legacy_nomem: 126 vs 126). The bound below is mechanistic rather than a guessed
+    # tolerance: at most 4096 rows can be in flight per table per trial.
     for arm in all_arms:
         cond = load(base, arm, "conditioning")
         mouth = load(base, arm, "mouth_interactions")
@@ -168,8 +178,12 @@ def main() -> int:
         n_events = cond.groupby(["_trial", "creature_key", "seq"]).ngroups
         n_eat = int((mouth["interaction_type"] == "EAT").sum())
         ratio = n_events / n_eat if n_eat else float("inf")
-        g.check("G3", n_events == n_eat,
-                f"{arm}: {n_events} reinforcements vs {n_eat} EAT (ratio {ratio:.3f})")
+        n_trials = cond["_trial"].nunique()
+        max_lost = ARROW_BATCH_ROWS * n_trials      # mouth_interactions rows possibly unflushed
+        ok = n_events >= n_eat and (n_events - n_eat) <= max_lost
+        g.check("G3", ok,
+                f"{arm}: {n_events} reinforcements vs {n_eat} EAT (ratio {ratio:.3f}); "
+                f"excess {n_events - n_eat} vs buffer bound {max_lost}")
 
     # G4 — the MEMORY filter really is in / out of the chain.
     for arm in nomem:

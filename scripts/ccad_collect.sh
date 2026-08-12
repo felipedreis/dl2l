@@ -33,11 +33,21 @@ REMOTE_BASE="l2l/data/p84_rerun_${COND}/${COND}"
 
 # Space-delimited set rather than an associative array: macOS ships bash 3.2, where
 # `declare -A` does not exist, and this script has to run from the developer's Mac.
+# On restart, a local trial dir counts as collected only if it is COMPLETE. An interrupted
+# rsync leaves a partial directory, and treating its mere existence as success silently keeps
+# a short trial forever: confirmed live, a trial killed mid-transfer kept 8 of 12 tables and
+# was never re-fetched, while the remote copy it should have been re-fetched from sat intact.
+# Partial dirs are deleted here so the normal collection loop picks them up again.
 collected=0
 have=" "
 mkdir -p "$OUT/$COND"
 for d in "$OUT/$COND"/trial_*; do
   [ -d "$d" ] || continue
+  n=$(ls "$d"/*.parquet 2>/dev/null | wc -l | tr -d ' ')
+  if [ "${MIN_TABLES:-0}" -gt 0 ] 2>/dev/null && [ "$n" -lt "$MIN_TABLES" ]; then
+    echo "discarding partial $(basename "$d") ($n tables) — will re-fetch"
+    rm -rf "$d"; continue
+  fi
   have="$have$(basename "$d") "
   collected=$((collected+1))
 done
