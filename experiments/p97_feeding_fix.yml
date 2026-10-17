@@ -1,0 +1,33 @@
+# Feeding at speed (#96) + seeded runs (#95) — issue #97. See
+# docs/experiments/p97_feeding_fix_recipe.md for the pre-registration.
+#
+# One arm: the p84 legacy_nomem configuration on the fixed build, 8 trials x 5 creatures
+# (sized by analysis/diagnostics/p97_power.py). Compared descriptively with the historical
+# pre-fix data in ml/data_p84_behaviour_parity/legacy_nomem.
+name: p97_feeding_fix
+trials: 8
+seeds: [9701, 9702, 9703, 9704, 9705, 9706, 9707, 9708]
+
+conditions:
+  - key: legacy_nomem
+    simulation: simulations/p84_legacy_nomem.conf
+    label: Legacy (fixed)
+    color: "#2b5eb8"
+
+image:
+  source: build
+
+data_dir: ml/data_p97_feeding_fix
+
+extract:
+  format: parquet
+  backup: true
+  tables: all
+
+upload:
+  enabled: true
+  repo: felipedreis/dl2l-experiments
+  prefix: p97
+
+analysis:
+  module: p97_feeding_fix
