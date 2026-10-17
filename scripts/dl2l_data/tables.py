@@ -288,6 +288,17 @@ TABLES = {
     ),
 }
 
+# Run setup (issue #95): one row per holder JVM with the root seed. Absent from raw dumps
+# written before that change, so extract.py skips it when the view does not exist.
+TABLES["run_info"] = (
+    """
+    SELECT seed, seed_generated, trial_id, started_at
+    FROM data.run_info
+    ORDER BY started_at
+    """,
+    None,
+)
+
 # Tables written before pg_dump/manifest bookkeeping, in the order exp_extract.py
 # originally wrote them (a couple of analyses key off this ordering in logs).
 TABLE_ORDER = [
@@ -295,6 +306,7 @@ TABLE_ORDER = [
     "perceptions", "smell_perceptions", "mouth_interactions", "sleep_episodes", "neuromodulators",
     "endocrine", "expectancy", "engrams", "consolidation_episodes",
     "consolidation_batches", "memory_traces", "conditioning", "memory_decisions",
+    "run_info",
 ]
 
 assert set(TABLE_ORDER) == set(TABLES)

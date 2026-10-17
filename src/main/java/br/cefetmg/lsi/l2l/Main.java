@@ -51,9 +51,13 @@ public class Main {
                     .toArray(String[]::new);
 
             Config simulationConfig = ConfigFactory.parseFile(configFile);
-            if (commandLine.hasOption("seed")) {
+            // --seed wins; DL2L_SEED is how the experiment runners hand a trial its seed to
+            // the container without touching each entrypoint's argument list.
+            String seedArg = commandLine.hasOption("seed") ? commandLine.getOptionValue("seed")
+                    : System.getenv("DL2L_SEED");
+            if (seedArg != null && !seedArg.isBlank()) {
                 simulationConfig = ConfigFactory.parseString(
-                        "simulation.seed = " + Long.parseLong(commandLine.getOptionValue("seed")))
+                        "simulation.seed = " + Long.parseLong(seedArg.trim()))
                         .withFallback(simulationConfig);
             }
             Simulation simulation = new Simulation(simulationConfig);

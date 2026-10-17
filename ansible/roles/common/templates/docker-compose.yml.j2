@@ -16,6 +16,7 @@ services:
     environment:
       ROLE: "manager,idProvider"
       SIMULATION: "${SIMULATION:?SIMULATION must be exported before running docker compose}"
+      DL2L_SEED: "${DL2L_SEED:-}"
       HOST: "dl2l-manager"
       PORT: 2551
     networks:
@@ -40,6 +41,7 @@ services:
     environment:
       ROLE: "collisionDetector,holder"
       SIMULATION: "${SIMULATION:?SIMULATION must be exported before running docker compose}"
+      DL2L_SEED: "${DL2L_SEED:-}"
       HOST: "dl2l-holder"
       PORT: "2551"
       # See scripts/run-dl2l.sh and docs/plans/arrow-ipc-write-path.md, W5.
@@ -68,6 +70,7 @@ services:
     environment:
       ROLE: "collisionDetector"
       SIMULATION: "${SIMULATION:?SIMULATION must be exported before running docker compose}"
+      DL2L_SEED: "${DL2L_SEED:-}"
       HOST: "dl2l-detector"
       PORT: 2551
     networks:
@@ -88,6 +91,7 @@ services:
     environment:
       ROLE: "holder"
       SIMULATION: "${SIMULATION:?SIMULATION must be exported before running docker compose}"
+      DL2L_SEED: "${DL2L_SEED:-}"
       HOST: "dl2l-holder"
       PORT: "2551"
       # See scripts/run-dl2l.sh and docs/plans/arrow-ipc-write-path.md, W5.

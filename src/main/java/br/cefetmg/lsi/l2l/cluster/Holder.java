@@ -14,6 +14,7 @@ import akka.util.Timeout;
 import br.cefetmg.lsi.l2l.creature.bd.DumpParquet;
 import br.cefetmg.lsi.l2l.creature.bd.Flush;
 import br.cefetmg.lsi.l2l.creature.bd.PersistenceExtension;
+import br.cefetmg.lsi.l2l.creature.bd.RunInfoState;
 import br.cefetmg.lsi.l2l.creature.ml.MLServiceExtension;
 import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
@@ -85,6 +86,7 @@ public class Holder extends AbstractActor implements Registrable {
     private static final int FLUSH_TIMEOUT_SECONDS = 1800;
 
     private final long seed;
+    private final boolean seedGenerated;
 
     public Holder(Simulation settings, String saveDir) {
         this.saveDir = saveDir;
@@ -100,6 +102,7 @@ public class Holder extends AbstractActor implements Registrable {
         hasReposition = settings.isReposition();
         learningSettings = settings.getLearningSettings();
         seed = settings.getSeed();
+        seedGenerated = settings.isSeedGenerated();
     }
 
     @Override
@@ -133,6 +136,9 @@ public class Holder extends AbstractActor implements Registrable {
         // Sets up the persistence backend (see PersistenceExtension) before any creature is
         // spawned - CreatureActor/component actors resolve bdActor() in their own preStart().
         PersistenceExtension.of(context().system()).configure(saveDir);
+        PersistenceExtension.of(context().system()).bdActor().tell(
+                new RunInfoState(seed, seedGenerated, System.getenv().getOrDefault("TRIAL_ID", "local"),
+                        System.currentTimeMillis()), self());
         // Eagerly load the species ML models once for this JVM node, so an invalid model
         // contract fails fast here rather than mid-run. Skipped entirely when the filter
         // chain has no WORLD_MODEL: nothing in the run would touch the models, and loading
