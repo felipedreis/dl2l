@@ -2,7 +2,7 @@
 
 Covers 2026-06-22 → 2026-10-16. Compiled 2026-10-17 from git (including the unmerged
 `claude/issue-91-*` branch), GitHub issues/PRs, `docs/plans`, `docs/reports`, the CCAD
-postmortem, and untracked working files. Numbers are copied from the cited report or commit;
+postmortem, and working files since moved to the alifeworld repo. Numbers are copied from the cited report or commit;
 nothing is re-measured here.
 
 Earlier history in one line: imported from Bitbucket (2022-02), Docker image (2022-10),
@@ -142,15 +142,15 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
   Keeping only engrams with eligibility ≥ 0.99 removes it. It recommends reverting `911132a` and trying an
   eligibility threshold, then quantile scoring, offline first. Not acted on.
 
-### 08-15 → 08-17 · Original ALifeWorld source recovered (untracked files)
+### 08-15 → 08-17 · Original ALifeWorld source recovered (now in [`felipedreis/alifeworld`](https://github.com/felipedreis/alifeworld), private)
 - **Mapa (0.9.5, `Hash_BD` snapshot):** this is the dissertation code; it runs on JDK 23. The dissertation's
   Table 2 swaps Q3/Q4 (verified live). There never was a memory on/off flag. Docs:
-  `docs/legacy/alifeworld-0.9.5-architecture.md`; port plan in `docs/plans/mapa-alifeworld-port-to-dl2l.md`.
+  `docs/legacy/alifeworld-0.9.5-architecture.md`; port plan in `docs/plans/mapa-alifeworld-port-to-dl2l.md` (both in that repo).
 - **Campos 2015 (0.7.5.1):** the checked-in config ("Experimento27") ≠ the paper's Table II. There is no
   memory-off switch, and the memory filter has bugs (only the last candidate counts; it matches on target only).
   A timestamp bug silently drops all per-step logs. One 56 s smoke replication
-  (`data/campos2015_replication/`); no paper-faithful comparison yet.
-- **10-16:** `ACTION_SELECTION_ALIFEWORLD.md` compares the two versions' action selection.
+  (`data/campos2015_replication/` in that repo); no paper-faithful comparison yet.
+- **10-16:** `docs/legacy/action-selection-0.7.5.1-vs-0.9.5.md` (alifeworld repo) compares the two versions' action selection.
   Campos uses memory to pick an action. Mapa uses memory to pick a target and a probability table to pick the action.
 
 ### 10-07 · Process
