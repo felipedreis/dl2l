@@ -1,152 +1,185 @@
-# DL2L Research Diary
+# DL2L research diary
 
-Compiled 2026-10-17 from git history, PRs, issues, plans and reports (2026-06-22 → 2026-10-07).
-Each entry: **what** was done, **why**, and **what came out**. Details live in the linked
-report/plan; this is the index to remember the thread. Report filenames are in `docs/reports/`.
+Covers 2026-06-22 → 2026-10-16. Compiled 2026-10-17 from git (including the unmerged
+`claude/issue-91-*` branch), GitHub issues/PRs, `docs/plans`, `docs/reports`, the CCAD
+postmortem, and untracked working files. Numbers are copied from the cited report or commit;
+nothing is re-measured here.
 
-**Thread in one paragraph.** We added a JEPA world model (species model + per-creature adapter,
-sleep-gated consolidation, "Mode-2" deliberative action selection) to the creature. It first
-failed on bugs in our own pipeline (SLEEP bias, adapter init). After fixing the creature's
-biology (emotions, neuromodulators, sleep/stress), JEPA beat a Mapa-style memory filter in
-scarce worlds but not in abundant ones. Then infrastructure problems (CCAD, persistence)
-turned out to confound results, so we rebuilt persistence and the clock. The behaviour-parity
-campaign (p84) against Mapa/Campos then showed our *memory* was broken, which led to a memory
-rework and several open bugs.
+Earlier history in one line: imported from Bitbucket (2022-02), Docker image (2022-10),
+Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
+
+## The thread
+
+1. **Jun 22–24.** We built the JEPA world model into the creature in six phases. It made creatures worse.
+2. **Jun 26–Jul 2.** The regressions came from our own pipeline: adapter init, and a dataset
+   that dropped every WANDER sample. After fixing those, JEPA beat a Mapa-style memory filter on the Pi.
+3. **Jul 2–10.** The creature's biology was not faithful to Campos/Mapa. We added emotion
+   scoping, neuromodulators, orexin/HPA and attention, then retrained JEPA for the new state.
+4. **Jul 9–29.** Five memory-vs-JEPA experiments gave conflicting answers depending on world
+   density.
+5. **Jul 27–Aug 6.** Those runs turned out to be confounded by infrastructure: blocking Postgres
+   writes, OOMs, a metabolic clock tied to cycle count, and a cycle rate 9× nominal. We
+   rebuilt persistence (Arrow IPC), the clock and the cognitive tick.
+6. **Aug 4–12.** The behaviour-parity campaign against Mapa/Campos (p84) showed that our memory was
+   harmful. We reworked it, and memory now raises feeding rate. Three memory bugs are still open.
+7. **Aug 15–Oct 16.** Unmerged #91 follow-up; recovered and ran the original ALifeWorld source;
+   planned a shared experiment toolkit.
 
 ---
 
-## Phase A — JEPA integration, built in phases (2026-06-22 → 06-24)
+## Log
 
-Plan: `docs/roadmap/JEPA_Integration.md`, `docs/hld/JEPA_WM_Integration.md`; epics #3–#8, PRs #31–#38.
+### 06-22 → 06-24 · JEPA integration, Phases 0–6 (epics #3–#8, PRs #31–#38)
+- **Why:** give creatures a learned world model (species model + per-creature adapter) for
+  deliberative action selection. Design: `docs/hld/JEPA_WM_Integration.md`, `docs/roadmap/JEPA_Integration.md`.
+- **P0 coverage:** the reactive policy covers distance and angle well enough, so no random-exploration
+  episodes are needed. The probe also showed **memory was dead**: 0 MEMORY selections.
+- **P1 granularity:** same-drive collisions occurred in 93.3% of batches (threshold 1%). Decision: `PER_STIMULUS_FROZEN_BASELINE`.
+- **P2 species model:** 219,779 tuples; collapse check passed. Best L_pred was 0.0625 at epoch 4,
+  degrading to 0.60 by epoch 100. Cause: gradient interference from SIGReg at λ=0.1.
+- **P3–P4:** engram memory with eligibility traces; 577,102 engrams from 3 creatures.
+- **P5:** sleep-gated adapter consolidation; loss falls 53–67% per lifetime. Gradient explosion fixed
+  (zero grads + tanh targets).
+- **P6 Mode-2:** fires on 16.8% of decisions, but **lifetime fell to 4.5 min vs ~73 min**.
 
-- **Phase 0/1 — de-risk and instrumentation (06-22).** Why: check the design is viable before
-  building. Coverage probe on perception, and a measurement of how many regulating stimuli
-  collide per batch. Result: decision `FROZEN-BASELINE PER-STIMULUS` (collision rate far above
-  the 1% threshold) — reinforcement stays per stimulus.
-- **Phase 2 — species model (06-22).** PyTorch encoder/predictor/critic trained offline
-  (SIGReg), collapse check, TorchScript export. Finding: SIGReg interferes with training
-  (`EXP_P2_1`).
-- **Phase 3–4 — memory engrams and eligibility traces (06-23).** Engram-capable memory,
-  cognitive-cycle counter, eligibility-weighted reinforcement (577k engrams in the P4 run).
-- **Phase 5 — sleep-gated adapter consolidation (06-24).** Gradient explosion found and fixed
-  (zero grads + tanh targets). Loss falls 53–67% per lifetime.
-- **Phase 6 — Mode-2 action selection (06-24).** Works mechanically (16.8% of decisions) but
-  lifetimes collapsed to 4.5 min vs ~73 min baseline.
+### 06-26 → 07-02 · Why JEPA hurt; first comparison
+- **#43 (06-28):** random adapter init corrupted the trained pipeline. Fix: zero-init the projection,
+  so the adapter starts as identity. Lifetime +28% vs P6, still below P5.
+- **#48 → #51 (06-29/30):** Critic picked SLEEP ~94% of the time. Retraining and a dual encoder
+  changed nothing (94.2/94.4%). Passing `z_internal` to the Critic was needed but not sufficient.
+  **Root cause: `prepare_dataset` dropped self-targeted actions → 0 WANDER samples.** After the fix:
+  10× lifetime in food-rich worlds and Mode-2 firing −94%. A residual 60% SLEEP bias needs multi-step
+  rollout (not done).
+- **Plumbing:** world enrichment (rotten fruit, cactus, aloe, OBSERVE, tedium; #40), configurable
+  learning (#41), single-threaded `TestingCreature` harness (#45), CI (06-28), four JEPA variants
+  (#53), and TypedActor removed from cross-JVM stimulus routing (#49).
+- **EXP-P7 (07-02, Pi, 50 creatures/arm):** we implemented `MemoryFilter` + Mapa consolidation as the
+  non-JEPA competitor. Baseline 2704 s; memory −51 s (significant); memory+consolidation n.s.;
+  JEPA +178 s; JEPA+consolidation +618 s. Mac control: most of the Pi wall-clock gain is inference
+  latency. The report's conclusions were left "pending".
 
-## Phase B — Fixing why JEPA made creatures worse (06-26 → 07-02)
+### 07-02 → 07-10 · Make the creature faithful to Campos/Mapa
+- **Why:** cognition was being compared on a creature whose drives didn't match the models it
+  descends from. Gap analysis: `docs/roadmap/Campos2015_Model_Parity.md` (#54).
+- **#55/#56 (07-07):** metabolism, arousal and death scoped to the 4 active emotions; swapped
+  behavioural-efficiency curves fixed.
+- **#57 (07-07/08):** symbolic dopamine/serotonin RPE loop plus innate `ActionTendency`.
+  Baseline creatures slept 82.8% of the time; tendency arms forage. CONTINUOUS expectancy ~9% lower MSE.
+  The same work fixed an eat-loop bug (the reply never reached the Mouth), made pain nociceptive, and made
+  boredom drive WANDER.
+- **#58 (07-08):** distance-driven focus; eye closed during sleep.
+- **#59 (07-08/09):** orexin wakefulness gate + HPA axis with negative feedback. A stimulus-batching fix
+  dropped SLEEP from 44.2% to ~1%; creatures now starve at ~150 s instead of dying of sleep loss.
+- **JEPA retrain (07-09/10, #67, #68):** the p9-trained model hit domain shift on the new stack
+  (97.5% AVOID). Retrained as `unified_critic` (8-dim internal state, VICReg + EMA). JEPA error is now the RPE source.
+- **Infra:** Prometheus/Grafana (#66).
 
-- **Adapter init (#43, 06-28).** Cause of the Phase 6 regression: random adapter output
-  corrupted the trained pipeline. Fix: zero-init projection → adapter starts as identity. Guard
-  test added. Lifetime +28% vs P6-1, but the SLEEP bias remained.
-- **SLEEP bias (#48 → #51, 06-29).** Two hypotheses failed (retrain on full world; dual
-  encoder: bias stayed ~94%). Giving the Critic `z_internal` helped partly. **Real root cause
-  was a data bug**: the dataset builder dropped every self-targeted action (WANDER), so 0
-  WANDER samples. After the fix, WANDER regulates hunger (10× lifetime in food-rich worlds).
-  Remaining 60% SLEEP bias needs multi-step planning (K-step rollout, not done).
-- **Plumbing.** Learning subsystems made configurable (#41), single-threaded
-  `TestingCreature` harness (#45), CI (06-28), plants/rotten fruit/OBSERVE added (#40),
-  four JEPA variants + Strategy routing (#53). Cross-JVM TypedActor bug (#49) worked around
-  by co-locating holder + collisionDetector.
-- **P7: memory filter vs world model (06-30 → 07-02).** Implemented Mapa-style `MemoryFilter`
-  and sleep consolidator to have a non-JEPA competitor. Pi vs Mac control run to rule out
-  inference latency as a confound. Conclusions left pending.
-
-## Phase C — Make the creature's biology faithful to Campos/Mapa (07-02 → 07-10)
-
-Why: we were comparing cognition on top of a creature whose emotions/drives were not
-faithful. Gap analysis vs Campos 2015: `docs/roadmap/Campos2015_Model_Parity.md`.
-
-- **#55/#56 (07-07).** Metabolism, arousal and death scoped to the four active emotions;
-  swapped behavioural-efficiency curves fixed.
-- **#57 neuromodulatory expectancy (07-07/08).** Symbolic dopamine/serotonin RPE loop plus an
-  innate emotion→action coupling (`ActionTendency`) to stop over-sleeping. Also fixed the eat
-  loop (EnergeticStimulus reply never reached the Mouth) and made boredom drive WANDER.
-- **#58 (07-08).** Focus now distance-driven; eye closed while asleep.
-- **#59 orexin + HPA axis (07-08/09).** Wakefulness gate and cortisol with negative feedback.
-  Last bug: homeostatic stimuli backlog; batching fix dropped SLEEP rate 44% → ~1%.
-- **JEPA wired as the RPE baseline, retrained as `unified_critic` (VICReg + EMA)** (#67, #68,
-  07-10). Prometheus/Grafana observability added (#66).
-
-## Phase D — Experiments: memory vs world model (07-09 → 07-17)
-
-| Date | Experiment | Result |
+### 07-09 → 07-29 · Memory vs JEPA experiments (5 conditions × 5 trials × 5 creatures)
+| Report | World | Headline |
 |---|---|---|
-| 07-09 | `memory_vs_wm_v1` (scarce world) | JEPA (no consol.) survives longer than baseline (441 vs 290 s, p<0.001). Consolidation *hurts* (315 s). Memory filter does **not** help (237–261 s). |
-| 07-13 | `rotten_fruit_v1` | JEPA +112% survival, JEPA+Consol +33%. **No aversion learning in any condition** (rotten share ≈ chance). Consolidation hurts in a novel world. |
-| 07-14 | `dense_reposition` (abundant food) | JEPA advantage **vanishes** (p≈1); memory penalty vanishes too. Strategy sophistication matters only under scarcity. |
-| 07-17 | `dense_scarce` | JEPA advantage **inverts** (24/50 JEPA deaths vs 0/50 baseline). Later shown to be confounded (see Phase E). |
-| 07-17 | `dense_no_reposition` (corrected re-run) | Once cognition runs at the right rate, JEPA+Consol has a real, robust edge (123 s vs 74–87 s); memory shows no penalty. Lifetimes short. |
+| `20260709_memory_vs_wm_v1` | scarce | JEPA 441 s vs baseline 290 s; consolidation hurts JEPA; memory hurts survival |
+| `20260713_rotten_fruit_v1` | novel food | JEPA +112% survival; **no aversion learning in any arm** |
+| `20260714_dense_reposition` | abundant (CCAD) | JEPA advantage vanishes (p≈1); memory penalty vanishes |
+| `20260717_dense_scarce` (07-27) | dense, depleting | JEPA advantage inverts (24/50 deaths vs 0/50) — **confounded, see below** |
+| `20260717_dense_no_reposition` (07-29) | same, re-run | JEPA+Consol 123 s vs 74–87 s for the others |
 
-Infra in the same window: experiments moved to one Ansible playbook + YAML specs, replacing
-46 compose files (#69, 07-13); CCAD (Singularity/SLURM) became the cluster target
-(#71, #72). Experiment data goes to HuggingFace.
+- **Infra in the same window:** Ansible playbook + YAML specs replaced 46 compose files and 10
+  scripts (#69, 07-13). CCAD (SLURM + Singularity) replaced the defunct CEFET cluster (07-13 → 07-17,
+  #71, #72). Data is uploaded to HF.
 
-## Phase E — Infrastructure confounded the results (07-27 → 08-06)
+### 07-27 → 08-06 · Infrastructure confounds, then the rebuild
+- **CCAD node stall (07-27 → 29):** creatures on nodes c1/c2 ran 6–40× slower. Three fixes in
+  sequence: oversubscribed thread pools (#74), one JPA factory per actor (#75), and synchronous
+  Postgres writes on the cognition path (#76, the dominant cause). Afterwards every node ran 10–20×
+  faster than the old "healthy" baseline. See `docs/postmortems/ccad-node-c1-cognitive-cycle-stall.md`.
+- **#77 (07-30):** the now-async writer had no backpressure, causing OOMs. Fix: bounded `BDActor` (#78).
+- **#79 (07-31 → 08-02):** metabolism advanced per cognitive cycle, so faster cycles killed creatures in
+  ~1 min. Phase A rescaled constants (÷5.858). Phase B capped the rate at the pacemaker and dt-weighted
+  metabolism. JPA/Postgres were removed in the same PR (#81).
+- **Persistence (08-01 → 08-04, #81–#83):** Postgres → Parquet/DuckDB backend (tried, dropped) →
+  **off-heap Arrow IPC + embedded-DuckDB extraction**. An A/B showed a "harmless" refactor caused a
+  4% lifetime regression (dispatcher pool=2); fixed.
+- **#85 (08-06):** cycles actually ran at 259–298 Hz vs a nominal 30, and 82% of cycles saw
+  nothing, so perception strobed ~66×/s. **Cognition is now tick-gated**, and the Phase A constants
+  are back at round values. CI gained integration tests, preview/release images and a regression benchmark.
+- **Tedium (08-06/07):** tedium pinned arousal at 7, collapsing behavioural efficiency.
+  We disabled it, then **reverted** that: Mapa does model tedium, and relieves it via a toy/ball
+  DL2L doesn't have. Resolved without code: ActionTendency or neuromodulation each keep tedium
+  low. See `docs/plans/tedium-saturation.md`.
 
-- **CCAD node c1 stall (07-27 → 07-29).** `dense_scarce` creatures on some nodes ran 6–40×
-  slower. Three causes fixed in sequence: thread-pool oversubscription (#74), one JPA
-  EntityManagerFactory per actor (#75), synchronous Postgres writes on the cognition path
-  (#76, real culprit). Postmortem: `docs/postmortems/ccad-node-c1-cognitive-cycle-stall.md`.
-  Lesson: the 07-17 headline results were measured at an unintended cognition rate.
-- **#77 OOM (07-30).** Async persistence had no backpressure → bounded `BDActor` (#78).
-- **#79 biological clock (07-31 → 08-02).** The fix made cognition 10–20× faster, and since
-  metabolism advanced per cognitive cycle, creatures died in ~1 min. Fix: clock decoupled
-  from cycle count (pacemaker, dt-weighted metabolism).
-- **Persistence rewrite (#79, #82, #83; 08-01 → 08-04).** JPA/Postgres removed entirely. After
-  a Parquet attempt, the final path is off-heap **Arrow IPC** + DuckDB extraction. Validated
-  locally and on CCAD (`20260804_arrow_ipc_write_path_validation_report.md`).
-- **#85 (08-06).** Cognitive cycle measured at ~9× the nominal 30 Hz and perception flickered.
-  Cycle is now tick-gated; integration tests run the full actor system in CI.
+### 08-04 → 08-12 · Behaviour parity with Mapa/Campos (#84, PR #92)
+- **Why:** before writing up JEPA, check the current architecture still behaves like its
+  published ancestors. Only shapes and ratios are comparable (different code, no source data).
+  Pre-registered in `docs/experiments/p84_behaviour_parity_recipe.md`.
+- **First campaign (08-05):** the memory-advantage predictions (P1, P4) were refuted.
+- **#88 (08-07):** `MemoryFilter` ranked actions by *sum* of engram value, i.e. by frequency.
+  Memory creatures ate 3.6× less and died 27% sooner (p=7e-11).
+- **Memory rework (08-07 → 08-10):** ranking by mean instead of sum; selection proportional to value
+  instead of argmax; memory picks the object and operant conditioning picks the action; separate
+  consummatory store, because APPROACH engrams were 114:1 and diluted the 6.3× caloric discrimination
+  down to 1.14×; retention bounded per (action, object). Also fixed a manager startup race.
+- **CCAD disk quota (08-05, 08-11):** stopped writing `stimulus_state` (3.2 of 5.6 GB, never read), made
+  collection incremental, and salvaged truncated dumps. Reworked arms no longer die, so we capped runs at
+  30 min and compare rates.
+- **Final campaign (08-12):** 6 arms × 16 trials × 5 creatures = 480; 10/10 schema gates.
+  - Memory raises feeding rate in all 3 pairs (e.g. legacy 11.3 → 13.4 EAT/min).
+  - **P2 confirmed:** RANDOM collapses when memory is on.
+  - **P3 confirmed.**
+  - **P4 confirmed in the legacy pair only:** 1.11× vs Campos's 6.7×.
+  - P1 and P5 inconclusive; S1 untestable with food replenishment.
+  - A truncated-frame metric bug had inverted the feeding result; a dry run caught it before the report.
+- **Filed from the data:** #90 (legacy/current arms confounded on chain arbitration; current-stack
+  creatures never get hungry), #91 (engram value tied to the dominant drive; sleep for 99.95% of
+  engrams, so memory prefers zero-calorie food), #93 (eligibility applied twice). Also, the consolidation
+  threshold of 0.1 is unreachable (max observed 0.031), so consolidation never runs.
 
-## Phase F — Behaviour parity with Mapa/Campos, and the memory rework (08-04 → 08-12)
+### 08-15 → 08-16 · #91 follow-up (branch `claude/issue-91-drive-specific-memory-valuation`, no PR)
+- Implemented drive-matched object valuation (`911132a`). It is a measured no-op on every existing arm.
+- The p91 pilot failed its regime gate twice. The first reading (scarcity) was wrong. The real cause:
+  `ActionTendencyFilter` gives EAT only to hunger, so a sleep-tagged EAT engram can't exist.
+  The pilot was re-specced with tendency off, which means it is no longer legacy-faithful.
+- **Decision doc (`020eca9`):** the #91 inversion is an *eligibility artefact*, not drive pooling.
+  Keeping only engrams with eligibility ≥ 0.99 removes it. It recommends reverting `911132a` and trying an
+  eligibility threshold, then quantile scoring, offline first. Not acted on.
 
-Issue #84; recipe `docs/experiments/p84_behaviour_parity_recipe.md`; PR #92 (merged 08-12).
-Why: before writing up JEPA, show the current architecture still behaves like the published
-ones. We have neither paper's code nor data (ALifeWorld 0.9.5 / 0.7.5.1 were later recovered
-as source — see `docs/legacy/`, `docs/plans/mapa-alifeworld-port-to-dl2l.md`), so only shapes
-and ratios compare.
+### 08-15 → 08-17 · Original ALifeWorld source recovered (untracked files)
+- **Mapa (0.9.5, `Hash_BD` snapshot):** this is the dissertation code; it runs on JDK 23. The dissertation's
+  Table 2 swaps Q3/Q4 (verified live). There never was a memory on/off flag. Docs:
+  `docs/legacy/alifeworld-0.9.5-architecture.md`; port plan in `docs/plans/mapa-alifeworld-port-to-dl2l.md`.
+- **Campos 2015 (0.7.5.1):** the checked-in config ("Experimento27") ≠ the paper's Table II. There is no
+  memory-off switch, and the memory filter has bugs (only the last candidate counts; it matches on target only).
+  A timestamp bug silently drops all per-step logs. One 56 s smoke replication
+  (`data/campos2015_replication/`); no paper-faithful comparison yet.
+- **10-16:** `ACTION_SELECTION_ALIFEWORLD.md` compares the two versions' action selection.
+  Campos uses memory to pick an action. Mapa uses memory to pick a target and a probability table to pick the action.
 
-- **First campaign (08-05).** Predictions P1/P4 (memory advantage) refuted. Cause: memory
-  ranked actions by *sum* of engram value → frequency, not quality (#88): memory creatures
-  ate 3.6× less, died 27% sooner (p=7e-11).
-- **Memory rework (08-07 → 08-10).** Mean not sum; memory picks the *object*, operant
-  conditioning picks the *action*; engrams tagged with object and drive; separate consummatory
-  store; retention bounded per key. Cluster now waits for all roles before starting.
-- **CCAD quota exhaustion (08-05, 08-11).** Raw dumps filled the disk quota; fixed with
-  incremental collection, dropping `stimulus_state` (60% of the dump), salvaging truncated
-  dumps.
-- **Final campaign (08-12).** 6 arms × 16 trials × 5 creatures = 480 creatures, 10/10 schema
-  gates passing (`20260812_p84_behaviour_parity_report.md`). Confirmed: P2, P3, D2 (memory
-  forms and is decisive on 27–67% of consultations). P4 confirmed only in the legacy pair at
-  1.11× (Campos: 6.7×). P1, P5 inconclusive; S1 untestable under replenishment.
-- **Bugs found by the campaign (all open):** #90 legacy/current arms confounded on chain
-  arbitration; #91 engram value tagged with the *dominant* drive (99.95% sleep → memory prefers
-  zero-calorie food); #93 eligibility applied twice (effective half-life 2.5 cycles, not 5);
-  consolidation threshold 0.1 unreachable (max observed 0.031), so consolidation is dead code.
-
-## Phase G — Tooling and reproducibility (10-07)
-
-No simulation work since 08-12. On 10-07: PR #94 (open, plan only) proposes a shared
-experiment-toolkit repo (spec → run → collect → analyse → report); issue #95 notes no trial
-can be replayed because randomness is unseeded.
+### 10-07 · Process
+- PR #94 merged: plan for a shared experiment-toolkit repo (dl2l + snake_rl conventions, with
+  pre-registration). Draft only, not built.
+- #95: trials can't be replayed because no randomness is seeded.
 
 ---
 
-## State as of 2026-10-17
+## Which results still stand
 
-**Open, needs a decision:** #91 and #93 (memory correctness — fix before re-running p84 memory
-arms), #90 (arms confounded), #88/#84/#85 (still open though largely addressed by the rework
-and tick-gate; verify and close), #87 (p84 PR, superseded by merged #92?), #47 (stale), #95
-(seeding), #94 (toolkit plan), #80 (blocking TypedActor accessors), #70 (image distribution),
-#65 (full-architecture validation with consolidation, never run post-rework), #24 (cue
-competition).
+| Claim | Status |
+|---|---|
+| SLEEP bias came from a dataset bug, not the architecture | Stands; residual 60% SLEEP unaddressed |
+| JEPA improves survival over baseline/memory (P7, v1, rotten fruit, no_reposition) | **Provisional.** All lifetime data predates the 08-02 clock fix and the 08-06 tick fix; P7 is also latency-confounded |
+| JEPA's advantage depends on density/scarcity | Same caveat; the runs disagree with each other |
+| Consolidation hurts JEPA | Same caveat; P7 and no_reposition show the opposite |
+| Old `MemoryFilter` harms foraging | Confirmed mechanism (#88); superseded by the rework |
+| Reworked memory raises feeding rate | Stands (p84, post-fix data); valuation bugs #91/#93 still open |
+| Aversion learning (rotten fruit) | Never demonstrated |
+| Memory consolidation does anything | No — its threshold is currently unreachable |
 
-**Cross-cutting lessons:**
-1. Most "negative JEPA" results traced to our own pipeline bugs (adapter init, dropped WANDER
-   samples, CCAD stall, cycle-coupled clock), not to the idea. Check instrumentation before
-   interpreting a result.
-2. JEPA's edge depends on scarcity and on cognition running at the intended rate; it is not a
-   uniform win.
-3. Consolidation has never shown a clean benefit (hurt in familiar/novel worlds; helped only in
-   `dense_no_reposition`). The memory consolidation threshold is currently unreachable.
-4. Aversion learning (rotten fruit) has not been demonstrated in any condition.
+No JEPA experiment has run since the 08-02/08-06 fixes. The deployed `unified_critic` was
+trained (07-10) on data collected before them.
+
+## Open threads (as of 10-17)
+- **Memory correctness:** #93 (eligibility²), #91 (decide between the branch's two designs; revert `911132a`?), consolidation threshold.
+- **Parity:** #90 (arm confound), S1 needs a depleting world, Mapa port plan (Phases 1–6).
+- **JEPA:** re-validate on the fixed clock/tick before citing any survival claim; #65 full-architecture run; K-step rollout.
+- **Reproducibility/infra:** #95 seeding, #94 toolkit, #80 blocking TypedActor accessors, #70 image distribution.
+- **Housekeeping:** #84, #85, #88 still open though largely addressed. PR #87 is superseded by #92, and PR #47 is stale.
+  #49 is still open even though its TypedActor fix landed 07-01.
