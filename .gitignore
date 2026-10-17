@@ -45,3 +45,4 @@ heapdumps/*
 .project
 .settings/
 .claude/
+graphify-out/
