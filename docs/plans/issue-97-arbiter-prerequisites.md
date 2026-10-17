@@ -1,7 +1,27 @@
 # Issue #97 — Arbiter prerequisites: feeding at speed (#96) and seeded runs (#95)
 
 Plan for the two fixes every arbiter arm depends on (`docs/plans/2026-q4-research-plan.md`,
-A0 baseline). Status: **draft, awaiting approval**.
+A0 baseline). Status: **approved 2026-10-17; implemented on `fix/arbiter-prereqs-97`, verification run pending.**
+
+### Decisions and what the code showed
+- Feeding: the suspected arc bug is real (`CreatureGeometryTest.mouthContainsFruitDeadAheadOfRadianBearing`
+  failed for 5 of 7 headings before the fix). Fixed as **A + C**: `Arc.startAngleFor` converts the
+  radian bearing to a normalised, y-flipped, centred degree start angle at
+  `CreatureActor.getPositioningAttr`; the mouth arc is centred on the vision arc's centre line;
+  `FullAppraisal.contactDistance` affords EAT within mouth radius + object radius. The conversion
+  also corrects the **vision** arc (it was equally decoupled from heading), so the A0 baseline moves
+  on perception too, not only on eating. `Eye.direction` still adds degrees to a radian bearing
+  (left as is; it only feeds the world-model feature vector).
+- Seeding: `Seeds.derive` (SplitMix64 + FNV-1a over UTF-8, pinned by test); `Simulation.getSeed()`;
+  `--seed` or `DL2L_SEED`; positions are a function of (seed, object id) so several holder JVMs
+  never replay the same stream; per-creature streams for the three filters and WANDER.
+- Recording: `run_info` table (one row per holder) + `seeds` in `manifest.json`; the experiment
+  spec takes an optional `seeds:` list indexed by `trial - 1` (validated), exported as `DL2L_SEED`
+  by the local, Pi and CCAD runners.
+- Power: `analysis/diagnostics/p97_power.py` (baseline D = life deciles with an EAT: mean 4.58,
+  SD 0.94, ICC ~0). The effect is so large (d > 2) that comparison power is no constraint; the
+  binding constraint is the precision of the absolute claim "feeding sustained".
+
 
 ## Part A — Feeding collapses at speed (#96)
 
