@@ -1,6 +1,7 @@
 package br.cefetmg.lsi.l2l.cluster.settings;
 
 import br.cefetmg.lsi.l2l.common.Point;
+import br.cefetmg.lsi.l2l.common.Seeds;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
 import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyMode;
 import br.cefetmg.lsi.l2l.world.FruitType;
@@ -34,6 +35,10 @@ public class Simulation {
 
     private LearningSettings learningSettings;
 
+    private long seed;
+
+    private boolean seedGenerated;
+
     public Simulation(){}
 
     public Simulation(Config config) {
@@ -45,10 +50,14 @@ public class Simulation {
 
         numHolders = fullConfig.getLong("simulation.holders");
 
+        seedGenerated = !fullConfig.hasPath("simulation.seed");
+        seed = seedGenerated ? Seeds.fresh() : fullConfig.getLong("simulation.seed");
+
         try {
-            positionFactory = (PositionFactory) getClass().getClassLoader()
-                    .loadClass(fullConfig.getString("simulation.positionFactory"))
-                    .getConstructor(Point.class).newInstance(worldBoundaries);
+            Class<?> factoryClass = getClass().getClassLoader()
+                    .loadClass(fullConfig.getString("simulation.positionFactory"));
+            positionFactory = (PositionFactory) factoryClass.getConstructor(Point.class, long.class)
+                    .newInstance(worldBoundaries, Seeds.derive(seed, "world"));
 
         } catch (Exception ex) {
             throw new IllegalArgumentException("Could\'t load the PositionFactory");
@@ -131,6 +140,16 @@ public class Simulation {
 
     public void setNumHolders(Long numHolders) {
         this.numHolders = numHolders;
+    }
+
+    /** Root seed of every random stream in the run; see {@link Seeds}. */
+    public long getSeed() {
+        return seed;
+    }
+
+    /** True when the config gave no seed and one was generated (it is logged either way). */
+    public boolean isSeedGenerated() {
+        return seedGenerated;
     }
 
     public PositionFactory getPositionFactory() {

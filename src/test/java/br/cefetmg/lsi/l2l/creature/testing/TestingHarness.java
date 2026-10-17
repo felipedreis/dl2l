@@ -140,8 +140,12 @@ public final class TestingHarness {
         public Builder worldBoundaries(Point p) { this.worldBoundaries = p; return this; }
         public Builder learningSettings(LearningSettings s) { this.learningSettings = s; return this; }
 
+        private long seed = br.cefetmg.lsi.l2l.common.Seeds.fresh();
+
+        public Builder seed(long seed) { this.seed = seed; return this; }
+
         public TestingHarness build() {
-            return new TestingHarness(new TestingCreature(id, position, worldBoundaries, learningSettings));
+            return new TestingHarness(new TestingCreature(id, position, worldBoundaries, learningSettings, seed));
         }
 
         /**

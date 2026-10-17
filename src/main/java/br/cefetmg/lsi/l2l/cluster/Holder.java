@@ -84,6 +84,8 @@ public class Holder extends AbstractActor implements Registrable {
     // ever genuinely stalls rather than just being slow.
     private static final int FLUSH_TIMEOUT_SECONDS = 1800;
 
+    private final long seed;
+
     public Holder(Simulation settings, String saveDir) {
         this.saveDir = saveDir;
 
@@ -97,6 +99,7 @@ public class Holder extends AbstractActor implements Registrable {
         worldBoundaries = settings.getWorldBoundaries();
         hasReposition = settings.isReposition();
         learningSettings = settings.getLearningSettings();
+        seed = settings.getSeed();
     }
 
     @Override
@@ -126,6 +129,7 @@ public class Holder extends AbstractActor implements Registrable {
         logger.setLevel(Level.SEVERE);
         // Register learning settings before any creature is spawned so components can read them.
         SimulationSettingsExtension.of(context().system()).configure(learningSettings);
+        SimulationSettingsExtension.of(context().system()).configureSeed(seed);
         // Sets up the persistence backend (see PersistenceExtension) before any creature is
         // spawned - CreatureActor/component actors resolve bdActor() in their own preStart().
         PersistenceExtension.of(context().system()).configure(saveDir);
@@ -192,7 +196,7 @@ public class Holder extends AbstractActor implements Registrable {
     private void createWorldObject(WorldObjectType type, SequentialId id) {
         if(type instanceof FruitType) {
             ActorRef worldObject = context().actorOf(
-                    Fruit.props(id, type, factory.nextPosition(), collisionDetector),
+                    Fruit.props(id, type, factory.positionFor(id), collisionDetector),
                     "object-" + id.toString());
 
             worldObjects.put(id, worldObject);
@@ -200,7 +204,7 @@ public class Holder extends AbstractActor implements Registrable {
             logger.fine("Created a new world object with id " + id);
         } else if (type instanceof PlantType) {
             ActorRef worldObject = context().actorOf(
-                    Plant.props(id, type, factory.nextPosition(), collisionDetector),
+                    Plant.props(id, type, factory.positionFor(id), collisionDetector),
                     "object-" + id.toString());
 
             worldObjects.put(id, worldObject);
@@ -212,7 +216,7 @@ public class Holder extends AbstractActor implements Registrable {
     private void handleCreateCreature(CreateCreature order) {
         logger.info("Handling new creature creation order %s".formatted(order));
         Creature creature = TypedActor.get(context()).typedActorOf(
-                CreatureActor.props(order.id(), collisionDetector, factory.nextPosition(), worldBoundaries,
+                CreatureActor.props(order.id(), collisionDetector, factory.positionFor(order.id()), worldBoundaries,
                         order.learningSettings()),
                 "creature-" + order.id());
         creature.init();

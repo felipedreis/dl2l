@@ -216,4 +216,41 @@ public class LearningSettingsTest {
         assertEquals(LearningSettings.MASTER_FILTER_ORDER, ls.getEnabledFilters(),
                 "filters must default to master order");
     }
+
+    // -----------------------------------------------------------------------
+    // Seed (issue #95)
+    // -----------------------------------------------------------------------
+
+    private static String hoconWithSeed(String seedLine) {
+        return "simulation {\n"
+                + "  holders = 1\n"
+                + "  positionFactory = \"br.cefetmg.lsi.l2l.world.RandomPositionFactory\"\n"
+                + "  reposition = false\n"
+                + "  creatureSettings = [{quantity = 1}]\n"
+                + "  worldObjectSettings = []\n"
+                + "  worldSize = { width = 100, height = 100 }\n"
+                + seedLine
+                + "}";
+    }
+
+    @Test
+    void simulation_reads_seed_from_config_and_builds_the_same_world_from_it() {
+        Simulation a = new Simulation(com.typesafe.config.ConfigFactory.parseString(hoconWithSeed("  seed = 123\n")));
+        Simulation b = new Simulation(com.typesafe.config.ConfigFactory.parseString(hoconWithSeed("  seed = 123\n")));
+        Simulation c = new Simulation(com.typesafe.config.ConfigFactory.parseString(hoconWithSeed("  seed = 124\n")));
+
+        assertEquals(123L, a.getSeed());
+        assertFalse(a.isSeedGenerated());
+        br.cefetmg.lsi.l2l.common.SequentialId id = new br.cefetmg.lsi.l2l.common.SequentialId(9);
+        assertEquals(a.getPositionFactory().positionFor(id), b.getPositionFactory().positionFor(id));
+        assertNotEquals(a.getPositionFactory().positionFor(id), c.getPositionFactory().positionFor(id));
+    }
+
+    @Test
+    void simulation_without_seed_generates_one_and_says_so() {
+        Simulation a = new Simulation(com.typesafe.config.ConfigFactory.parseString(hoconWithSeed("")));
+        Simulation b = new Simulation(com.typesafe.config.ConfigFactory.parseString(hoconWithSeed("")));
+        assertTrue(a.isSeedGenerated());
+        assertNotEquals(a.getSeed(), b.getSeed());
+    }
 }

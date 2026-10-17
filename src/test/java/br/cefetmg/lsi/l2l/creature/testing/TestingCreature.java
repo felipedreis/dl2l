@@ -3,6 +3,7 @@ package br.cefetmg.lsi.l2l.creature.testing;
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.Point;
+import br.cefetmg.lsi.l2l.common.Seeds;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.ComponentRef;
 import br.cefetmg.lsi.l2l.creature.Creature;
@@ -29,6 +30,7 @@ import java.util.Map;
  */
 public final class TestingCreature implements Creature {
 
+    private final long seed;
     private final SequentialId id;
     private final Point worldBoundaries;
     private final LearningSettings learningSettings;
@@ -58,6 +60,13 @@ public final class TestingCreature implements Creature {
 
     public TestingCreature(SequentialId id, Point position, Point worldBoundaries,
                            LearningSettings learningSettings) {
+        this(id, position, worldBoundaries, learningSettings, Seeds.fresh());
+    }
+
+    /** {@code seed} is the run's root seed: same seed, same random draws per component (issue #95). */
+    public TestingCreature(SequentialId id, Point position, Point worldBoundaries,
+                           LearningSettings learningSettings, long seed) {
+        this.seed = seed;
         this.id = id;
         this.position = position;
         this.worldBoundaries = worldBoundaries;
@@ -83,7 +92,7 @@ public final class TestingCreature implements Creature {
         register(cid = cid.next(), new EffectorCortex(cid));
         register(cid = cid.next(), new PartialAppraisal(cid, learningSettings));
         // FullAppraisal: pass null for MLServiceExtension.Impl so WORLD_MODEL is skipped.
-        register(cid = cid.next(), new FullAppraisal(cid, learningSettings, null));
+        register(cid = cid.next(), new FullAppraisal(cid, learningSettings, null, null, seed));
         register(cid = cid.next(), new HomeostaticRegulation(cid, learningSettings));
         register(cid = cid.next(), new Valuation(cid, learningSettings));
         register(cid = cid.next(), new NeuromodulatorSystem(cid));

@@ -2,6 +2,7 @@ package br.cefetmg.lsi.l2l.creature.components;
 
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.common.Constants;
+import br.cefetmg.lsi.l2l.common.Seeds;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionProbabilityFilter;
@@ -72,6 +73,9 @@ public class FullAppraisal extends CreatureComponent {
     // Endocrine: cortisol tonic level from HPA axis, cached for encodeInternalState().
     private double cortisolTonic = 0.0;
 
+    private final long rootSeed;
+    private Random wanderRandom;
+
     private long cognitiveCycle = 0;
     private final SleepEpisode sleepEpisode = new SleepEpisode();
 
@@ -81,7 +85,14 @@ public class FullAppraisal extends CreatureComponent {
 
     public FullAppraisal(SequentialId id, LearningSettings learningSettings, MLServiceExtension.Impl mlExt,
                          AtomicReference<WorldModelFilter> wmFilterRef) {
+        this(id, learningSettings, mlExt, wmFilterRef, Seeds.fresh());
+    }
+
+    /** {@code rootSeed} is the run seed (SimulationSettingsExtension.seed()); see issue #95. */
+    public FullAppraisal(SequentialId id, LearningSettings learningSettings, MLServiceExtension.Impl mlExt,
+                         AtomicReference<WorldModelFilter> wmFilterRef, long rootSeed) {
         super(id);
+        this.rootSeed = rootSeed;
         this.learningSettings = learningSettings;
         this.mlExt = mlExt;
         this.wmFilterRef = wmFilterRef;
@@ -91,6 +102,10 @@ public class FullAppraisal extends CreatureComponent {
     public void preStart() throws Exception {
         super.preStart();
         memorySystem = creature.memory();
+
+        // One generator per random stream, each derived from the run seed and this creature's
+        // key, so a creature's draws do not depend on how many creatures or filters exist (#95).
+        wanderRandom = new Random(Seeds.derive(rootSeed, "creature", id.key, "wander"));
 
         // When mlExt is null (e.g. TestingCreature), the WORLD_MODEL filter is silently
         // disabled regardless of LearningSettings. Other filters still respect settings.
@@ -111,11 +126,13 @@ public class FullAppraisal extends CreatureComponent {
             switch (type) {
                 case TARGET_DISTANCE -> filterList.add(new TargetDistanceFilter());
                 case AFFORDANCE      -> {
-                    affordanceFilter = new ActionProbabilityFilter(creature.operantConditioning());
+                    affordanceFilter = new ActionProbabilityFilter(creature.operantConditioning(),
+                            new Random(Seeds.derive(rootSeed, "creature", id.key, "affordanceFilter")));
                     filterList.add(affordanceFilter);
                 }
                 case MEMORY          -> {
-                    memoryFilter = new MemoryFilter(memorySystem);
+                    memoryFilter = new MemoryFilter(memorySystem,
+                            new Random(Seeds.derive(rootSeed, "creature", id.key, "memoryFilter")));
                     filterList.add(memoryFilter);
                 }
                 case WORLD_MODEL     -> {
@@ -125,7 +142,7 @@ public class FullAppraisal extends CreatureComponent {
                         if (wmFilterRef != null) wmFilterRef.set(worldModelFilter);
                     }
                 }
-                case RANDOM          -> filterList.add(new RandomFilter());
+                case RANDOM          -> filterList.add(new RandomFilter(new Random(Seeds.derive(rootSeed, "creature", id.key, "randomFilter"))));
                 default              -> logger.warning("FullAppraisal: unknown filter type " + type + ", skipping");
             }
         }
@@ -413,7 +430,7 @@ public class FullAppraisal extends CreatureComponent {
             case WANDER ->
                 // symmetric random turn ±MAX_ROTATE_ANGLE degrees around current heading
                 cortical(action,
-                        perception.angle + (2 * new Random().nextDouble() - 1) * Math.toRadians(Constants.MAX_ROTATE_ANGLE),
+                        perception.angle + (2 * wanderRandom.nextDouble() - 1) * Math.toRadians(Constants.MAX_ROTATE_ANGLE),
                         defaultFocus, defaultSpeed);
 
             case OBSERVE ->

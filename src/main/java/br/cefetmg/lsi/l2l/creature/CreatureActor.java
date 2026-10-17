@@ -188,7 +188,7 @@ public class CreatureActor implements Creature {
                 ? MLServiceExtension.of(context.system()) : null;
 
         SequentialId componentId = id;
-        for (Map.Entry<Class<?>, Function<SequentialId, CreatureComponent>> entry : componentFactories(effective, mlExt, wmFilterRef).entrySet()) {
+        for (Map.Entry<Class<?>, Function<SequentialId, CreatureComponent>> entry : componentFactories(effective, mlExt, wmFilterRef, ext.seed()).entrySet()) {
             componentId = componentId.next();
             final SequentialId cid = componentId;
             final Class<?> componentType = entry.getKey();
@@ -229,7 +229,7 @@ public class CreatureActor implements Creature {
 
     private LinkedHashMap<Class<?>, Function<SequentialId, CreatureComponent>> componentFactories(
             LearningSettings effective, MLServiceExtension.Impl mlExt,
-            AtomicReference<WorldModelFilter> wmFilterRef) {
+            AtomicReference<WorldModelFilter> wmFilterRef, long seed) {
         LinkedHashMap<Class<?>, Function<SequentialId, CreatureComponent>> factories = new LinkedHashMap<>();
         factories.put(Eye.class,                   Eye::new);
         factories.put(Body.class,                  Body::new);
@@ -238,7 +238,7 @@ public class CreatureActor implements Creature {
         factories.put(SensoryCortex.class,         SensoryCortex::new);
         factories.put(EffectorCortex.class,        EffectorCortex::new);
         factories.put(PartialAppraisal.class,      id -> new PartialAppraisal(id, effective));
-        factories.put(FullAppraisal.class,         id -> new FullAppraisal(id, effective, mlExt, wmFilterRef));
+        factories.put(FullAppraisal.class,         id -> new FullAppraisal(id, effective, mlExt, wmFilterRef, seed));
         factories.put(HomeostaticRegulation.class, id -> new HomeostaticRegulation(id, effective));
         factories.put(Valuation.class,             id -> new Valuation(id, effective));
         factories.put(NeuromodulatorSystem.class,  NeuromodulatorSystem::new);
