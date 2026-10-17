@@ -3,7 +3,10 @@ package br.cefetmg.lsi.l2l.physics;
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import org.junit.jupiter.api.Test;
+import org.newdawn.slick.geom.Circle;
 import org.newdawn.slick.geom.Rectangle;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -127,5 +130,27 @@ public class CreatureGeometryTest {
         assertEquals(-50, rectangle.getY());
         assertEquals(200, rectangle.getWidth());
         assertEquals(200, rectangle.getHeight());
+    }
+
+    /**
+     * Issue #96: the creature steers by an absolute world bearing in radians (Point.angleAlpha
+     * == atan2(dy, dx), see FullAppraisal.produceCortical) and that value is what reaches
+     * CreaturePositioningAttr.visionFieldPosition. A fruit dead ahead of the heading, well
+     * inside mouth radius, must be inside the mouth arc whatever the heading.
+     */
+    @ParameterizedTest
+    @ValueSource(doubles = {0.0, 1.0, 1.5707963, 3.0, -1.0, -1.5707963, -3.0})
+    public void mouthContainsFruitDeadAheadOfRadianBearing(double bearingRad) {
+        Point creature = new Point(500, 500);
+        double ahead = 12;
+        Circle fruit = new Circle((float) (creature.x + ahead * Math.cos(bearingRad)),
+                (float) (creature.y + ahead * Math.sin(bearingRad)), 8);
+
+        CreatureGeometry geometry = new CreatureGeometry(new CreaturePositioningAttr(sequentialId,
+                sequentialId.next(), sequentialId.next(), sequentialId.next(), sequentialId.next(),
+                creature, Arc.startAngleFor(bearingRad, 50), 50, 65, false, false));
+
+        assertTrue(geometry.mouth.intersects(fruit),
+                "fruit 12 units ahead of bearing " + bearingRad + " rad is outside the mouth arc");
     }
 }

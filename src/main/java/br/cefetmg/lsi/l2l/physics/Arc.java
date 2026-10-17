@@ -22,6 +22,18 @@ public class Arc extends Shape{
     }
 
 
+    /**
+     * Converts a creature heading into the {@code startAngle} an arc of the given opening needs
+     * to be centred on it. Creatures steer by an absolute world bearing in radians
+     * ({@code atan2(dy, dx)}); an Arc takes degrees, measured with y flipped ({@code -sin}), and
+     * spans {@code [start, start + opening]}. The result is normalised to {@code [0, 360)}, which
+     * {@link CreatureGeometry#getBoundingBox()} relies on to pick a quadrant.
+     */
+    public static double startAngleFor(double bearingRadians, double openingDegrees) {
+        double start = (-Math.toDegrees(bearingRadians) - openingDegrees / 2.0) % 360;
+        return start < 0 ? start + 360 : start;
+    }
+
     protected void createPoints() {
 
         //Inicializa o vetor pontos com o maximo de pontos que vou precisar.

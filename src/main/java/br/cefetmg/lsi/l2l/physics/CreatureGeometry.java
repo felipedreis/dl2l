@@ -44,7 +44,9 @@ public class CreatureGeometry implements Serializable, Geometry {
 
         mouth = new Arc( attr.position.x,  attr.position.y,
                  Constants.DEFAULT_MOUTH_RADIUS,
-                 attr.visionFieldPosition,
+                 // centred on the vision arc's centre line, i.e. on the heading
+                 attr.visionFieldPosition + attr.visionFieldOpening / 2.0
+                         - Constants.DEFAULT_MOUTH_OPENING / 2.0,
                  Constants.DEFAULT_MOUTH_OPENING, 10);
         this.id = attr.bodyId;
         this.visionFieldPosition = attr.visionFieldPosition;

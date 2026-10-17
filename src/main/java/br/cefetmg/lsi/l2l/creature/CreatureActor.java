@@ -27,6 +27,7 @@ import br.cefetmg.lsi.l2l.creature.ml.MLServiceExtension;
 import br.cefetmg.lsi.l2l.creature.ml.MemoryConsolidator;
 import br.cefetmg.lsi.l2l.creature.ml.MemoryTraceConsolidator;
 import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
+import br.cefetmg.lsi.l2l.physics.Arc;
 import br.cefetmg.lsi.l2l.physics.CreaturePositioningAttr;
 import br.cefetmg.lsi.l2l.stimuli.CognitiveTick;
 import scala.concurrent.duration.Duration;
@@ -313,7 +314,8 @@ public class CreatureActor implements Creature {
                 componentId(Body.class), componentId(Eye.class), componentId(Nose.class), componentId(Mouth.class),
                 TypedActor.context().self(),
                 componentRef(Body.class), componentRef(Eye.class), componentRef(Nose.class), componentRef(Mouth.class),
-                position, visionFieldPosition, visionFieldOpening, olfactoryFieldRadius, false, false);
+                position, Arc.startAngleFor(visionFieldPosition, visionFieldOpening), visionFieldOpening,
+                olfactoryFieldRadius, false, false);
     }
 
     private SequentialId componentId(Class componentClass) {

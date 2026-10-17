@@ -33,6 +33,7 @@ import br.cefetmg.lsi.l2l.stimuli.EndocrineState;
 import br.cefetmg.lsi.l2l.stimuli.NeuromodulatorState;
 import br.cefetmg.lsi.l2l.stimuli.Stimulus;
 import br.cefetmg.lsi.l2l.stimuli.TediumStimulus;
+import br.cefetmg.lsi.l2l.world.FruitType;
 import br.cefetmg.lsi.l2l.world.PlantType;
 import br.cefetmg.lsi.l2l.world.Self;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
@@ -535,10 +536,26 @@ public class FullAppraisal extends CreatureComponent {
                 new Action(ActionType.WANDER, perception)
             );
         }
-        if (perception.distance > 0) {
+        if (perception.distance > contactDistance(type)) {
             return actionsAtDistance(perception);
         }
         return actionsAtContact(perception, type);
+    }
+
+    /**
+     * Centre-to-centre distance at which the mouth reaches an object. Contact used to be only
+     * the detector's {@code TouchStimulus} (distance exactly 0), which a step of up to MAX_STEP
+     * can jump straight over once the creature is fast, so EAT stopped being a candidate
+     * (issue #96). Anything inside mouth radius plus the object's own radius counts as contact.
+     */
+    static double contactDistance(WorldObjectType type) {
+        double objectRadius = 0;
+        if (type instanceof FruitType fruit) {
+            objectRadius = fruit.radius;
+        } else if (type instanceof PlantType plant) {
+            objectRadius = plant.radius;
+        }
+        return Constants.DEFAULT_MOUTH_RADIUS + objectRadius;
     }
 
     private List<Action> actionsAtDistance(Perception perception) {
