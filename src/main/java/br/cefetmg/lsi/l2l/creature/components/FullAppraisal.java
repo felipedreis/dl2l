@@ -428,9 +428,14 @@ public class FullAppraisal extends CreatureComponent {
                 cortical(action, perception.angle, Constants.MIN_VISION_FIELD_OPENING, 0);
 
             case WANDER ->
-                // symmetric random turn ±MAX_ROTATE_ANGLE degrees around current heading
+                // symmetric random turn ±MAX_ROTATE_ANGLE degrees around the CURRENT HEADING.
+                // perception.angle is the bearing to the perceived object, so turning around it
+                // made WANDER walk toward whatever the creature was looking at: next to an
+                // uneatable apple (EAT probability learned down to 0) it could never leave
+                // (issue #97: position spread ~10 px for the last 60% of life).
                 cortical(action,
-                        perception.angle + (2 * wanderRandom.nextDouble() - 1) * Math.toRadians(Constants.MAX_ROTATE_ANGLE),
+                        creature.getVisionFieldPosition()
+                                + (2 * wanderRandom.nextDouble() - 1) * Math.toRadians(Constants.MAX_ROTATE_ANGLE),
                         defaultFocus, defaultSpeed);
 
             case OBSERVE ->

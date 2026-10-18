@@ -62,3 +62,40 @@ the outcome.
 
 Historical control; the arc fix changes the A0 baseline for perception; ICC from 16 trials; replay
 covers initial conditions and per-component draws only.
+
+---
+
+## Revision 1 (2026-10-18) — v1 failed H1; second intervention, arm `p97_feeding_fix_v2`
+
+**What v1 showed** (8 trials x 5, seeds 9701-9708, arc + contact-range fix only): H1 fails.
+Mean D 4.50 vs 4.58 pre-fix (Mann-Whitney p = 0.74), P[D>=9] = 0. Total EATs fell 40%; the
+collapse after ~30% of life remained. These numbers were produced under the protocol above and
+are reported as-is.
+
+**Diagnosis (exploratory, from the v1 data — not pre-registered, flagged as such).**
+- From ~30% of life, creatures stay inside ~10 px of movement (std of position by decile:
+  185, 156, 99, 22, 13, 11, 14, 12, 9, 5 px; pre-fix 122, 146, 124, 87, 7, 6, ...) among ~10
+  distinct objects, 92% of whose perceptions are GRAY_APPLE.
+- The operant table learns P(EAT | GRAY_APPLE) -> 0 within ~50 s (eating gray gives no calories);
+  P(EAT | RED/GREEN) stays ~37-50. Approaching gray therefore never ends in a meal.
+- Code reading: the WANDER branch of `FullAppraisal.produceCortical` turns around
+  `perception.angle`, the **bearing to the perceived object**, although its comment and the
+  surrounding javadoc say "around current heading". Next to an object, WANDER is therefore a random
+  walk *toward* it (+-30 deg) and the creature cannot leave. AVOID (+45 deg off the bearing) and
+  APPROACH also keep it in the neighbourhood.
+
+**Intervention v2.** WANDER turns around `creature.getVisionFieldPosition()` (the heading), as documented
+(unit test `wander_near_an_object_turns_around_the_heading_not_the_objects_bearing`, fails
+without the change). Nothing else changes. Same seeds, so v2 trial N shares its initial world with v1 trial N.
+
+**Hypotheses for v2** (same operational definitions as H1/H2):
+- **H4.** Position spread in the last 60% of life exceeds 3x that of v1 (median across
+  creatures), i.e. the trap is gone.
+- **H1'.** H1 as written, on v2.
+- **H5 (v2 vs v1, paired by seed).** D is larger in v2; Wilcoxon signed-rank on the 8 trial means.
+
+Decision rule: if H4 holds but H1' fails, the trap was real but not the only cause, and the
+report says so; if H4 fails, the diagnosis is wrong and is reported as such. n = 8 trials is kept
+(sized above; the SD for v2 is unknown, so intervals are the primary output).
+
+Data: `experiments/p97_feeding_fix_v2.yml`, HF prefix `p97_v2/`.

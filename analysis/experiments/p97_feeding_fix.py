@@ -33,6 +33,25 @@ def baseline(table):
     return pd.concat(parts, ignore_index=True)
 
 
+def spread_by_creature(creatures, body, lo=0.4):
+    """Median-able per-creature position spread (std of final_x/final_y, hypot) over life fraction >= lo."""
+    cr = creatures.drop_duplicates(["trial", "creature_key"]).set_index(["trial", "creature_key"])
+    b = body.join(cr[["born_time", "observed_s"]], on=["trial", "creature_key"])
+    b = b[((b.time - b.born_time) / 1000 / b.observed_s) >= lo]
+    g = b.groupby(["trial", "creature_key"])
+    return np.hypot(g.final_x.std(), g.final_y.std())
+
+
+def v1_arm():
+    """The first fixed run (arc + contact range only), when this is the v2 analysis."""
+    d = REPO_ROOT / "ml" / "data_p97_feeding_fix" / "legacy_nomem"
+    parts = {}
+    for t in ("creatures", "mouth_interactions", "body_states"):
+        fs = sorted(glob.glob(f"{d}/trial_*/{t}.parquet"))
+        parts[t] = pd.concat(pd.read_parquet(f).assign(trial=int(f.split("trial_")[1].split("/")[0])) for f in fs)
+    return parts
+
+
 def per_creature(creatures, mouth):
     creatures = creatures.drop_duplicates(["trial", "creature_key"]).set_index(["trial", "creature_key"])
     eats = mouth[mouth.interaction_type == "EAT"] if "interaction_type" in mouth else mouth
@@ -72,6 +91,20 @@ def run(cfg: ExperimentAnalysis) -> None:
     print(f"fixed D mean {D.D.mean():.2f} median {med}  P[D>={THRESH}] {p:.2f} CI [{lo:.2f}, {hi:.2f}]")
     print(f"vs baseline D mean {D0.D.mean():.2f}: U p={u.pvalue:.2g}, Cliff's delta {delta:.2f}")
 
+    extra = ""
+    if cfg.name.endswith("_v2") and (REPO_ROOT / "ml" / "data_p97_feeding_fix").exists():
+        v1 = v1_arm()
+        D1, eats1, cr1 = per_creature(v1["creatures"], v1["mouth_interactions"])
+        s2 = spread_by_creature(creatures, load_all(cfg, "body_states.parquet"))
+        s1 = spread_by_creature(v1["creatures"], v1["body_states"])
+        h4 = s2.median() > 3 * s1.median()
+        tm2, tm1 = D.groupby("trial").D.mean(), D1.groupby("trial").D.mean().reindex(D.groupby("trial").D.mean().index)
+        w = stats.wilcoxon(tm2, tm1, alternative="greater")
+        extra = (f" v1 (arc+contact only): mean D {D1.D.mean():.2f}. Late-life position spread (median std, px): "
+                 f"v1 {s1.median():.1f}, v2 {s2.median():.1f}; **H4 {'holds' if h4 else 'does not hold'}** (needs >3x). "
+                 f"H5 paired by seed, Wilcoxon on trial means: p = {w.pvalue:.3g}.")
+        print(extra)
+
     fig, ax = plt.subplots(1, 2, figsize=(11, 4))
     x = np.arange(10)
     ax[0].bar(x - 0.2, rate(eats0, cr0), 0.4, color=OLD, label=f"pre-fix p84 (n={len(D0)})")
@@ -96,7 +129,7 @@ def run(cfg: ExperimentAnalysis) -> None:
     rb.result("Feeding over life", f"Fixed: mean D {D.D.mean():.2f}, median {med}, "
               f"P[D>={THRESH}] = {p:.2f} (95% trial-bootstrap CI {lo:.2f}-{hi:.2f}). "
               f"Pre-fix: mean D {D0.D.mean():.2f}. Mann-Whitney p = {u.pvalue:.2g}, "
-              f"Cliff's delta {delta:.2f}. **H1 {'holds' if h1 else 'does not hold'}.**",
+              f"Cliff's delta {delta:.2f}. **H1 {'holds' if h1 else 'does not hold'}.**" + extra,
               "feeding_over_life.png")
     rb.analysis("See the written report in docs/reports.")
     rb.write()
