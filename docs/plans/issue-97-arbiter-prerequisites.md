@@ -1,7 +1,7 @@
 # Issue #97 — Arbiter prerequisites: feeding at speed (#96) and seeded runs (#95)
 
 Plan for the two fixes every arbiter arm depends on (`docs/plans/2026-q4-research-plan.md`,
-A0 baseline). Status: **approved 2026-10-17; implemented on `fix/arbiter-prereqs-97`, verification run pending.**
+A0 baseline). Status: **approved 2026-10-17; implemented on `fix/arbiter-prereqs-97`, verification run done — see below.**
 
 ### Decisions and what the code showed
 - Feeding: the suspected arc bug is real (`CreatureGeometryTest.mouthContainsFruitDeadAheadOfRadianBearing`
@@ -22,6 +22,7 @@ A0 baseline). Status: **approved 2026-10-17; implemented on `fix/arbiter-prereqs
   SD 0.94, ICC ~0). The effect is so large (d > 2) that comparison power is no constraint; the
   binding constraint is the precision of the absolute claim "feeding sustained".
 
+- **Verification outcome (2026-10-18):** H1 failed. The contact fixes are correct but not sufficient (mean D 4.5 vs 4.58 pre-fix); a gray-free world already feeds through every decile (D = 9.91), so the collapse is gray-world learning dynamics, not the contact path. A WANDER-around-heading fix (found on the way) did not release the trap. Report: `docs/reports/20261018_p97_feeding_fix_report.md`.
 
 ## Part A — Feeding collapses at speed (#96)
 

@@ -43,7 +43,7 @@ creatures started at identical positions. Full trajectories are not expected to 
 | pre-fix, mixed world (historical) | 80 | 4.58 | 4 | 0 |
 | v1: arc + contact-range fix | 40 | 4.50 | 4 | 0 (interval 0-0) |
 | v2: v1 + WANDER around heading | 40 | 4.97 | 5 | 0 (interval 0-0) |
-| pre-fix, **gray-free** world (historical) | 80 | **9.91** | 10 | 0.99 (73 of 80 at D = 10) |
+| pre-fix, **gray-free** world (historical) | 80 | **9.91** | 10 | 1.00 (73 of 80 at D = 10, 7 at 9) |
 
 - v1 vs pre-fix: Mann-Whitney p = 0.74, Cliff's delta -0.07. Total EATs fell 40% (2,207 vs 3,728).
 - v2 vs pre-fix: p = 0.049, delta 0.18. v2 vs v1, paired by seed (Wilcoxon on trial means): p = 0.26.
@@ -58,7 +58,7 @@ creatures started at identical positions. Full trajectories are not expected to 
   pre-fix 122, 146, 124, 87, 7, 6, 6, 6, 4, 2. After ~30% of life a creature moves inside ~10 px
   while stepping ~9 per action, among ~10 distinct objects.
 - **Gray dominates what it sees.** Share of perceptions that are GRAY_APPLE: 54% in decile 0,
-  93% in decile 9. Of late APPROACH actions, 98% target gray.
+  93% in decile 9. Of APPROACH actions in deciles 5-9, 94-97% target gray.
 - **Gray is learned as inedible.** The operant EAT probability for GRAY_APPLE falls from 12 to 0 in
   the first ~50 s; for RED/GREEN it stays 37-50. The probability of APPROACH on gray *rises* (30.8,
   vs 22.5 for red/green), because punishing EAT redistributes weight to the other actions.
@@ -79,7 +79,7 @@ Fixing it (test-covered) did not release the trap: late-life spread 38 px vs 31 
    radius. These are real bugs, covered by tests, and they change perception for every arm. But
    they do not restore sustained feeding: mean D stays ~4.5-5.
 2. **#96's premise does not hold as stated.** In the world without GRAY_APPLE, creatures eat in
-   every decile (D = 9.91) and never die, *with the pre-fix code at the same step sizes*. Feeding
+   every decile (D = 9.91) and never die, *with the pre-fix code*. Feeding
    only collapses when an unrewarding fruit is present. The cause sits in the learned action
    probabilities and the world mix, not in the contact test.
 3. **Mechanism, with the confidence it deserves.** The chain above (EAT on gray punished ->
@@ -90,8 +90,8 @@ Fixing it (test-covered) did not release the trap: late-life spread 38 px vs 31 
 4. **The acceptance criterion is unreachable by a path fix.** "EATs in every decile on the legacy
    configuration" would need a change to the learning dynamics (for instance, punishing EAT must not
    raise APPROACH on the same target, or APPROACH must be extinguished at contact). That changes
-   behaviour parity with Mapa/Campos, who show an oscillating curve in a world with unrewarding
-   fruit (see the p84 report), so it is a design decision rather than a bug fix.
+   behaviour parity work in p84 (the legacy architecture is the reference there), so it is a design
+   decision rather than a bug fix.
 5. **Gray-free comparison caveats.** That world has 250 red + 250 green, a 30-minute cap and
    creatures that do not die, so deciles span ~1800 s instead of ~240 s. D is normalised by life
    length, which makes the arms comparable on shape but not on absolute time.
