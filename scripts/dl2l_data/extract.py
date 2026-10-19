@@ -141,6 +141,12 @@ def _dedup_creatures(creatures_df):
     )
 
 
+def _has_view(conn, table: str) -> bool:
+    return conn.execute(
+        "SELECT count(*) FROM information_schema.tables "
+        "WHERE table_schema = 'data' AND table_name = ?", [table]).fetchone()[0] > 0
+
+
 def save(df, out_dir: Path, table: str, fmt: str, condition: str, trial) -> None:
     if df.empty:
         print(f"  (empty) {table}", file=sys.stderr)
@@ -193,6 +199,7 @@ def main():
 
     conn = _open_raw_views(raw_dir)
 
+    seeds = None
     creatures_sql, _ = TABLES["creatures"]
     creatures_df = conn.execute(creatures_sql).df()
     if len(creatures_df) == 0:
@@ -206,8 +213,14 @@ def main():
     for table in TABLE_ORDER:
         if table == "creatures":
             continue
+        if table == "run_info" and not _has_view(conn, table):
+            print("  (no run_info in this raw dump: written before seeding, issue #95)",
+                  file=sys.stderr)
+            continue
         sql, post_process = TABLES[table]
         df = conn.execute(sql).df()
+        if table == "run_info":
+            seeds = sorted({int(s) for s in df["seed"]})
         if post_process is not None:
             df = post_process(df)
         save(df, out_dir, table, args.format, cond, trial)
@@ -229,6 +242,7 @@ def main():
         trial=trial,
         n_creatures=n_creatures,
         has_backup=has_backup,
+        seeds=seeds,
     )
     print(f"  manifest → {manifest_path}", file=sys.stderr)
     print("Extraction complete.", file=sys.stderr)

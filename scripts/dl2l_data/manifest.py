@@ -14,6 +14,7 @@ def update_manifest(
     trial,
     n_creatures: int,
     has_backup: bool,
+    seeds=None,
 ) -> Path:
     """Create or update <exp_dir>/manifest.json with this trial's metadata.
 
@@ -57,6 +58,11 @@ def update_manifest(
                 "extracted_at": datetime.now(timezone.utc).isoformat(),
                 "has_backup": has_backup,
             }
+            if seeds:
+                # Root seed(s) every random stream of this trial was derived from (issue #95);
+                # more than one only for an unseeded multi-holder run, where each JVM
+                # generated its own.
+                cond_entry["trials"][trial_key]["seeds"] = seeds
             manifest["updated_at"] = datetime.now(timezone.utc).isoformat()
 
             tmp_path = manifest_path.with_suffix(".json.tmp")

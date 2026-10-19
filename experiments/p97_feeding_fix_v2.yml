@@ -1,0 +1,30 @@
+# v2 of p97_feeding_fix: adds the WANDER-around-heading fix on top of the arc/contact fix.
+# Same seeds as v1, so trial N shares its initial world with v1 trial N.
+# See docs/experiments/p97_feeding_fix_recipe.md, Revision 1.
+name: p97_feeding_fix_v2
+trials: 8
+seeds: [9701, 9702, 9703, 9704, 9705, 9706, 9707, 9708]
+
+conditions:
+  - key: legacy_nomem
+    simulation: simulations/p84_legacy_nomem.conf
+    label: Legacy (fixed + wander heading)
+    color: "#2b5eb8"
+
+image:
+  source: build
+
+data_dir: ml/data_p97_feeding_fix_v2
+
+extract:
+  format: parquet
+  backup: true
+  tables: all
+
+upload:
+  enabled: true
+  repo: felipedreis/dl2l-experiments
+  prefix: p97_v2
+
+analysis:
+  module: p97_feeding_fix

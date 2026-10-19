@@ -2,6 +2,7 @@ package br.cefetmg.lsi.l2l.cluster;
 
 import akka.actor.AbstractExtensionId;
 import akka.actor.ActorSystem;
+import br.cefetmg.lsi.l2l.common.Seeds;
 import akka.actor.Extension;
 import akka.actor.ExtendedActorSystem;
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
@@ -40,6 +41,17 @@ public class SimulationSettingsExtension extends AbstractExtensionId<SimulationS
         private volatile LearningSettings globalSettings = new LearningSettings();
 
         private final ConcurrentHashMap<Long, LearningSettings> perCreatureSettings = new ConcurrentHashMap<>();
+
+        private volatile long seed = Seeds.fresh();
+
+        /** Root seed for this run's random streams (issue #95); set by Holder before any creature spawns. */
+        public void configureSeed(long seed) {
+            this.seed = seed;
+        }
+
+        public long seed() {
+            return seed;
+        }
 
         /** Called once by Holder before any creature actor is created. */
         public void configure(LearningSettings settings) {

@@ -2,6 +2,7 @@ package br.cefetmg.lsi.l2l.creature.components;
 
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.common.Constants;
+import br.cefetmg.lsi.l2l.common.Seeds;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionProbabilityFilter;
@@ -33,6 +34,7 @@ import br.cefetmg.lsi.l2l.stimuli.EndocrineState;
 import br.cefetmg.lsi.l2l.stimuli.NeuromodulatorState;
 import br.cefetmg.lsi.l2l.stimuli.Stimulus;
 import br.cefetmg.lsi.l2l.stimuli.TediumStimulus;
+import br.cefetmg.lsi.l2l.world.FruitType;
 import br.cefetmg.lsi.l2l.world.PlantType;
 import br.cefetmg.lsi.l2l.world.Self;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
@@ -71,6 +73,9 @@ public class FullAppraisal extends CreatureComponent {
     // Endocrine: cortisol tonic level from HPA axis, cached for encodeInternalState().
     private double cortisolTonic = 0.0;
 
+    private final long rootSeed;
+    private Random wanderRandom;
+
     private long cognitiveCycle = 0;
     private final SleepEpisode sleepEpisode = new SleepEpisode();
 
@@ -80,7 +85,14 @@ public class FullAppraisal extends CreatureComponent {
 
     public FullAppraisal(SequentialId id, LearningSettings learningSettings, MLServiceExtension.Impl mlExt,
                          AtomicReference<WorldModelFilter> wmFilterRef) {
+        this(id, learningSettings, mlExt, wmFilterRef, Seeds.fresh());
+    }
+
+    /** {@code rootSeed} is the run seed (SimulationSettingsExtension.seed()); see issue #95. */
+    public FullAppraisal(SequentialId id, LearningSettings learningSettings, MLServiceExtension.Impl mlExt,
+                         AtomicReference<WorldModelFilter> wmFilterRef, long rootSeed) {
         super(id);
+        this.rootSeed = rootSeed;
         this.learningSettings = learningSettings;
         this.mlExt = mlExt;
         this.wmFilterRef = wmFilterRef;
@@ -90,6 +102,10 @@ public class FullAppraisal extends CreatureComponent {
     public void preStart() throws Exception {
         super.preStart();
         memorySystem = creature.memory();
+
+        // One generator per random stream, each derived from the run seed and this creature's
+        // key, so a creature's draws do not depend on how many creatures or filters exist (#95).
+        wanderRandom = new Random(Seeds.derive(rootSeed, "creature", id.key, "wander"));
 
         // When mlExt is null (e.g. TestingCreature), the WORLD_MODEL filter is silently
         // disabled regardless of LearningSettings. Other filters still respect settings.
@@ -110,11 +126,13 @@ public class FullAppraisal extends CreatureComponent {
             switch (type) {
                 case TARGET_DISTANCE -> filterList.add(new TargetDistanceFilter());
                 case AFFORDANCE      -> {
-                    affordanceFilter = new ActionProbabilityFilter(creature.operantConditioning());
+                    affordanceFilter = new ActionProbabilityFilter(creature.operantConditioning(),
+                            new Random(Seeds.derive(rootSeed, "creature", id.key, "affordanceFilter")));
                     filterList.add(affordanceFilter);
                 }
                 case MEMORY          -> {
-                    memoryFilter = new MemoryFilter(memorySystem);
+                    memoryFilter = new MemoryFilter(memorySystem,
+                            new Random(Seeds.derive(rootSeed, "creature", id.key, "memoryFilter")));
                     filterList.add(memoryFilter);
                 }
                 case WORLD_MODEL     -> {
@@ -124,7 +142,7 @@ public class FullAppraisal extends CreatureComponent {
                         if (wmFilterRef != null) wmFilterRef.set(worldModelFilter);
                     }
                 }
-                case RANDOM          -> filterList.add(new RandomFilter());
+                case RANDOM          -> filterList.add(new RandomFilter(new Random(Seeds.derive(rootSeed, "creature", id.key, "randomFilter"))));
                 default              -> logger.warning("FullAppraisal: unknown filter type " + type + ", skipping");
             }
         }
@@ -410,9 +428,14 @@ public class FullAppraisal extends CreatureComponent {
                 cortical(action, perception.angle, Constants.MIN_VISION_FIELD_OPENING, 0);
 
             case WANDER ->
-                // symmetric random turn ±MAX_ROTATE_ANGLE degrees around current heading
+                // symmetric random turn ±MAX_ROTATE_ANGLE degrees around the CURRENT HEADING.
+                // perception.angle is the bearing to the perceived object, so turning around it
+                // made WANDER walk toward whatever the creature was looking at: next to an
+                // uneatable apple (EAT probability learned down to 0) it could never leave
+                // (issue #97: position spread ~10 px for the last 60% of life).
                 cortical(action,
-                        perception.angle + (2 * new Random().nextDouble() - 1) * Math.toRadians(Constants.MAX_ROTATE_ANGLE),
+                        creature.getVisionFieldPosition()
+                                + (2 * wanderRandom.nextDouble() - 1) * Math.toRadians(Constants.MAX_ROTATE_ANGLE),
                         defaultFocus, defaultSpeed);
 
             case OBSERVE ->
@@ -535,10 +558,26 @@ public class FullAppraisal extends CreatureComponent {
                 new Action(ActionType.WANDER, perception)
             );
         }
-        if (perception.distance > 0) {
+        if (perception.distance > contactDistance(type)) {
             return actionsAtDistance(perception);
         }
         return actionsAtContact(perception, type);
+    }
+
+    /**
+     * Centre-to-centre distance at which the mouth reaches an object. Contact used to be only
+     * the detector's {@code TouchStimulus} (distance exactly 0), which a step of up to MAX_STEP
+     * can jump straight over once the creature is fast, so EAT stopped being a candidate
+     * (issue #96). Anything inside mouth radius plus the object's own radius counts as contact.
+     */
+    static double contactDistance(WorldObjectType type) {
+        double objectRadius = 0;
+        if (type instanceof FruitType fruit) {
+            objectRadius = fruit.radius;
+        } else if (type instanceof PlantType plant) {
+            objectRadius = plant.radius;
+        }
+        return Constants.DEFAULT_MOUTH_RADIUS + objectRadius;
     }
 
     private List<Action> actionsAtDistance(Perception perception) {

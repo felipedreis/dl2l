@@ -1,6 +1,6 @@
 # DL2L research diary
 
-Covers 2026-06-22 → 2026-10-16. Compiled 2026-10-17 from git (including the unmerged
+Covers 2026-06-22 → 2026-10-18. Compiled 2026-10-17 (updated 2026-10-18) from git (including the unmerged
 `claude/issue-91-*` branch), GitHub issues/PRs, `docs/plans`, `docs/reports`, the CCAD
 postmortem, and working files since moved to the alifeworld repo. Numbers are copied from the cited report or commit;
 nothing is re-measured here.
@@ -24,6 +24,9 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
    harmful. We reworked it, and memory now raises feeding rate. Three memory bugs are still open.
 7. **Aug 15–Oct 16.** Unmerged #91 follow-up; recovered and ran the original ALifeWorld source;
    planned a shared experiment toolkit.
+8. **Oct 17–18.** Arbiter prerequisites (#97). We fixed two real bugs (arc units, WANDER heading) and
+   seeded every run, but the "creatures stop eating at speed" premise of #96 was wrong: the collapse
+   is a property of the world with unrewarding gray apples.
 
 ---
 
@@ -158,6 +161,30 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
   pre-registration). Draft only, not built.
 - #95: trials can't be replayed because no randomness is seeded.
 
+### 10-17 → 10-18 · Arbiter prerequisites: feeding (#96) and seeding (#95), issue #97, PR #118
+- **Why:** every arbiter arm needs creatures that keep eating and runs that can be paired by seed.
+  Plan: `docs/plans/issue-97-arbiter-prerequisites.md`; recipe (pre-registered, with a revision after the
+  first arm failed): `docs/experiments/p97_feeding_fix_recipe.md`; report: `docs/reports/20261018_p97_feeding_fix_report.md`.
+- **Bugs found and fixed (tested):**
+  - The mouth and vision arcs read a radian bearing as degrees, so they sat in a nearly fixed wedge whatever
+    the heading (5 of 7 headings failed the new geometry test). This also changes perception for every arm.
+  - EAT is now afforded within mouth radius + object radius, not only on the detector's exact-touch event.
+  - WANDER turned around the bearing to the perceived object instead of the heading, contrary to its own comment.
+- **Seeding (#95):** `simulation.seed` / `--seed` / `DL2L_SEED`; per-creature child seeds; positions a function of
+  (seed, object id), so several holders never replay one stream; stored in a `run_info` table and the manifest;
+  specs take `seeds:`. Live replay: two runs with seed 9701 started all 5 creatures at identical positions.
+  Akka scheduling keeps trajectories non-identical.
+- **Feeding result (8 trials x 5 creatures, seeds 9701-9708, historical unseeded control):** D, the number of life
+  deciles with an EAT, is 4.58 pre-fix, 4.50 with the contact fix, 4.97 with the WANDER fix too. Nobody reaches
+  P[D>=9]. **The #96 criterion is not met.**
+- **What actually causes it:** the gray-free legacy world already feeds in every decile with the *old* code
+  (D = 9.91, no deaths). In the mixed world P(EAT|gray) is learned down to 0 within ~50 s while P(APPROACH|gray)
+  rises, so after ~30% of life creatures sit inside ~10 px among grays and the local red/green is exhausted. Speed
+  rises because hunger rises, not the other way round. This chain fits the data; no intervention has tested it.
+- **Decision pending:** meeting the criterion needs a learning-rule change (EAT punishment should not redistribute
+  weight to APPROACH on the same target), which touches Mapa/Campos parity. Until then the arbiter A0 baseline
+  should use the gray-free world or accept the collapse.
+
 ---
 
 ## Which results still stand
@@ -172,14 +199,17 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
 | Reworked memory raises feeding rate | Stands (p84, post-fix data); valuation bugs #91/#93 still open |
 | Aversion learning (rotten fruit) | Never demonstrated |
 | Memory consolidation does anything | No — its threshold is currently unreachable |
+| Creatures stop eating mid-life because contact fails at speed (#96) | **Refuted.** Contact fixes do not restore feeding; the collapse is gray-world learning dynamics (D 9.91 without gray). Causal chain untested by intervention |
+| Runs are replayable by seed (#95) | Initial world only (live-verified); trajectories stay nondeterministic |
 
 No JEPA experiment has run since the 08-02/08-06 fixes. The deployed `unified_critic` was
 trained (07-10) on data collected before them.
 
-## Open threads (as of 10-17)
+## Open threads (as of 10-18)
 - **Memory correctness:** #93 (eligibility²), #91 (decide between the branch's two designs; revert `911132a`?), consolidation threshold.
 - **Parity:** #90 (arm confound), S1 needs a depleting world, Mapa port plan (Phases 1–6).
 - **JEPA:** re-validate on the fixed clock/tick before citing any survival claim; #65 full-architecture run; K-step rollout.
-- **Reproducibility/infra:** #95 seeding, #94 toolkit, #80 blocking TypedActor accessors, #70 image distribution.
+- **Feeding:** #96 stays open; decide on the learning rule (EAT punishment -> APPROACH redistribution) and test the causal chain by intervention. PR #118 awaits merge.
+- **Reproducibility/infra:** #94 toolkit, #80 blocking TypedActor accessors, #70 image distribution.
 - **Housekeeping:** #84, #85, #88 still open though largely addressed. PR #87 is superseded by #92, and PR #47 is stale.
   #49 is still open even though its TypedActor fix landed 07-01.

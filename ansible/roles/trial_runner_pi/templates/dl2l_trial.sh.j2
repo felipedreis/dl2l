@@ -29,6 +29,9 @@ OUT="${SHARED_FS}/data/${EXPERIMENT}"
 TRIAL_DIR="${OUT}/${CONDITION}/trial_${TRIAL}"
 RAW_DIR="${TRIAL_DIR}/raw"
 export SIMULATION
+# Per-trial root seed from the spec's `seeds:` list, indexed by trial-1 (issue #95); empty = unseeded.
+SEEDS=({% for s in (experiment_cfg.seeds | default([])) %}{{ s }} {% endfor %})
+export DL2L_SEED="${SEEDS[$((TRIAL - 1))]:-}"
 export DL2L_RAW_DATA_DIR="$TRIAL_DIR"
 
 dc() { sudo -E docker compose -p "$PROJ" -f "$COMPOSE" "$@"; }

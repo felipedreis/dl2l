@@ -284,4 +284,60 @@ class TestingCreatureTest {
         assertEquals(creatureId, holderMsgs.get(holderMsgs.size() - 1),
                 "The kill notification carries the creature's SequentialId");
     }
+
+    // -------- issue #96: contact range ------------------------------------------------------
+
+    @Test
+    void apple_within_mouth_range_but_not_touching_affords_eat() {
+        TestingHarness h = newHarness();
+        // Creature at (100,100); apple 15 units east: inside mouth radius 10 + apple radius 10,
+        // yet never reported as a touch because a step of up to MAX_STEP would jump past it.
+        h.injectLuminous(new LuminousStimulus(new SequentialId(42L), new SequentialId(43L),
+                FruitType.RED_APPLE, new Point(115, 100)));
+        h.tick();
+
+        CorticalStimulus cortical = h.effectorCortexRecorder().lastOf(CorticalStimulus.class);
+        assertNotNull(cortical);
+        assertEquals(ActionType.EAT, cortical.action);
+        assertEquals(0.0, cortical.speed, 1e-9, "EAT must not move the creature past the fruit");
+    }
+
+    @Test
+    void wander_near_an_object_turns_around_the_heading_not_the_objects_bearing() {
+        int wanders = 0;
+        for (long seed = 1; seed <= 40; seed++) {
+            TestingHarness h = TestingHarness.builder().seed(seed)
+                    .learningSettings(new LearningSettings(false, false, List.of(ActionSelectionType.RANDOM)))
+                    .build();
+            // Heading is 0 (east); the apple is due north, 15 away: inside contact range.
+            h.injectLuminous(new LuminousStimulus(new SequentialId(42L), new SequentialId(43L),
+                    FruitType.RED_APPLE, new Point(100, 115)));
+            h.tick();
+            CorticalStimulus first = h.effectorCortexRecorder().ofType(CorticalStimulus.class).get(0);
+            if (first.action != ActionType.WANDER) continue;
+            wanders++;
+            assertTrue(Math.abs(first.angle) <= Math.toRadians(Constants.MAX_ROTATE_ANGLE) + 1e-9,
+                    "WANDER must turn around the heading (0), not the object's bearing (pi/2): " + first.angle);
+        }
+        assertTrue(wanders > 0, "no seed produced a WANDER; test is vacuous");
+    }
+
+    // -------- issue #95: seeded random streams ---------------------------------------------
+
+    private static List<ActionType> wanderOrSleepSequence(long seed, int ticks) {
+        // Only RANDOM in the chain and no perceptions: every cycle is a draw among SLEEP/WANDER/OBSERVE.
+        TestingHarness h = TestingHarness.builder().seed(seed)
+                .learningSettings(new LearningSettings(false, false, List.of(ActionSelectionType.RANDOM)))
+                .build();
+        for (int i = 0; i < ticks; i++) h.tick();
+        return h.effectorCortexRecorder().ofType(CorticalStimulus.class).stream().map(c -> c.action).toList();
+    }
+
+    @Test
+    void same_seed_replays_the_same_action_sequence() {
+        List<ActionType> a = wanderOrSleepSequence(99, 60);
+        assertEquals(60, a.size());
+        assertEquals(a, wanderOrSleepSequence(99, 60));
+        assertNotEquals(a, wanderOrSleepSequence(100, 60));
+    }
 }

@@ -40,6 +40,18 @@ def validate(spec: dict) -> list:
         if not isinstance(trials, int) or isinstance(trials, bool) or trials < 1:
             errors.append(f"'trials' must be a positive int, got {trials!r}")
 
+    if "seeds" in spec:
+        seeds = spec["seeds"]
+        if (not isinstance(seeds, list)
+                or not all(isinstance(s, int) and not isinstance(s, bool) for s in seeds)):
+            errors.append("'seeds' must be a list of ints (seeds[trial - 1] seeds trial N)")
+        else:
+            if len(set(seeds)) != len(seeds):
+                errors.append("'seeds' must not repeat a value")
+            trials = spec.get("trials")
+            if isinstance(trials, int) and len(seeds) < trials:
+                errors.append(f"'seeds' has {len(seeds)} entries but 'trials' is {trials}")
+
     conditions = spec.get("conditions")
     if conditions is not None:
         if not isinstance(conditions, list) or len(conditions) == 0:

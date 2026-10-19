@@ -39,6 +39,8 @@
     argv: [docker, compose, -p, "{{ _proj }}", -f, "{{ compose_file }}", up, -d]
   environment:
     SIMULATION: "{{ _cond.simulation }}"
+    # Per-trial root seed from the spec's `seeds:` list (issue #95); empty = JVM generates one.
+    DL2L_SEED: "{{ (experiment_cfg.seeds | default([]))[_trial | int - 1] | default('') }}"
     DL2L_RAW_DATA_DIR: "{{ _trial_dir }}"
   changed_when: true
 

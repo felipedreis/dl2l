@@ -33,14 +33,8 @@ public class ActionProbabilityFilter implements ActionFilter {
     private double temperature = 1.0;   // softmax temperature; 1.0 = unmodulated
     private double restBias = 0.0;       // additive up-weight fraction for quieting actions; 0.0 = none
 
-    public ActionProbabilityFilter(OperantConditioning operantConditioning) {
-        // No-arg Random() self-seeds from an atomic uniquifier ^ nanoTime, so filters created in the
-        // same millisecond are not correlated (unlike seeding with currentTimeMillis).
-        this(operantConditioning, new Random());
-    }
-
-    /** Seedable constructor for deterministic tests of the sampling distribution. */
-    ActionProbabilityFilter(OperantConditioning operantConditioning, Random random) {
+    /** The caller supplies the generator (derived from the run seed, issue #95) so runs can be replayed. */
+    public ActionProbabilityFilter(OperantConditioning operantConditioning, Random random) {
         this.operantConditioning = operantConditioning;
         this.random = random;
     }

@@ -50,7 +50,19 @@ public class Main {
                     .flatMap(r -> Arrays.stream(r.split(",")))
                     .toArray(String[]::new);
 
-            Simulation simulation = new Simulation(ConfigFactory.parseFile(configFile));
+            Config simulationConfig = ConfigFactory.parseFile(configFile);
+            // --seed wins; DL2L_SEED is how the experiment runners hand a trial its seed to
+            // the container without touching each entrypoint's argument list.
+            String seedArg = commandLine.hasOption("seed") ? commandLine.getOptionValue("seed")
+                    : System.getenv("DL2L_SEED");
+            if (seedArg != null && !seedArg.isBlank()) {
+                simulationConfig = ConfigFactory.parseString(
+                        "simulation.seed = " + Long.parseLong(seedArg.trim()))
+                        .withFallback(simulationConfig);
+            }
+            Simulation simulation = new Simulation(simulationConfig);
+            logger.info("seed=" + simulation.getSeed()
+                    + (simulation.isSeedGenerated() ? " (generated: none in config or --seed)" : ""));
 
             String roleParam = roles[0];
 
@@ -151,6 +163,11 @@ public class Main {
                 .hasArg()
                 .create("simulation");
 
+        Option seed = OptionBuilder.withArgName("seed")
+                .hasArg()
+                .withDescription("Root seed for every random stream; overrides simulation.seed in the config")
+                .create("seed");
+
         Option save = OptionBuilder.withArgName("dataDir")
                 .hasArg()
                 .create("save");
@@ -162,5 +179,6 @@ public class Main {
         options.addOption(roles);
         options.addOption(save);
         options.addOption(simulation);
+        options.addOption(seed);
     }
 }

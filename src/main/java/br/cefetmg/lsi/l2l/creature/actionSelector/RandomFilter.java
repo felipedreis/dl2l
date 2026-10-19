@@ -14,9 +14,8 @@ import java.util.Random;
 public class RandomFilter implements ActionFilter{
     Random random;
 
-    public RandomFilter(){
-        // Self-seeding Random() avoids correlated streams when many filters are created together.
-        random = new Random();
+    public RandomFilter(Random random){
+        this.random = random;
     }
 
     @Override

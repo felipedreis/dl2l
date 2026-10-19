@@ -88,14 +88,8 @@ public class MemoryFilter implements ActionFilter {
     /** Multiplier on the novelty prior from tonic dopamine; 1.0 = unmodulated. */
     private double noveltyGain = 1.0;
 
-    public MemoryFilter(MemorySystem memory) {
-        // No-arg Random() self-seeds from an atomic uniquifier ^ nanoTime, so filters created in
-        // the same millisecond are not correlated — same reasoning as ActionProbabilityFilter.
-        this(memory, new Random());
-    }
-
-    /** Seeded constructor, for deterministic tests. */
-    MemoryFilter(MemorySystem memory, Random random) {
+    /** The caller supplies the generator (derived from the run seed, issue #95) so runs can be replayed. */
+    public MemoryFilter(MemorySystem memory, Random random) {
         this.memory = memory;
         this.random = random;
     }

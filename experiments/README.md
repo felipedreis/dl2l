@@ -31,6 +31,11 @@ already been spent.
 ```yaml
 name: <str>                    # required. Experiment identifier.
 trials: <int>                  # required. Trials per condition, >= 1.
+seeds: [<int>, ...]            # optional. seeds[trial - 1] is the root seed of trial N
+                                # (every random stream derives from it; same seed in every
+                                # condition pairs the arms by world). >= `trials` unique
+                                # ints. Omitted = each JVM generates and records its own.
+                                # The seed lands in the trial's run_info table + manifest.
 
 conditions:                    # required, non-empty list.
   - key: <str>                 #   required, unique. Matches simulations/*.conf

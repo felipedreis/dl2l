@@ -326,7 +326,13 @@ public final class TableSchemas {
                         col("winning_score", ColType.DOUBLE, MemoryDecisionState::getWinningScore)),
                 seqCols("key", "sequential", MemoryDecisionState::getTarget))));
 
-        return List.copyOf(all);
+                all.add(table("run_info", RunInfoState.class, RunInfoState::getId, List.of(
+                col("seed", ColType.INT64, RunInfoState::getSeed),
+                col("seed_generated", ColType.BOOLEAN, RunInfoState::isSeedGenerated),
+                col("trial_id", ColType.STRING, RunInfoState::getTrialId),
+                col("started_at", ColType.INT64, RunInfoState::getStartedAt))));
+
+return List.copyOf(all);
     }
 
     @SafeVarargs

@@ -72,7 +72,7 @@ public class ActionSelectionConfigTest {
 
     @Test
     void random_only_chain_selects_one_from_many() {
-        ActionSelection sel = new ActionSelection(List.of(new RandomFilter()));
+        ActionSelection sel = new ActionSelection(List.of(new RandomFilter(new java.util.Random(1))));
         Action chosen = sel.selectOne(twoActions(), EMOTION);
         assertNotNull(chosen);
         assertTrue(chosen.type == ActionType.WANDER || chosen.type == ActionType.SLEEP);
@@ -123,7 +123,7 @@ public class ActionSelectionConfigTest {
         List<ActionFilter> filterList = new ArrayList<>();
         for (ActionSelectionType type : LearningSettings.MASTER_FILTER_ORDER) {
             if (!ls.isFilterEnabled(type)) continue;
-            if (type == ActionSelectionType.RANDOM) filterList.add(new RandomFilter());
+            if (type == ActionSelectionType.RANDOM) filterList.add(new RandomFilter(new java.util.Random(1)));
             // AFFORDANCE would require OperantConditioning; use a stub that tracks insertion order.
             if (type == ActionSelectionType.AFFORDANCE) filterList.add(new OrderTrackingFilter("AFFORDANCE"));
         }

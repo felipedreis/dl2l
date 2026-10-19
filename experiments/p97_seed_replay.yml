@@ -1,0 +1,30 @@
+# Seed replay check (#95): two identical conditions, one trial, same seed. The initial
+# world (run_info seed, first positions) must match; trajectories are not expected to.
+name: p97_seed_replay
+trials: 1
+seeds: [9701]
+
+conditions:
+  - key: run_a
+    simulation: simulations/p84_legacy_nomem.conf
+    label: Run A
+    color: "#2b5eb8"
+  - key: run_b
+    simulation: simulations/p84_legacy_nomem.conf
+    label: Run B
+    color: "#c4622d"
+
+image:
+  source: build
+
+data_dir: ml/data_p97_seed_replay
+
+extract:
+  format: parquet
+  backup: true
+  tables: all
+
+upload:
+  enabled: true
+  repo: felipedreis/dl2l-experiments
+  prefix: p97_replay
