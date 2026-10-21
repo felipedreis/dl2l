@@ -80,6 +80,9 @@ public class LearningSettings implements Serializable {
     // --- Tick-gated cognition (issue #85) — default-ON, unlike every other flag here ---
     private final boolean tickGatedCognition;
 
+    // --- Focal drive (issue #99) — default-off: filters see the per-cycle most-aroused emotion ---
+    private final boolean focalDriveEnabled;
+
     public LearningSettings(boolean circadianEnabled,
                             boolean consolidationEnabled,
                             List<ActionSelectionType> enabledFilters) {
@@ -133,6 +136,22 @@ public class LearningSettings implements Serializable {
                             boolean orexinEnabled,
                             boolean endocrineEnabled,
                             boolean tickGatedCognition) {
+        this(circadianEnabled, consolidationEnabled, enabledFilters, expectancyEnabled,
+                expectancyMode, neuromodulationEnabled, actionTendencyEnabled, orexinEnabled,
+                endocrineEnabled, tickGatedCognition, false);
+    }
+
+    public LearningSettings(boolean circadianEnabled,
+                            boolean consolidationEnabled,
+                            List<ActionSelectionType> enabledFilters,
+                            boolean expectancyEnabled,
+                            ExpectancyMode expectancyMode,
+                            boolean neuromodulationEnabled,
+                            boolean actionTendencyEnabled,
+                            boolean orexinEnabled,
+                            boolean endocrineEnabled,
+                            boolean tickGatedCognition,
+                            boolean focalDriveEnabled) {
         this.circadianEnabled       = circadianEnabled;
         this.consolidationEnabled   = consolidationEnabled;
         this.enabledFilters         = Collections.unmodifiableList(new ArrayList<>(enabledFilters));
@@ -143,6 +162,7 @@ public class LearningSettings implements Serializable {
         this.orexinEnabled          = orexinEnabled;
         this.endocrineEnabled       = endocrineEnabled;
         this.tickGatedCognition     = tickGatedCognition;
+        this.focalDriveEnabled      = focalDriveEnabled;
     }
 
     /** Default: all subsystems enabled, full filter chain in canonical order. */
@@ -166,6 +186,15 @@ public class LearningSettings implements Serializable {
      */
     public boolean isTickGatedCognition() {
         return tickGatedCognition;
+    }
+
+    /**
+     * Issue #99: whether the emotion passed to the selection filters is the
+     * {@code FocusTracker}'s focal drive instead of the per-cycle most-aroused one. While no
+     * episode is open the most-aroused emotion is still used, so calm-state behaviour is A0's.
+     */
+    public boolean isFocalDriveEnabled() {
+        return focalDriveEnabled;
     }
 
     /** Whether the expectancy → RPE → dopamine learning loop is active (else legacy binary valence). */

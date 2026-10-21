@@ -70,8 +70,9 @@ class TableSchemasTest {
         t.put("nose_state", List.of("key", "sequential"));
         t.put("object_smelt_state", List.of("objecttype", "smelltype", "key", "sequential",
                 "changestimulusstate_id"));
-        t.put("chosen_action_state", List.of("action", "actionselectiontype", "inference_duration_ms", "key",
-                "sequential", "changestimulusstate_id"));
+        // focal_drive: deliberate column added by issue #99 (nullable; null when the flag is off).
+        t.put("chosen_action_state", List.of("action", "actionselectiontype", "inference_duration_ms",
+                "focal_drive", "key", "sequential", "changestimulusstate_id"));
         t.put("body_state", List.of("finalx", "finaly", "initialx", "initialy", "speed", "stimulusstate_id"));
         t.put("behavioural_efficiency_state", List.of("behaviouralefficiency", "complextask", "numberofobjects",
                 "perceivedobjects", "changestimulusstate_id"));

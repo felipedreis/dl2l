@@ -150,6 +150,53 @@ public class LearningSettingsTest {
     }
 
     // -----------------------------------------------------------------------
+    // Focal drive (issue #99)
+    // -----------------------------------------------------------------------
+
+    private static String simulationWith(String learningSettingsBody) {
+        return "simulation {\n"
+                + "  holders = 1\n"
+                + "  positionFactory = \"br.cefetmg.lsi.l2l.world.RandomPositionFactory\"\n"
+                + "  reposition = false\n"
+                + "  creatureSettings = [{quantity = 1}]\n"
+                + "  worldObjectSettings = []\n"
+                + "  worldSize = { width = 100, height = 100 }\n"
+                + "  learningSettings { " + learningSettingsBody + " }\n"
+                + "}";
+    }
+
+    @Test
+    void focal_drive_defaults_off_and_parses_from_config() {
+        assertFalse(new LearningSettings().isFocalDriveEnabled());
+
+        LearningSettings absent = new Simulation(com.typesafe.config.ConfigFactory
+                .parseString(simulationWith("circadianEnabled = false"))).getLearningSettings();
+        assertFalse(absent.isFocalDriveEnabled());
+
+        LearningSettings on = new Simulation(com.typesafe.config.ConfigFactory
+                .parseString(simulationWith("focalDriveEnabled = true"))).getLearningSettings();
+        assertTrue(on.isFocalDriveEnabled());
+    }
+
+    @Test
+    void arbiter_a0_conf_is_the_p84_legacy_nomem_stack_with_focal_drive_off() {
+        LearningSettings a0 = new Simulation(com.typesafe.config.ConfigFactory
+                .parseFile(new java.io.File("simulations/arbiter_a0.conf"))).getLearningSettings();
+        LearningSettings p84 = new Simulation(com.typesafe.config.ConfigFactory
+                .parseFile(new java.io.File("simulations/p84_legacy_nomem.conf"))).getLearningSettings();
+
+        assertFalse(a0.isFocalDriveEnabled());
+        assertTrue(a0.isActionTendencyEnabled());
+        assertFalse(a0.isNeuromodulationEnabled());
+        assertFalse(a0.isExpectancyEnabled());
+        assertFalse(a0.isOrexinEnabled());
+        assertFalse(a0.isEndocrineEnabled());
+        assertEquals(p84.getEnabledFilters(), a0.getEnabledFilters());
+        assertEquals(p84.isCircadianEnabled(), a0.isCircadianEnabled());
+        assertEquals(p84.isConsolidationEnabled(), a0.isConsolidationEnabled());
+    }
+
+    // -----------------------------------------------------------------------
     // Neuromodulatory expectancy loop (issue #57)
     // -----------------------------------------------------------------------
 

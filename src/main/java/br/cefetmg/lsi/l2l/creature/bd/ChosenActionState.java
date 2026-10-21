@@ -19,6 +19,9 @@ public class ChosenActionState implements PersistenceState{
 
 	private long inferenceDurationMs;
 
+	/** Issue #99: the focus tracker's focal drive for this decision; null when off or no episode open. */
+	private String focalDrive;
+
 	public ChosenActionState(){
 
 	}
@@ -30,11 +33,25 @@ public class ChosenActionState implements PersistenceState{
 
 	public ChosenActionState(ChangeStimulusState changeStimulusState, ActionSelectionType actionSelectionType,
 							 ActionType action, SequentialId target, long inferenceDurationMs) {
+		this(changeStimulusState, actionSelectionType, action, target, inferenceDurationMs, null);
+	}
+
+	public ChosenActionState(ChangeStimulusState changeStimulusState, ActionSelectionType actionSelectionType,
+							 ActionType action, SequentialId target, long inferenceDurationMs, String focalDrive) {
+		this.focalDrive = focalDrive;
 		this.changeStimulusState = changeStimulusState;
 		this.actionSelectionType = actionSelectionType;
 		this.action = action;
 		this.target = target;
 		this.inferenceDurationMs = inferenceDurationMs;
+	}
+
+	public String getFocalDrive() {
+		return focalDrive;
+	}
+
+	public void setFocalDrive(String focalDrive) {
+		this.focalDrive = focalDrive;
 	}
 
 	public UUID getId() {
