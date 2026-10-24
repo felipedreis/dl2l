@@ -327,6 +327,22 @@ public final class TableSchemas {
                         col("winning_score", ColType.DOUBLE, MemoryDecisionState::getWinningScore)),
                 seqCols("key", "sequential", MemoryDecisionState::getTarget))));
 
+        all.add(table("drive_outcome_state", DriveOutcomeState.class, DriveOutcomeState::getId, concat(
+                List.of(
+                        col("action", ColType.STRING, DriveOutcomeState::getAction),
+                        col("creature_key", ColType.INT64, DriveOutcomeState::getCreatureKey),
+                        col("d_hunger", ColType.DOUBLE, DriveOutcomeState::getDHunger),
+                        col("d_pain", ColType.DOUBLE, DriveOutcomeState::getDPain),
+                        col("d_sleep", ColType.DOUBLE, DriveOutcomeState::getDSleep),
+                        col("d_tedium", ColType.DOUBLE, DriveOutcomeState::getDTedium),
+                        col("object_type", ColType.STRING, DriveOutcomeState::getObjectType),
+                        col("seq", ColType.INT64, DriveOutcomeState::getSeq),
+                        col("time_ms", ColType.INT64, DriveOutcomeState::getTimeMs)),
+                seqCols("key", "sequential", DriveOutcomeState::getTarget),
+                List.of(
+                        col("changestimulusstate_id", ColType.STRING, (DriveOutcomeState dos) ->
+                                uuidOrNull(dos.getChangeStimulusState() != null ? dos.getChangeStimulusState().getId() : null))))));
+
                 all.add(table("run_info", RunInfoState.class, RunInfoState::getId, List.of(
                 col("seed", ColType.INT64, RunInfoState::getSeed),
                 col("seed_generated", ColType.BOOLEAN, RunInfoState::isSeedGenerated),
