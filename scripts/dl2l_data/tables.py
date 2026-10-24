@@ -53,7 +53,8 @@ TABLES = {
                cas.action   AS action_type,
                cas.actionselectiontype AS selection_type,
                cas.key      AS target_key,
-               COALESCE(cas.inference_duration_ms, 0) AS inference_ms
+               COALESCE(cas.inference_duration_ms, 0) AS inference_ms,
+               cas.focal_drive
         FROM data.chosen_action_state cas
         JOIN data.change_stimulus_state css
           ON cas.changestimulusstate_id = css.id

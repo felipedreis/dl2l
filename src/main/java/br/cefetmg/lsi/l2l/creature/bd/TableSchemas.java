@@ -195,7 +195,8 @@ public final class TableSchemas {
                         col("action", ColType.STRING, (ChosenActionState cas) -> cas.getAction() != null ? cas.getAction().name() : null),
                         col("actionselectiontype", ColType.STRING, (ChosenActionState cas) ->
                                 cas.getActionSelectionType() != null ? cas.getActionSelectionType().name() : null),
-                        col("inference_duration_ms", ColType.INT64, ChosenActionState::getInferenceDurationMs)),
+                        col("inference_duration_ms", ColType.INT64, ChosenActionState::getInferenceDurationMs),
+                        col("focal_drive", ColType.STRING, ChosenActionState::getFocalDrive)),
                 seqCols("key", "sequential", ChosenActionState::getTarget),
                 List.of(
                         col("changestimulusstate_id", ColType.STRING, (ChosenActionState cas) ->

@@ -20,7 +20,9 @@ import br.cefetmg.lsi.l2l.stimuli.Stimulus;
 import br.cefetmg.lsi.l2l.world.Self;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Created by felipe on 02/01/17.
@@ -293,7 +295,16 @@ public class PartialAppraisal extends CreatureComponent {
         perceptions.forEach(p -> logger.fine(String.format("PartialAppraisal[%s]:   perception type=%s angle=%.3f dist=%.1f",
                 id, p.objectType, p.angle, p.distance)));
 
-        return new EmotionalStimulus(this.id, nextStimulusId(), perceptions, maxEmotion, behaviouralEfficiency);
+        // Issue #99: per-drive snapshots for the focus tracker. Copies, because Emotion is mutable
+        // and this stimulus crosses to another actor.
+        Map<String, Emotion> drives = new LinkedHashMap<>();
+        for (String name : EmotionalSystemActor.ACTIVE) {
+            Emotion snapshot = new Emotion(name);
+            snapshot.setLevel(emotionalSystem.getLevel(name));
+            drives.put(name, snapshot);
+        }
+
+        return new EmotionalStimulus(this.id, nextStimulusId(), perceptions, maxEmotion, behaviouralEfficiency, drives);
     }
 
     /**

@@ -129,9 +129,12 @@ public class Simulation {
         // which exists for the p85 baseline arm and nothing else.
         boolean tickGatedCognition = !ls.hasPath("tickGatedCognition") || ls.getBoolean("tickGatedCognition");
 
+        // Issue #99 — focal drive replaces the per-cycle most-aroused emotion (default-off).
+        boolean focalDriveEnabled = ls.hasPath("focalDriveEnabled") && ls.getBoolean("focalDriveEnabled");
+
         return new LearningSettings(circadianEnabled, consolidationEnabled, enabledFilters,
                 expectancyEnabled, expectancyMode, neuromodulationEnabled, actionTendencyEnabled,
-                orexinEnabled, endocrineEnabled, tickGatedCognition);
+                orexinEnabled, endocrineEnabled, tickGatedCognition, focalDriveEnabled);
     }
 
     public Long getNumHolders() {

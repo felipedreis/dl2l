@@ -1,6 +1,7 @@
 package br.cefetmg.lsi.l2l.creature.components;
 
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
+import br.cefetmg.lsi.l2l.creature.arbiter.FocusTracker;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.Seeds;
 import br.cefetmg.lsi.l2l.common.SequentialId;
@@ -41,7 +42,10 @@ import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -79,6 +83,11 @@ public class FullAppraisal extends CreatureComponent {
     private long cognitiveCycle = 0;
     private final SleepEpisode sleepEpisode = new SleepEpisode();
 
+    /** Issue #99: null unless {@code focalDriveEnabled}; then the source of the emotion filters see. */
+    private FocusTracker focusTracker;
+    /** Focal drive of the decision being made; null when the flag is off or no episode is open. */
+    private String focalDrive;
+
     public FullAppraisal(SequentialId id, LearningSettings learningSettings, MLServiceExtension.Impl mlExt) {
         this(id, learningSettings, mlExt, null);
     }
@@ -106,6 +115,10 @@ public class FullAppraisal extends CreatureComponent {
         // One generator per random stream, each derived from the run seed and this creature's
         // key, so a creature's draws do not depend on how many creatures or filters exist (#95).
         wanderRandom = new Random(Seeds.derive(rootSeed, "creature", id.key, "wander"));
+
+        if (learningSettings.isFocalDriveEnabled()) {
+            focusTracker = new FocusTracker(FocusTracker.Params.defaults());
+        }
 
         // When mlExt is null (e.g. TestingCreature), the WORLD_MODEL filter is silently
         // disabled regardless of LearningSettings. Other filters still respect settings.
@@ -248,7 +261,29 @@ public class FullAppraisal extends CreatureComponent {
             }
         }
         List<Action> possibleActions = definePossibleActions(emotional.getPerceptions());
-        return actionSelection.selectOne(possibleActions, emotional.getMaxEmotion());
+        return actionSelection.selectOne(possibleActions, emotionToRegulate(emotional));
+    }
+
+    /**
+     * The emotion the selection filters regulate this cycle. With {@code focalDriveEnabled} it is
+     * the {@link FocusTracker}'s focal drive; while no episode is open (every drive in its
+     * equilibrium band) it falls back to the most-aroused emotion, so calm-state behaviour is the
+     * same as with the flag off. Records {@link #focalDrive} for persistence.
+     */
+    private Emotion emotionToRegulate(EmotionalStimulus emotional) {
+        focalDrive = null;
+        if (focusTracker == null) {
+            return emotional.getMaxEmotion();
+        }
+        Map<String, Double> levels = new HashMap<>();
+        emotional.drives.forEach((name, emotion) -> levels.put(name, emotion.getLevel()));
+        focusTracker.update((int) cognitiveCycle, levels);
+        Optional<String> focal = focusTracker.focalDrive();
+        if (focal.isPresent() && emotional.drives.containsKey(focal.get())) {
+            focalDrive = focal.get();
+            return emotional.drives.get(focalDrive);
+        }
+        return emotional.getMaxEmotion();
     }
 
     /**
@@ -342,7 +377,7 @@ public class FullAppraisal extends CreatureComponent {
                 .buildOneReceivedOneEmitted(emotional, cortical);
         ChosenActionState chosenActionState = new ChosenActionState(change,
                 actionSelection.getLastUsedFilterType(), action.type, action.perception.id,
-                inferenceMs);
+                inferenceMs, focalDrive);
         persist(change, chosenActionState);
         persistMemoryDecision();
     }
