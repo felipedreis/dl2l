@@ -1,6 +1,6 @@
 # Issue #100 — Attribute the per-drive outcome vector K to the act that caused it
 
-Status: **draft, awaiting approval.** Revised after reading the arbitration paper draft
+Status: **implemented on `feature/issue-100-drive-outcome-vector`; real-data check passed (research diary 10-25).** Q1–Q5 taken as recommended. Revised after reading the arbitration paper draft
 (`docs/bib/uncertainty_arbitration.pdf`, §4.1, §4.2, §4.4, App. A step 2).
 Context: arbiter story map, `docs/plans/2026-q4-research-plan.md` (A2: value V(K|H) is read from K at decision
 time). Supersedes #91 by construction: K is recorded independent of need; need is applied when K is read.

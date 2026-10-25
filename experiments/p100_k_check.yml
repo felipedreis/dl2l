@@ -1,0 +1,19 @@
+# Verification run for issue #100, not a scientific experiment: checks on real data that
+# summed drive-outcome vectors K match the drives' change. Upload off on purpose (throwaway).
+name: p100_k_check
+trials: 1
+seeds: [12345]
+conditions:
+  - key: a0
+    simulation: simulations/p100_k_check.conf
+    label: A0 (K check)
+    color: "#333333"
+image:
+  source: build
+data_dir: ml/data_p100_k_check
+extract:
+  format: parquet
+  backup: false
+  tables: all
+upload:
+  enabled: false
