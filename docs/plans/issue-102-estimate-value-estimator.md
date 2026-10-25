@@ -59,14 +59,15 @@ naturally set-level.
 - The estimator is per-creature actor-owned state, not a shared instance (Akka anti-pattern rule); the
   interface says nothing that would encourage sharing.
 
-## Tests (`EstimateTest`, `ValueEstimatorTest`)
+## Tests (`EstimateTest`)
 
 1. `Estimate` accepts valid values; rejects NaN/∞ in any field and negative `se`/`sigma`; `q` may be negative.
 2. Record equality/accessors.
-3. `ConstantValueEstimator` (test double, in `src/test`): returns a fixed `Estimate` for every candidate;
-   preserves order and size, empty list → empty list.
-4. A per-action double (map ActionType → Estimate) proving the interface can express "different candidate,
-   different estimate" — the property #103 needs.
+3. `withSeScaled`: scales `se` only, rejects invalid factors.
+
+No test for `ValueEstimator` itself: an interface with no real implementation would only test its own stub.
+Its contract (one estimate per candidate, same order and size) is asserted by each implementation's tests, starting
+with #103's.
 
 "Done when… used by #103": satisfied structurally here (signature chosen against #103's text: per
 (focal drive, object type, distance bin) cells need only candidate + H); actual use lands with #103.
@@ -87,5 +88,5 @@ naturally set-level.
 
 ## Verification
 
-`mvn test -Dtest='EstimateTest,ValueEstimatorTest'`, full `mvn test`, `mvn package`, `graphify update .`.
+`mvn test -Dtest='EstimateTest'`, full `mvn test`, `mvn package`, `graphify update .`.
 No mini-experiment: nothing reads the estimator yet (same reasoning as #101); evidence is the contract tests.
