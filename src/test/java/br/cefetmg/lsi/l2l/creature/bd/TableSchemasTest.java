@@ -41,7 +41,7 @@ class TableSchemasTest {
      * {@link #PORTED_TABLE_ORDER} is a regression.
      */
     private static final List<String> ADDED_SINCE_PORT = List.of(
-            "action_probability_state", "memory_decision_state", "run_info");
+            "action_probability_state", "memory_decision_state", "drive_outcome_state", "run_info");
 
     private static final List<String> EXPECTED_TABLE_ORDER =
             Stream.concat(PORTED_TABLE_ORDER.stream(), ADDED_SINCE_PORT.stream()).toList();
@@ -98,6 +98,9 @@ class TableSchemasTest {
                 "decided", "engram_window", "object_type", "objects", "returned",
                 "runnerup_score", "scored", "seq", "time_ms", "winning_score", "key", "sequential"));
         t.put("run_info", List.of("seed", "seed_generated", "trial_id", "started_at"));
+        // Issue #100.
+        t.put("drive_outcome_state", List.of("action", "creature_key", "d_hunger", "d_pain", "d_sleep",
+                "d_tedium", "object_type", "seq", "time_ms", "key", "sequential", "changestimulusstate_id"));
         return t;
     }
 
@@ -126,7 +129,8 @@ class TableSchemasTest {
             Map.entry("endocrine_state_log", EndocrineStateLog.class),
             Map.entry("action_probability_state", ActionProbabilityState.class),
             Map.entry("memory_decision_state", MemoryDecisionState.class),
-            Map.entry("run_info", RunInfoState.class));
+            Map.entry("run_info", RunInfoState.class),
+            Map.entry("drive_outcome_state", DriveOutcomeState.class));
 
     @Test
     void tablesAreThePorted22FollowedByAnyLaterAdditions() {

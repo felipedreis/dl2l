@@ -185,6 +185,23 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
   weight to APPROACH on the same target), which touches Mapa/Campos parity. Until then the arbiter A0 baseline
   should use the gray-free world or accept the collapse.
 
+### 10-25 — #100: per-drive outcome vector K
+
+- **What:** `HomeostaticRegulation` now records K = (Δhunger, Δsleep, Δpain, Δtedium), the realized change around each
+  regulation event, tagged with the originating action (`EAT`, `SLEEP`, the stimulus' action, else `BASELINE`) in the
+  `drive_outcome_state` table, extracted as `drive_outcomes`. Arbitration draft §4.1 / App. A step 2. Nothing reads K yet.
+- **Real-data check** (`experiments/p100_k_check.yml`, A0, 5 creatures, seed 12345, 4 min, local Docker, upload off):
+  31,502 K rows. Per creature and drive, |Σ K − Σ(final − init) of `drives`| and |Σ K − (last final − first init)| are
+  both <= 9e-16, i.e. the sum identity holds to float precision for hunger, sleep and tedium. Pain is exactly 0 in
+  this world (no pain source), so its identity is vacuous here — the unit test (`DriveOutcomeTest`) covers it.
+- **Reading the rows:** `APPROACH` rows are tedium only (+418 total) and `WANDER` rows relieve it (-404); `BASELINE`
+  (metabolic drift) raises hunger and sleep by the same +50.95; `EAT` is 161 nutritive rows (hunger -30.3) plus 358
+  separate idle-tedium stimuli (+0.02 each) emitted for that action, never both in one row. Every EAT row has
+  dHunger <= 0 and every SLEEP row dSleep <= 0.
+- **Not tested:** the Pi path. The Pi controller's registry is plain HTTP (Docker Desktop will not push to it), and a
+  GHCR-image trial (job 26) exited rc 1 after 4m26s; its SLURM log could not be read because ssh to the controller
+  hung. Cause unknown.
+
 ---
 
 ## Which results still stand

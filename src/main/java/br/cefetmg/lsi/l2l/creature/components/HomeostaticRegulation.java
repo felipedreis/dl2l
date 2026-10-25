@@ -5,6 +5,7 @@ import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
+import br.cefetmg.lsi.l2l.creature.bd.DriveOutcomeState;
 import br.cefetmg.lsi.l2l.creature.bd.EmotionalState;
 import br.cefetmg.lsi.l2l.creature.bd.InternalDynamicState;
 import br.cefetmg.lsi.l2l.creature.bd.RegulationBatchStat;
@@ -14,6 +15,7 @@ import br.cefetmg.lsi.l2l.creature.ml.WakeUp;
 import br.cefetmg.lsi.l2l.stimuli.*;
 import br.cefetmg.lsi.l2l.stimuli.CortisolStimulus;
 import br.cefetmg.lsi.l2l.world.Self;
+import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -32,6 +34,7 @@ public class HomeostaticRegulation extends CreatureComponent {
     private int hungerDeprivationCycle = 0;
     private int sleepDeprivationCycle  = 0;
     private EmotionalSystem emotionalSystem;
+    private long driveOutcomeSeq = 0;
 
     public HomeostaticRegulation(SequentialId id, LearningSettings learningSettings) {
         super(id);
@@ -61,6 +64,7 @@ public class HomeostaticRegulation extends CreatureComponent {
             ChangeStimulusState change = new ChangeStimulusStateBuilder(this, this.id)
                     .buildOneReceivedOneEmitted(stimulus, emitted);
             persist(change, new InternalDynamicState(before, after, change));
+            persistDriveOutcome(stimulus, before, after, change);
 
             if (stimulus instanceof NutritiveStimulus)        { regulatingCount++; hungerHits++; drivesTouchedMask |= 1; }
             else if (stimulus instanceof CholinergicStimulus) { regulatingCount++; sleepHits++; drivesTouchedMask |= 2; }
@@ -100,6 +104,34 @@ public class HomeostaticRegulation extends CreatureComponent {
         s.setPain(emotionalSystem.getLevel(Constants.PAIN));
         s.setTedium(emotionalSystem.getLevel(Constants.TEDIUM));
         return s;
+    }
+
+    /**
+     * Issue #100: attribute K = after − before (realized, post-clamp) to the act behind {@code stimulus}.
+     * All-zero K is not written — it adds nothing to any sum.
+     */
+    private void persistDriveOutcome(Stimulus stimulus, EmotionalState before, EmotionalState after,
+                                     ChangeStimulusState change) {
+        double dHunger = after.getHunger() - before.getHunger();
+        double dSleep  = after.getSleep()  - before.getSleep();
+        double dPain   = after.getPain()   - before.getPain();
+        double dTedium = after.getTedium() - before.getTedium();
+        if (dHunger == 0 && dSleep == 0 && dPain == 0 && dTedium == 0) return;
+
+        ActionType action = null;
+        WorldObjectType objectType = null;
+        SequentialId target = null;
+        if (stimulus instanceof NutritiveStimulus n)        { action = ActionType.EAT;   objectType = n.objectType; target = n.origin; }
+        else if (stimulus instanceof CholinergicStimulus)   { action = ActionType.SLEEP; }
+        else if (stimulus instanceof NociceptiveStimulus n) { action = n.action; objectType = n.objectType; target = n.origin; }
+        else if (stimulus instanceof AnalgesicStimulus a)   { action = a.action; objectType = a.objectType; target = a.origin; }
+        else if (stimulus instanceof TediumStimulus t)      { action = t.action; }
+
+        persist(new DriveOutcomeState(id.key, driveOutcomeSeq++, System.currentTimeMillis(),
+                action != null ? action.name() : DriveOutcomeState.BASELINE,
+                objectType != null ? objectType.name() : null,
+                action != null ? target : null,
+                dHunger, dSleep, dPain, dTedium, change));
     }
 
     private Stimulus dispatch(Stimulus stimulus) {

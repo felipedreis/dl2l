@@ -62,6 +62,25 @@ TABLES = {
         """,
         None,
     ),
+    # Issue #100: per-drive outcome vector K, one row per regulation event with a non-zero
+    # change, attributed to the originating action (BASELINE = no deliberate act). Rows are
+    # additive: SUM(d_*) over any window is that window's change in each drive from regulation.
+    "drive_outcomes": (
+        """
+        SELECT d.creature_key,
+               d.seq,
+               css.time,
+               d.action,
+               d.object_type,
+               d.key        AS target_key,
+               d.d_hunger, d.d_sleep, d.d_pain, d.d_tedium
+        FROM data.drive_outcome_state d
+        JOIN data.change_stimulus_state css
+          ON d.changestimulusstate_id = css.id
+        ORDER BY d.creature_key, d.seq
+        """,
+        None,
+    ),
     "drives": (
         """
         SELECT css.key  AS creature_key,
@@ -303,7 +322,7 @@ TABLES["run_info"] = (
 # Tables written before pg_dump/manifest bookkeeping, in the order exp_extract.py
 # originally wrote them (a couple of analyses key off this ordering in logs).
 TABLE_ORDER = [
-    "creatures", "actions", "drives", "behavioural_efficiency", "body_states",
+    "creatures", "actions", "drives", "drive_outcomes", "behavioural_efficiency", "body_states",
     "perceptions", "smell_perceptions", "mouth_interactions", "sleep_episodes", "neuromodulators",
     "endocrine", "expectancy", "engrams", "consolidation_episodes",
     "consolidation_batches", "memory_traces", "conditioning", "memory_decisions",
