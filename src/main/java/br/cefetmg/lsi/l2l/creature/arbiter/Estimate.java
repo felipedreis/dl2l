@@ -37,8 +37,12 @@ public record Estimate(double q, double se, double sigma) {
 
     /**
      * @param factor multiplier for {@code se}; must be finite and non-negative
+     * <p>The product {@code se * factor} may overflow to infinity for very large inputs; in that
+     * case the constructor's {@link IllegalArgumentException} is thrown.
+     *
      * @return a new estimate with the same {@code q} and {@code sigma} and {@code se * factor}
-     * @throws IllegalArgumentException if {@code factor} is not finite and non-negative
+     * @throws IllegalArgumentException if {@code factor} is not finite and non-negative, or the
+     *                                  scaled {@code se} overflows
      */
     public Estimate withSeScaled(double factor) {
         if (!Double.isFinite(factor) || factor < 0) {

@@ -18,9 +18,10 @@ public interface ValueEstimator {
 
     /**
      * @param candidates candidate actions to evaluate
-     * @param h          drive levels, in {@link FocusTracker#DRIVES} order
+     * @param h          drive levels: one entry per {@link FocusTracker#DRIVES} element, in
+     *                   {@code DRIVES} order. Implementations must not mutate it.
      * @return one {@link Estimate} per candidate, in the same order and of the same size as
-     *         {@code candidates}; empty when {@code candidates} is empty
+     *         {@code candidates}; empty when {@code candidates} is empty. No element may be null.
      */
     List<Estimate> estimate(List<Action> candidates, double[] h);
 }
