@@ -29,18 +29,35 @@ public final class HomeostaticValue {
     /**
      * @param setPoint per-drive set point {@code H*}, in {@link FocusTracker#DRIVES} order
      * @param weights  per-drive weight {@code w}, same order and length as {@code setPoint}
-     * @throws IllegalArgumentException if the arrays differ in length
+     * @throws IllegalArgumentException if either array is null, they differ in length, a set
+     *                                  point is not finite, or a weight is not finite and non-negative
      */
     public HomeostaticValue(double[] setPoint, double[] weights) {
+        if (setPoint == null || weights == null) {
+            throw new IllegalArgumentException("setPoint and weights must not be null");
+        }
         if (setPoint.length != weights.length) {
             throw new IllegalArgumentException(
                     "setPoint has " + setPoint.length + " drives but weights has " + weights.length);
+        }
+        for (int i = 0; i < setPoint.length; i++) {
+            if (!Double.isFinite(setPoint[i])) {
+                throw new IllegalArgumentException("setPoint[" + i + "] is not finite: " + setPoint[i]);
+            }
+            if (!Double.isFinite(weights[i]) || weights[i] < 0) {
+                throw new IllegalArgumentException("weights[" + i + "] must be finite and non-negative: " + weights[i]);
+            }
         }
         this.setPoint = setPoint.clone();
         this.weights = weights.clone();
     }
 
-    /** Four drives in {@link FocusTracker#DRIVES} order, shared set point H* = 0.18, unit weights. */
+    /**
+     * Four drives in {@link FocusTracker#DRIVES} order, unit weights, shared set point H* =
+     * {@link Constants#MIN_AROUSAL_LEVEL} (0.18, the lower edge of the homeostatic band of #59).
+     * Retuning that constant moves the arbiter's set point too, by design: the paper defines H*
+     * as that band edge.
+     */
     public static HomeostaticValue defaults() {
         double[] setPoint = new double[FocusTracker.DRIVES.size()];
         double[] weights = new double[FocusTracker.DRIVES.size()];
@@ -58,16 +75,11 @@ public final class HomeostaticValue {
      * @param h drive levels, one per configured drive
      * @return {@code || w .* max(0, h - H*) ||_2}
      * @throws IllegalArgumentException if {@code h} does not match the configured dimension
+     *                                  or holds a non-finite level
      */
     public double deficit(double[] h) {
-        checkDimension(h, "h");
-        double sum = 0;
-        for (int i = 0; i < setPoint.length; i++) {
-            double excess = Math.max(0, h[i] - setPoint[i]);
-            double weighted = weights[i] * excess;
-            sum += weighted * weighted;
-        }
-        return Math.sqrt(sum);
+        checkInput(h, "h");
+        return deficitUnchecked(h, null);
     }
 
     /**
@@ -75,21 +87,34 @@ public final class HomeostaticValue {
      * @param h drive levels before the outcome, one per configured drive
      * @return {@code d(h) - d(h + k)}: the deficit removed by {@code k}
      * @throws IllegalArgumentException if either array does not match the configured dimension
+     *                                  or holds a non-finite entry
      */
     public double value(double[] k, double[] h) {
-        checkDimension(k, "k");
-        checkDimension(h, "h");
-        double[] after = new double[h.length];
-        for (int i = 0; i < h.length; i++) {
-            after[i] = h[i] + k[i];
-        }
-        return deficit(h) - deficit(after);
+        checkInput(k, "k");
+        checkInput(h, "h");
+        return deficitUnchecked(h, null) - deficitUnchecked(h, k);
     }
 
-    private void checkDimension(double[] v, String name) {
-        if (v.length != setPoint.length) {
+    /** d(h + k), or d(h) when {@code k} is null, without allocating. */
+    private double deficitUnchecked(double[] h, double[] k) {
+        double sum = 0;
+        for (int i = 0; i < setPoint.length; i++) {
+            double level = k == null ? h[i] : h[i] + k[i];
+            double weighted = weights[i] * Math.max(0, level - setPoint[i]);
+            sum += weighted * weighted;
+        }
+        return Math.sqrt(sum);
+    }
+
+    private void checkInput(double[] v, String name) {
+        if (v == null || v.length != setPoint.length) {
             throw new IllegalArgumentException(
-                    name + " has " + v.length + " entries but " + setPoint.length + " drives are configured");
+                    name + " must have " + setPoint.length + " entries, got " + (v == null ? "null" : v.length));
+        }
+        for (int i = 0; i < v.length; i++) {
+            if (!Double.isFinite(v[i])) {
+                throw new IllegalArgumentException(name + "[" + i + "] is not finite: " + v[i]);
+            }
         }
     }
 }

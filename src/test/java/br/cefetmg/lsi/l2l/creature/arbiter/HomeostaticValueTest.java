@@ -1,5 +1,6 @@
 package br.cefetmg.lsi.l2l.creature.arbiter;
 
+import br.cefetmg.lsi.l2l.common.Constants;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -75,5 +76,32 @@ class HomeostaticValueTest {
         assertThrows(IllegalArgumentException.class, () -> v.value(new double[]{1, 2}, new double[]{1}));
         assertThrows(IllegalArgumentException.class,
                 () -> new HomeostaticValue(new double[]{H_STAR, H_STAR}, new double[]{1}));
+    }
+
+    @Test
+    void nonFiniteInputsAreRejected() {
+        HomeostaticValue v = twoDrives();
+        assertThrows(IllegalArgumentException.class, () -> v.deficit(new double[]{Double.NaN, 1}));
+        assertThrows(IllegalArgumentException.class, () -> v.value(new double[]{Double.NaN, 0}, new double[]{1, 1}));
+        assertThrows(IllegalArgumentException.class,
+                () -> v.value(new double[]{0, 0}, new double[]{Double.POSITIVE_INFINITY, 1}));
+    }
+
+    @Test
+    void invalidConstructorArgumentsAreRejected() {
+        double[] sp = {H_STAR, H_STAR};
+        assertThrows(IllegalArgumentException.class, () -> new HomeostaticValue(sp, new double[]{-1, 1}));
+        assertThrows(IllegalArgumentException.class, () -> new HomeostaticValue(sp, new double[]{Double.NaN, 1}));
+        assertThrows(IllegalArgumentException.class,
+                () -> new HomeostaticValue(new double[]{Double.NaN, H_STAR}, new double[]{1, 1}));
+        assertThrows(IllegalArgumentException.class, () -> new HomeostaticValue(null, new double[]{1, 1}));
+        assertThrows(IllegalArgumentException.class, () -> new HomeostaticValue(sp, null));
+    }
+
+    @Test
+    void defaultsSetPointFollowsHomeostaticBandConstant() {
+        // Deficit of a single drive sitting 1.0 above the band edge is exactly 1.0.
+        double[] h = {Constants.MIN_AROUSAL_LEVEL + 1.0, 0, 0, 0};
+        assertEquals(1.0, HomeostaticValue.defaults().deficit(h), 1e-12);
     }
 }
