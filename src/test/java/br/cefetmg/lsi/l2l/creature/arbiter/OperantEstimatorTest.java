@@ -192,9 +192,24 @@ class OperantEstimatorTest {
         e.record(HUNGER, eat, 0.3);
         e.record(HUNGER, eat, 0.3);
         Estimate est = one(e, eat);
-        assertEquals(1.0, est.sigma(), 0.0, "identical values still leave the prior sigma0 = 1");
+        assertEquals(Math.sqrt(0.5), est.sigma(), TOL, "identical values: prior blended with zero sample spread");
         assertEquals(0.3 * 2 / 3, est.q(), TOL);
-        assertEquals(1 / Math.sqrt(3), est.se(), TOL);
+        assertEquals(Math.sqrt(0.5) / Math.sqrt(3), est.se(), TOL);
+    }
+
+    @Test
+    void sigmaIsThePriorAtOneObservationAndFallsWithoutAStepAfterwards() {
+        OperantEstimator e = new OperantEstimator(() -> HUNGER, new double[] {50, 100}, 1.0);
+        Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
+        assertEquals(1.0, one(e, eat).sigma(), 0.0, "unseen");
+        double prev = 1.0;
+        for (int k = 1; k <= 6; k++) {
+            e.record(HUNGER, eat, 0.3);
+            double sigma = one(e, eat).sigma();
+            assertEquals(Math.sqrt(1.0 / k), sigma, TOL, "constant outcome: sqrt(1/n) at n=" + k);
+            assertTrue(prev - sigma < 0.3, "no step at n=" + k + ": " + prev + " -> " + sigma);
+            prev = sigma;
+        }
     }
 
     @Test

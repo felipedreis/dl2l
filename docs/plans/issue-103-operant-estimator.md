@@ -15,10 +15,11 @@ running statistics of the value V experienced per (focal drive, object type, dis
 `Estimate(Q, SE, σ)` by the paper's formulas:
 
 - `Q = (n·v̄ + κ·Q0) / (n + κ)`, `SE = σ / √(n + κ)`; κ = 1, Q0 = 0.
-- σ: prior `σ0 = 1` until `n ≥ 3`; then **`σ² = (ν0·σ0² + (n−1)·s²) / (ν0 + n − 1)`, ν0 = 1** — the sample variance blended with
-  the prior. **Deliberate departure from the paper's `σ = s`**: with `σ = s` a constant outcome gives `s = 0` from `n ≥ 3`,
+- σ: prior `σ0 = 1` while `n ≤ 1`; then **`σ² = (ν0·σ0² + (n−1)·s²) / (ν0 + n − 1)`, ν0 = 1** — the sample variance blended with
+  the prior. **Deliberate departure from the paper's `σ = s`**: with `σ = s` a constant outcome gives `s = 0` from `n ≥ 2`,
   so `SE` is exactly 0 forever; #104's `Φ((Q1−Q2)/√(SE1²+SE2²))` then saturates and #115's `√(SE²+σ²)` is 0. The blend keeps
-  σ and SE strictly positive and shrinking with evidence, and converges to `s` for a noisy cell. Found when the first
+  σ and SE strictly positive and shrinking with evidence, and converges to `s` for a noisy cell. The blend equals the prior at
+  `n = 1`, so the paper's `n ≥ 3` gate is dropped: it would have made σ (and SE) step down at `n = 3` (code review). Found when the first
   implementation's "done when" test could only assert SE narrowing until it hit 0.
 - Each update multiplies the count by 0.995 first, then adds the observation (Welford).
 
@@ -49,7 +50,7 @@ episode closes (paper §4.2: `G_t = Σ γʲ K_{t+j}`, valued as `V(G | H)`).
   three bins at 1/3 and 2/3 of `Constants.DEFAULT_VISION_FIELD_RADIUS`; calibrated later (#107).
 - **Statistics** (per key): decayed count `n`, mean `v̄`, `M2`. Update with `d = 0.995`:
   `n ← d·n; n' = n + 1; δ = v − v̄; v̄ += δ/n'; M2 ← d·M2 + δ·(v − v̄); n ← n'`. With `d = 1` this is exactly
-  Welford (tested against a batch computation). `s = √(M2 / (n − 1))` once `n ≥ 3`, blended into σ as above; else `σ0 = 1`.
+  Welford (tested against a batch computation). `s = √(M2 / (n − 1))` for `n > 1`, blended into σ as above; else `σ0 = 1`.
 - **Unseen key**: `n = 0` → `Q = 0`, `σ = 1`, `SE = 1/√κ = 1`.
 - **Focal drive** is read when estimating from a `Supplier<String>` given at construction (the arbiter passes
   `() -> tracker.focalDrive().orElse(null)`); `record` takes the drive explicitly, since the close-out knows the
@@ -72,8 +73,8 @@ episode closes (paper §4.2: `G_t = Σ γʲ K_{t+j}`, valued as `V(G | H)`).
 3. Welford: with decay 1, mean/variance equal a batch computation on a random sequence (tolerance 1e-9).
 4. Decay: count after k updates equals the closed-form decayed count; old evidence fades (an early outlier's
    influence shrinks).
-5. σ prior: `σ = 1` for `n < 3` even when the two observed values are identical; `σ` equals the sample SD from
-   `n ≥ 3`; σ does not shrink with more identical-spread evidence while SE does.
+5. σ: prior `1` unseen; `sqrt(1/n)` for a constant outcome (no step); blends the sample variance with the prior;
+   converges to the sample SD for a noisy cell while SE keeps shrinking.
 6. Cell separation: different focal drive / object type / distance bin / action type do not share statistics.
 7. Distance bins: edges respected on boundaries; no-object candidate uses the `NONE` bucket; null focal → `NONE`.
 8. `estimate` preserves order and size, empty list → empty list, and is read-only (calling it does not change a
