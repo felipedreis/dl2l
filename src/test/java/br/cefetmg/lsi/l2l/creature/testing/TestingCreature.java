@@ -200,6 +200,9 @@ public final class TestingCreature implements Creature {
     @Override
     public OperantStore operantStore() { return operantStore; }
 
+    /** Test-only: publishes the focal drive as FullAppraisal does each cycle (read by the estimator). */
+    public void setFocalDriveForTesting(String drive) { focalDriveRef.set(drive); }
+
     @Override
     public ComponentRef memoryConsolidator() { return memoryConsolidator; }
 

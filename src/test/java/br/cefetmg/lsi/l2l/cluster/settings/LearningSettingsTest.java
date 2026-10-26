@@ -179,6 +179,18 @@ public class LearningSettingsTest {
     }
 
     @Test
+    void operant_estimator_defaults_off_and_requires_the_focal_drive() {
+        assertFalse(new LearningSettings().isOperantEstimatorEnabled());
+
+        LearningSettings on = new Simulation(com.typesafe.config.ConfigFactory.parseString(
+                simulationWith("focalDriveEnabled = true\noperantEstimatorEnabled = true"))).getLearningSettings();
+        assertTrue(on.isOperantEstimatorEnabled());
+
+        assertThrows(IllegalArgumentException.class, () -> new Simulation(com.typesafe.config.ConfigFactory
+                .parseString(simulationWith("operantEstimatorEnabled = true"))).getLearningSettings());
+    }
+
+    @Test
     void arbiter_a0_conf_is_the_p84_legacy_nomem_stack_with_focal_drive_off() {
         LearningSettings a0 = new Simulation(com.typesafe.config.ConfigFactory
                 .parseFile(new java.io.File("simulations/arbiter_a0.conf"))).getLearningSettings();
