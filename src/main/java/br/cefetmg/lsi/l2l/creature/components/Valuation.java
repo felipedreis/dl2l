@@ -3,6 +3,7 @@ package br.cefetmg.lsi.l2l.creature.components;
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.CreatureDied;
+import br.cefetmg.lsi.l2l.creature.arbiter.ClosedStep;
 import br.cefetmg.lsi.l2l.creature.arbiter.DecisionRecord;
 import br.cefetmg.lsi.l2l.creature.arbiter.DriveOutcomeMessage;
 import br.cefetmg.lsi.l2l.creature.arbiter.EpisodeBuffer;
@@ -11,11 +12,12 @@ import br.cefetmg.lsi.l2l.creature.arbiter.HomeostaticValue;
 import br.cefetmg.lsi.l2l.creature.arbiter.OperantReturnSink;
 import br.cefetmg.lsi.l2l.creature.arbiter.OperantStore;
 import br.cefetmg.lsi.l2l.creature.bd.ActionProbabilityState;
+import br.cefetmg.lsi.l2l.creature.bd.EpisodeReturnState;
+import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
 import br.cefetmg.lsi.l2l.creature.bd.EngramState;
 import br.cefetmg.lsi.l2l.creature.bd.ExpectancyState;
-import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.creature.conditioning.ActionProbability;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
@@ -26,7 +28,6 @@ import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.creature.memory.ShortTermMemory;
 import br.cefetmg.lsi.l2l.stimuli.DopaminergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.EvaluationStimulus;
-import br.cefetmg.lsi.l2l.stimuli.Stimulus;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
 import java.util.List;
@@ -53,6 +54,8 @@ public class Valuation extends CreatureComponent {
 
     /** Orders {@link ActionProbabilityState} events within a cycle, which can hold several. */
     private long conditioningSeq = 0;
+    /** Orders {@link EpisodeReturnState} rows within a creature. */
+    private long episodeReturnSeq = 0;
 
     /**
      * Issue #110: the episode buffer, single writer, owned here. Null unless {@code focalDriveEnabled};
@@ -78,6 +81,7 @@ public class Valuation extends CreatureComponent {
             if (store != null) {
                 episodes.addSink(new OperantReturnSink(store));
             }
+            episodes.addSink(this::persistEpisodeReturns);
         }
     }
 
@@ -206,6 +210,26 @@ public class Valuation extends CreatureComponent {
             ActionProbability ap = probabilities.get(i);
             rows[i] = new ActionProbabilityState(id.key, seq, now, cycle, target.name(),
                     ap.getAction(), ap.getProbability(), reinforced, delta);
+        }
+        persist(rows);
+    }
+
+    /**
+     * Issue #110: one {@link EpisodeReturnState} per closed step, in one persist call so the batch lands in
+     * one BDActor transaction. The steps arrive in decision order from the buffer.
+     */
+    private void persistEpisodeReturns(List<ClosedStep> steps) {
+        long now = System.currentTimeMillis();
+        PersistenceState[] rows = new PersistenceState[steps.size()];
+        for (int i = 0; i < rows.length; i++) {
+            ClosedStep s = steps.get(i);
+            double[] h = s.h();
+            double[] g = s.g();
+            rows[i] = new EpisodeReturnState(id.key, episodeReturnSeq++, now, s.episodeId(), s.drive(),
+                    s.closeType().name(), s.cycle(), s.closeCycle() - s.cycle(),
+                    s.action().type.name(),
+                    s.action().getTarget() != null ? s.action().getTarget().name() : null,
+                    s.action().perception.distance, h, g, s.bootstrap(), s.value());
         }
         persist(rows);
     }

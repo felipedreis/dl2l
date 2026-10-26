@@ -9,6 +9,7 @@ import br.cefetmg.lsi.l2l.creature.arbiter.Estimate;
 import br.cefetmg.lsi.l2l.creature.arbiter.FocusEvent;
 import br.cefetmg.lsi.l2l.creature.arbiter.FocusEvents;
 import br.cefetmg.lsi.l2l.creature.arbiter.OperantStore;
+import br.cefetmg.lsi.l2l.creature.bd.EpisodeReturnState;
 import br.cefetmg.lsi.l2l.creature.common.Action;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.creature.common.Perception;
@@ -20,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Issue #110, component level: {@code Valuation} receives the decision, focus and outcome messages of
@@ -130,6 +132,17 @@ class ValuationEpisodeTest {
         assertEquals(0.5, after.get(0).q(), TOL, "EAT: value 1.0 over one observation");
         assertEquals(GAMMA / 2, after.get(1).q(), TOL, "APPROACH: value gamma over one observation");
         assertEquals(1 / Math.sqrt(2), after.get(0).se(), TOL);
+
+        // Persistence sink: one row per written step, in decision order.
+        List<EpisodeReturnState> rows = h.bdSink().ofType(EpisodeReturnState.class);
+        assertEquals(List.of("APPROACH", "EAT"), rows.stream().map(EpisodeReturnState::getAction).toList());
+        assertEquals(List.of("REGULATED", "REGULATED"), rows.stream().map(EpisodeReturnState::getCloseType).toList());
+        assertEquals(List.of(1L, 2L), rows.stream().map(EpisodeReturnState::getStepCycle).toList());
+        assertEquals(1.0, rows.get(1).getValue(), TOL);
+        assertEquals(GAMMA, rows.get(0).getValue(), TOL);
+        // The close is at cycle 3: APPROACH (cycle 1) is two cycles from it, EAT (cycle 2) one.
+        assertEquals(List.of(2L, 1L), rows.stream().map(EpisodeReturnState::getStepsToClose).toList());
+        assertTrue(Double.isNaN(rows.get(0).getBootstrap()), "a regulated step is not pre-empted");
 
         // A cell nothing was decided in stays unseen.
         Estimate sleep = h.creature().operantStore().estimate(
