@@ -4,6 +4,7 @@ import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.ComponentRef;
 import br.cefetmg.lsi.l2l.creature.Creature;
+import br.cefetmg.lsi.l2l.creature.arbiter.OperantStore;
 import br.cefetmg.lsi.l2l.creature.bd.EmotionalState;
 import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
@@ -69,6 +70,7 @@ class CreatureComponentPersistBufferingTest {
         @Override public EmotionalSystem emotions() { throw unused(); }
         @Override public OperantConditioning operantConditioning() { throw unused(); }
         @Override public MemorySystem memory() { throw unused(); }
+        @Override public OperantStore operantStore() { return null; }
         @Override public ExpectancyPredictor expectancy() { throw unused(); }
         @Override public ComponentRef memoryConsolidator() { throw unused(); }
         @Override public void kill() { throw unused(); }

@@ -2,6 +2,14 @@ package br.cefetmg.lsi.l2l.creature.components;
 
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.common.SequentialId;
+import br.cefetmg.lsi.l2l.creature.CreatureDied;
+import br.cefetmg.lsi.l2l.creature.arbiter.DecisionRecord;
+import br.cefetmg.lsi.l2l.creature.arbiter.DriveOutcomeMessage;
+import br.cefetmg.lsi.l2l.creature.arbiter.EpisodeBuffer;
+import br.cefetmg.lsi.l2l.creature.arbiter.FocusEvents;
+import br.cefetmg.lsi.l2l.creature.arbiter.HomeostaticValue;
+import br.cefetmg.lsi.l2l.creature.arbiter.OperantReturnSink;
+import br.cefetmg.lsi.l2l.creature.arbiter.OperantStore;
 import br.cefetmg.lsi.l2l.creature.bd.ActionProbabilityState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
@@ -46,6 +54,12 @@ public class Valuation extends CreatureComponent {
     /** Orders {@link ActionProbabilityState} events within a cycle, which can hold several. */
     private long conditioningSeq = 0;
 
+    /**
+     * Issue #110: the episode buffer, single writer, owned here. Null unless {@code focalDriveEnabled};
+     * with it on, closed episodes are written to the operant store when one exists.
+     */
+    private EpisodeBuffer episodes;
+
     public Valuation(SequentialId id, LearningSettings learningSettings) {
         super(id);
         this.learningSettings = learningSettings;
@@ -57,13 +71,21 @@ public class Valuation extends CreatureComponent {
         operantConditioning = creature.operantConditioning();
         expectancy = creature.expectancy();
         memorySystem = creature.memory();
+
+        if (learningSettings.isFocalDriveEnabled()) {
+            episodes = new EpisodeBuffer(HomeostaticValue.defaults());
+            OperantStore store = creature.operantStore();
+            if (store != null) {
+                episodes.addSink(new OperantReturnSink(store));
+            }
+        }
     }
 
     @Override
     public void onReceive(Object message) {
-        List<Stimulus> stimuli = (List) message;
+        List stimuli = (List) message;
 
-        for (Stimulus aStimuli : stimuli) {
+        for (Object aStimuli : stimuli) {
 
             if (aStimuli instanceof EvaluationStimulus) {
 
@@ -79,8 +101,30 @@ public class Valuation extends CreatureComponent {
                         .buildOneReceivedOneEmitted(evaluation, null);
 
                 persist(change);
+            } else {
+                onEpisodeMessage(aStimuli);
             }
 
+        }
+    }
+
+    /**
+     * Issue #110: feeds the episode buffer. The three producers (FullAppraisal's decisions and focus
+     * events, HomeostaticRegulation's outcomes) arrive on separate channels, so the buffer's settle rule
+     * (see {@link EpisodeBuffer}) is what makes the result independent of their interleaving. An outcome
+     * is stamped with the decision cycle at its arrival, as the warm-trace consolidation already does.
+     */
+    private void onEpisodeMessage(Object message) {
+        if (episodes == null) {
+            return;
+        }
+        switch (message) {
+            case DecisionRecord d -> episodes.onDecision(d.cycle(), d.action(), d.h(), d.focalDrive(), d.chosenQ());
+            case FocusEvents f -> f.events().forEach(episodes::onFocus);
+            case DriveOutcomeMessage k -> episodes.onOutcome((int) memorySystem.currentDecisionCycle(), k.k());
+            case CreatureDied died -> episodes.onDeath(died.cycle(), died.lethalDeviation());
+            default -> {
+            }
         }
     }
 

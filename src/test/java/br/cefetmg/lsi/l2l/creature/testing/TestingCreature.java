@@ -15,8 +15,12 @@ import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyPredictors;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystemActor;
 
+import br.cefetmg.lsi.l2l.creature.arbiter.OperantEstimator;
+import br.cefetmg.lsi.l2l.creature.arbiter.OperantStore;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Single-threaded, no-{@code ActorSystem} implementation of {@link Creature}. Wires
@@ -39,6 +43,11 @@ public final class TestingCreature implements Creature {
     private final OperantConditioning operantConditioning = new OperantConditioningActor();
     private final MemorySystem memory = new MemorySystemActor();
     private final ExpectancyPredictor expectancy;
+
+    /** Issue #110: shared with FullAppraisal, read by the operant estimator's supplier. */
+    private final AtomicReference<String> focalDriveRef = new AtomicReference<>();
+    /** Issue #110: in-process operant estimator (no facade in the harness); null unless enabled. */
+    private OperantStore operantStore;
 
     private Point position;
     private boolean alive;
@@ -82,6 +91,10 @@ public final class TestingCreature implements Creature {
         visionFieldOpening = Constants.MAX_VISION_FIELD_OPENING;
         olfactoryFieldRadius = Constants.MIN_OLFACTORY_FIELD_RADIUS;
 
+        if (learningSettings.isOperantEstimatorEnabled()) {
+            operantStore = new OperantEstimator(focalDriveRef::get);
+        }
+
         // Instantiate every component and its dispatcher.
         SequentialId cid = id;
         register(cid = cid.next(), new Eye(cid));
@@ -92,7 +105,7 @@ public final class TestingCreature implements Creature {
         register(cid = cid.next(), new EffectorCortex(cid));
         register(cid = cid.next(), new PartialAppraisal(cid, learningSettings));
         // FullAppraisal: pass null for MLServiceExtension.Impl so WORLD_MODEL is skipped.
-        register(cid = cid.next(), new FullAppraisal(cid, learningSettings, null, null, seed));
+        register(cid = cid.next(), new FullAppraisal(cid, learningSettings, null, null, seed, focalDriveRef));
         register(cid = cid.next(), new HomeostaticRegulation(cid, learningSettings));
         register(cid = cid.next(), new Valuation(cid, learningSettings));
         register(cid = cid.next(), new NeuromodulatorSystem(cid));
@@ -183,6 +196,9 @@ public final class TestingCreature implements Creature {
 
     @Override
     public MemorySystem memory() { return memory; }
+
+    @Override
+    public OperantStore operantStore() { return operantStore; }
 
     @Override
     public ComponentRef memoryConsolidator() { return memoryConsolidator; }
