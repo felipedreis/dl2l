@@ -14,7 +14,12 @@ In: `OperantEstimator implements ValueEstimator` — the cheapest controller (al
 running statistics of the value V experienced per (focal drive, object type, distance bin, action), turned into
 `Estimate(Q, SE, σ)` by the paper's formulas:
 
-- `Q = (n·v̄ + κ·Q0) / (n + κ)`, `σ = s` (prior `σ0 = 1` until `n ≥ 3`), `SE = σ / √(n + κ)`; κ = 1, Q0 = 0.
+- `Q = (n·v̄ + κ·Q0) / (n + κ)`, `SE = σ / √(n + κ)`; κ = 1, Q0 = 0.
+- σ: prior `σ0 = 1` until `n ≥ 3`; then **`σ² = (ν0·σ0² + (n−1)·s²) / (ν0 + n − 1)`, ν0 = 1** — the sample variance blended with
+  the prior. **Deliberate departure from the paper's `σ = s`**: with `σ = s` a constant outcome gives `s = 0` from `n ≥ 3`,
+  so `SE` is exactly 0 forever; #104's `Φ((Q1−Q2)/√(SE1²+SE2²))` then saturates and #115's `√(SE²+σ²)` is 0. The blend keeps
+  σ and SE strictly positive and shrinking with evidence, and converges to `s` for a noisy cell. Found when the first
+  implementation's "done when" test could only assert SE narrowing until it hit 0.
 - Each update multiplies the count by 0.995 first, then adds the observation (Welford).
 
 Out (by design): detecting episode close and computing V(G | H) — that is #110, which will call `record`;
@@ -44,7 +49,7 @@ episode closes (paper §4.2: `G_t = Σ γʲ K_{t+j}`, valued as `V(G | H)`).
   three bins at 1/3 and 2/3 of `Constants.DEFAULT_VISION_FIELD_RADIUS`; calibrated later (#107).
 - **Statistics** (per key): decayed count `n`, mean `v̄`, `M2`. Update with `d = 0.995`:
   `n ← d·n; n' = n + 1; δ = v − v̄; v̄ += δ/n'; M2 ← d·M2 + δ·(v − v̄); n ← n'`. With `d = 1` this is exactly
-  Welford (tested against a batch computation). `s = √(M2 / (n − 1))` once `n ≥ 3`, else `σ0 = 1`.
+  Welford (tested against a batch computation). `s = √(M2 / (n − 1))` once `n ≥ 3`, blended into σ as above; else `σ0 = 1`.
 - **Unseen key**: `n = 0` → `Q = 0`, `σ = 1`, `SE = 1/√κ = 1`.
 - **Focal drive** is read when estimating from a `Supplier<String>` given at construction (the arbiter passes
   `() -> tracker.focalDrive().orElse(null)`); `record` takes the drive explicitly, since the close-out knows the
@@ -76,21 +81,12 @@ episode closes (paper §4.2: `G_t = Σ γʲ K_{t+j}`, valued as `V(G | H)`).
 9. `record` rejects NaN/∞.
 10. `WelfordTable` alone (via the estimator's tests plus a direct table test): keys independent, decay math.
 
-## Proposals needing a decision
+## Decisions
 
-- **Q1 — Distance bins.** 3 bins at 1/3 and 2/3 of the vision radius (recommended; edges are a constructor
-  argument) vs. a different count now. The paper only says "distance bin"; #107 calibrates.
-- **Q2 — DECIDED: decay is a constructor argument `decay` in (0, 1], default 0.995, applied to the key being updated only.** (Was: where decay applies.) Only the statistics of the key being updated (recommended; the paper's "on each
-  update the count is multiplied by 0.995" read per cell) vs. every key on every update (forgets unvisited cells
-  too — makes SE re-grow for options not tried, a different mechanism).
-- **Q3 — Variance estimator.** Decayed sample variance `M2 / (n − 1)` once `n ≥ 3` (recommended) vs. population
-  `M2 / n`. Differs by ~`n/(n−1)`; matters only for tiny n.
-- **Q4 — Focal drive source.** `Supplier<String>` at construction (recommended) vs. a `setFocalDrive` mutator.
-- **Q6 — Interfaces.** Separate `ValueLearner` + reuse of `ValueEstimator`, table split out as `WelfordTable`
-  (recommended, per review of this plan) vs. a single concrete class.
-- **Q5 — Branch.** Implement on `feature/issue-102-estimate-value-estimator` (as you asked); the PR then carries
-  #102 and #103. Also fold in the open review fixes for #102 (interface javadoc on `h`/order, stale Q1–Q5 section
-  in its plan, `withSeScaled` overflow note) — recommended, small — vs. leave them.
+- Q1 3 distance bins at 1/3 and 2/3 of the vision radius, edges a constructor argument. Q2 decay is a constructor
+  argument in (0, 1], default 0.995, applied to the updated key only (Silva/Mapa's table has no decay). Q3 sample
+  variance `M2/(n−1)`, blended with the prior (see above). Q4 focal drive from a `Supplier<String>`. Q5 branch shared
+  with #102, whose review fixes were folded in. Q6 `ValueLearner` + `ValueEstimator` + `WelfordTable`.
 
 ## Verification
 

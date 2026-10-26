@@ -46,7 +46,7 @@ class OperantEstimatorTest {
     // ---- Done-when property (#88) ----------------------------------------------------------
 
     @Test
-    void constantPositiveValueShrinksQAndNarrowsSeUntilSpreadCollapses() {
+    void constantPositiveValueShrinksQAndNarrowsSeAtEveryStep() {
         OperantEstimator e = withDrive(HUNGER);
         Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
         double prevQ = Double.NEGATIVE_INFINITY;
@@ -57,16 +57,11 @@ class OperantEstimatorTest {
             last = one(e, eat);
             assertTrue(last.q() <= 0.5, "Q must never exceed the mean: " + last.q());
             assertTrue(last.q() >= prevQ, "Q must rise monotonically toward the mean at step " + k);
-            if (prevSe > 0) {
-                assertTrue(last.se() < prevSe, "SE must narrow strictly at step " + k);
-            } else {
-                // Constant V has zero sample spread from n >= 3 on, so SE is exactly 0 from then on.
-                assertEquals(0.0, last.se(), "SE stays at 0 once the sample spread is 0");
-            }
+            assertTrue(last.se() > 0, "SE never collapses to 0, even for a constant outcome");
+            assertTrue(last.se() < prevSe, "SE must narrow strictly at step " + k);
             prevQ = last.q();
             prevSe = last.se();
         }
-        assertEquals(0.0, last.se(), TOL);
         assertTrue(last.q() > 0 && last.q() < 0.5, "Q after 50 must be shrunk below 0.5: " + last.q());
     }
 
@@ -81,11 +76,8 @@ class OperantEstimatorTest {
             Estimate est = one(e, eat);
             assertTrue(est.q() >= -0.5, "Q must never fall below the mean: " + est.q());
             assertTrue(est.q() <= prevQ, "Q must fall monotonically toward the mean at step " + k);
-            if (prevSe > 0) {
-                assertTrue(est.se() < prevSe, "SE must narrow strictly at step " + k);
-            } else {
-                assertEquals(0.0, est.se(), "SE stays at 0 once the sample spread is 0");
-            }
+            assertTrue(est.se() > 0, "SE never collapses to 0, even for a constant outcome");
+            assertTrue(est.se() < prevSe, "SE must narrow strictly at step " + k);
             prevQ = est.q();
             prevSe = est.se();
         }
@@ -138,8 +130,10 @@ class OperantEstimatorTest {
 
         Estimate est = one(e, eat);
         assertEquals(n * mean / (n + 1), est.q(), TOL);
-        assertEquals(sd, est.sigma(), TOL);
-        assertEquals(sd / Math.sqrt(n + 1), est.se(), TOL);
+        double sigma = Math.sqrt((1.0 + (n - 1) * sd * sd) / n);
+        assertEquals(sigma, est.sigma(), TOL);
+        assertEquals(sigma / Math.sqrt(n + 1), est.se(), TOL);
+        assertEquals(sd, est.sigma(), 0.01, "converges to the sample SD with much evidence");
     }
 
     @Test
@@ -204,14 +198,27 @@ class OperantEstimatorTest {
     }
 
     @Test
-    void sigmaIsSampleSdFromThreeObservations() {
+    void sigmaBlendsSampleVarianceWithThePriorFromThreeObservations() {
         OperantEstimator e = new OperantEstimator(() -> HUNGER, new double[] {50, 100}, 1.0);
         Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
         for (double v : new double[] {1, 2, 4}) {
             e.record(HUNGER, eat, v);
         }
-        // mean 7/3; sum of squares 42/9; sample variance 7/3.
-        assertEquals(Math.sqrt(7.0 / 3.0), one(e, eat).sigma(), TOL);
+        // mean 7/3; sample variance 7/3; blended with the prior (1 observation of variance 1):
+        // (1 + 2 * 7/3) / 3.
+        assertEquals(Math.sqrt((1 + 2 * 7.0 / 3.0) / 3), one(e, eat).sigma(), TOL);
+    }
+
+    @Test
+    void constantOutcomeKeepsSigmaPositiveSoCalibrationAndDecisivenessStayDefined() {
+        OperantEstimator e = new OperantEstimator(() -> HUNGER, new double[] {50, 100}, 1.0);
+        Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
+        for (int i = 0; i < 100; i++) {
+            e.record(HUNGER, eat, 0.5);
+        }
+        Estimate est = one(e, eat);
+        assertTrue(est.sigma() > 0 && est.se() > 0);
+        assertTrue(est.sigma() < 0.2, "and still shrinks with evidence: " + est.sigma());
     }
 
     @Test
@@ -227,7 +234,7 @@ class OperantEstimatorTest {
         }
         Estimate late = one(e, eat);
         assertTrue(late.se() < early.se() / 2, "SE shrinks with evidence");
-        assertTrue(Math.abs(late.sigma() - early.sigma()) < 0.1, "sigma stays about the same");
+        assertEquals(0.5, late.sigma(), 0.05, "sigma converges to the outcome's own spread, not to 0");
         assertTrue(late.sigma() > 0.4, "outcome stays noisy");
     }
 

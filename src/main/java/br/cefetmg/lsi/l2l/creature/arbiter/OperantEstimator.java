@@ -18,11 +18,18 @@ import java.util.function.Supplier;
  * {@link Estimate} by the paper's formulas, with {@code kappa = 1} and {@code Q0 = 0}:
  * <ul>
  *   <li>{@code Q = (n * mean + kappa * Q0) / (n + kappa)}: frequency alone never inflates {@code Q};</li>
- *   <li>{@code sigma = s}, the sample SD of the cell, once {@code n >= 3}; before that the prior
- *       {@code sigma0 = 1};</li>
+ *   <li>{@code sigma}: the prior {@code sigma0 = 1} while {@code n < 3}; from then on the sample variance
+ *       {@code s^2} of the cell blended with the prior as worth {@code NU0 = 1} observation:
+ *       {@code sigma^2 = (NU0 * sigma0^2 + (n - 1) * s^2) / (NU0 + n - 1)};</li>
  *   <li>{@code SE = sigma / sqrt(n + kappa)}.</li>
  * </ul>
  * An unseen cell gives {@code Estimate(0, 1, 1)}.
+ *
+ * <p>The blend is a deliberate departure from the paper's {@code sigma = s}. With {@code sigma = s} a
+ * constant outcome has zero sample spread from {@code n >= 3}, so {@code SE} collapses to exactly 0:
+ * the decisiveness {@code Phi((Q1 - Q2) / sqrt(SE1^2 + SE2^2))} then saturates and calibration's
+ * {@code sqrt(SE^2 + sigma^2)} is 0. The blend keeps {@code sigma} (hence {@code SE}) strictly
+ * positive and still shrinking with evidence, while converging to {@code s} for a noisy cell.
  *
  * <p>Binning: the distance bins are the intervals between the sorted upper edges given at
  * construction, with each edge inclusive on its lower bin. The default has three bins at one third
@@ -45,6 +52,8 @@ public final class OperantEstimator implements ValueEstimator, ValueLearner {
     private static final double Q0 = 0.0;
     private static final double SIGMA0 = 1.0;
     private static final int MIN_N_FOR_SAMPLE_SD = 3;
+    /** Weight of the prior spread {@link #SIGMA0}, in observations. */
+    private static final double NU0 = 1.0;
 
     /** Cell key. {@code null} in a field means that bucket is {@code NONE}. */
     private record Key(String focalDrive, WorldObjectType objectType, int distanceBin, ActionType actionType) {
@@ -158,10 +167,15 @@ public final class OperantEstimator implements ValueEstimator, ValueLearner {
         return bin;
     }
 
+    private static double blendedSigma(double n, double sampleSd) {
+        double variance = (NU0 * SIGMA0 * SIGMA0 + (n - 1) * sampleSd * sampleSd) / (NU0 + n - 1);
+        return Math.sqrt(variance);
+    }
+
     private static Estimate estimateOf(WelfordTable.Stats s) {
         double n = s.n();
         double q = (n * s.mean() + KAPPA * Q0) / (n + KAPPA);
-        double sigma = n >= MIN_N_FOR_SAMPLE_SD ? s.sd() : SIGMA0;
+        double sigma = n >= MIN_N_FOR_SAMPLE_SD ? blendedSigma(n, s.sd()) : SIGMA0;
         double se = sigma / Math.sqrt(n + KAPPA);
         return new Estimate(q, se, sigma);
     }
