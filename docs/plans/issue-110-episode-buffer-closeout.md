@@ -1,6 +1,6 @@
 # Issue #110 — Episode buffer and close-out: discounted returns G
 
-Status: **approved 2026-10-26 with all recommendations (Q1–Q6).**
+Status: **implemented 2026-10-26** (approved with all recommendations, Q1–Q6; deviations and open items in the last section).
 Context: arbiter story map (`docs/plans/2026-q4-research-plan.md`, A2); arbitration paper draft
 (`docs/bib/uncertainty_arbitration.pdf`) §4.2 "How an episode closes, and what each step learns", Fig. 2, App. A steps 4–6.
 Depends on #98 (`FocusTracker`/`FocusEvent`), #100 (K), and — through the sink — #101 (`HomeostaticValue`), #102/#103
@@ -163,3 +163,45 @@ local-experiment rule) and an extraction. Checks on real data: every closing typ
 (an `estimate` call from a test harness shows `n > 0`); no deadlock or slowdown from the facade (cycle rate unchanged within
 noise). Per CLAUDE.md step 5, a hypothesis experiment needs a reader of the learned values — arrives with #104/#109; this issue's
 evidence is the identity and invariant checks above, recorded in the diary.
+
+## Implementation notes and deviations (2026-10-26)
+
+- **Death is wired from `CreatureActor.kill()`, not `setAlive(false)`.** Nothing in the codebase calls `setAlive`;
+  death goes through `kill()` from `PartialAppraisal.checkDeath`, and `setAlive(false)` calls `kill()`. `CreatureDied`
+  is sent best-effort from `kill()` immediately before the components are stopped, so it is likely dropped (the
+  `Valuation` mailbox is stopped with the rest). **Not verified.** Until it is, death closes are absent from the data.
+- **Lethal deviation (not specified in the plan):** the dominant basic drive is pushed to `Constants.MAX_AROUSAL_LEVEL`
+  (the others are zero). A zero K would leave death steps with no negative credit, contrary to test 4's intent.
+- **`DriveOutcomeMessage` carries K only, no cycle.** `Valuation` stamps each K on arrival (the plan's rule); a
+  sender-side cycle would need a blocking memory call per outcome and would not be authoritative.
+- **`ClosedStep` carries `closeCycle`** in addition to the plan's fields, so steps-to-close can be stored.
+- **The settle rule lives in `EpisodeBuffer`** (held pending closes flushed when a decision with cycle
+  `>= closeCycle + settleCycles` arrives, or at death), not in `Valuation`. `Valuation` owns the buffer.
+- **Pre-empted bootstrap** is the chosen Q of the decision *at the cut cycle*, looked up when the held close is written
+  (that decision arrives before the write). `B = 0` while the Q is NaN.
+- **Persistence naming:** table `episode_return` (as the brief asked, not `*_state`). Columns follow `drive_outcome`:
+  `seq` and `time_ms` are included, `steps_to_close` is stored, `bootstrap` is a null column unless pre-empted.
+- **Facade wiring landed in the stage 3 commit**, not stage 4: the `Creature.operantStore()` accessor it needs is
+  part of the plumbing. The `LearningSettings` validation (`operantEstimatorEnabled` requires `focalDriveEnabled`)
+  sits in its constructor, which the parser calls.
+- **Test harness:** `TestingCreature` uses an in-process `OperantEstimator` (no facade, no Akka).
+  `ValuationEpisodeTest` drives `Valuation` with messages directly, not through `FullAppraisal`/`HomeostaticRegulation`.
+
+### Open concerns
+
+- **Boundary double count.** A K stamped at a cut or close cycle `T` counts in the closing segment (`<= T`). If the next
+  segment opens at `T` and has a step there, the same K also counts in its return. Inherent to the stated rule, not
+  resolved here.
+- **Baseline exclusion** is by construction only (`HomeostaticRegulation` sends attributed K), with no test that
+  asserts a baseline message is never sent.
+- **Arrival stamping** makes a K's discount depend on its delivery delay (a K delayed past a cycle is discounted one
+  cycle more). The settle rule keeps the *membership* stable; the *weight* still follows arrival.
+
+### Verification not run (per the brief)
+
+- A0 run (`simulations/arbiter_a0.conf`, `focalDriveEnabled` + `operantEstimatorEnabled`, UI on) and extraction on real data.
+- Checks on real data: every closing type occurs; `Σ K` on closed steps `<= Σ K` in `drive_outcome`; per-step `value`
+  re-derived from persisted `h` and `g` (checked only on a synthetic fixture); operant cells fill from a real run.
+- Facade latency and cycle-rate (no deadlock or slowdown) measurement.
+- Death delivery: whether `CreatureDied` survives the `kill()` stop sequence.
+
