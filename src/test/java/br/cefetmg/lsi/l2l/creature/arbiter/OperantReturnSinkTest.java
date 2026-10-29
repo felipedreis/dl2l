@@ -76,4 +76,26 @@ class OperantReturnSinkTest {
         return new ClosedStep(0L, drive, ClosedStep.CloseType.REGULATED, 3, 4, action,
                 HUNGRY, NO_K, Double.NaN, value);
     }
+
+    // Review follow-up: a non-finite value is skipped, not thrown, so one bad sample cannot restart the
+    // operant facade and wipe the table.
+    @Test
+    void nonFiniteValueIsSkippedAndTheRestOfTheBatchStillWritten() {
+        OperantEstimator estimator = new OperantEstimator(() -> HUNGER);
+        OperantReturnSink sink = new OperantReturnSink(estimator);
+        Action eat = new Action(ActionType.EAT, new Perception(FruitType.GREEN_APPLE, new SequentialId(7), 10, 0));
+        Action wander = new Action(ActionType.WANDER, new Perception(null, new SequentialId(8), 10, 0));
+
+        sink.onClosed(List.of(
+                step(eat, Double.NaN),
+                step(wander, 1.0)));
+
+        assertEquals(new Estimate(0, 1, 1), estimator.estimate(List.of(eat), ZERO_H).get(0));
+        assertEquals(0.5, estimator.estimate(List.of(wander), ZERO_H).get(0).q(), TOL);
+    }
+
+    private static ClosedStep step(Action action, double value) {
+        return new ClosedStep(0, HUNGER, ClosedStep.CloseType.REGULATED, 1, 2, action,
+                HUNGRY, NO_K, Double.NaN, value);
+    }
 }

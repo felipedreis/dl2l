@@ -284,17 +284,28 @@ public class CreatureActor implements Creature {
         clock.cancel();
         state.setDeadTime(System.currentTimeMillis());
 
-        if (focalDriveInUse) {
-            // Issue #110, best effort: Valuation closes its open and held episodes with the lethal deviation.
-            // The message is queued behind the component stops below, so it is likely dropped; see the
-            // report of #110 for the verification still owed. Nothing else depends on it.
-            components.get(Valuation.class).second.tell(
-                    new CreatureDied((int) memory.currentDecisionCycle(), lethalDeviation()),
-                    ActorRef.noSender());
+        // Issue #110: with the focal drive on, Valuation is told of the death and then stopped with a
+        // PoisonPill instead of stop(): the component mailbox is FIFO and handles a PoisonPill after the
+        // messages ahead of it (ComponentMessageQueue), so CreatureDied is processed before Valuation
+        // goes. The lethal deviation reads the emotional system through blocking calls; if that fails the
+        // teardown must still run, so a failure only costs the death close-out.
+        ActorRef valuation = focalDriveInUse ? components.get(Valuation.class).second : null;
+        if (valuation != null) {
+            try {
+                valuation.tell(
+                        new CreatureDied((int) memory.currentDecisionCycle(), lethalDeviation()),
+                        ActorRef.noSender());
+            } catch (RuntimeException e) {
+                logger.warning("Creature " + id + ": death close-out skipped: " + e);
+            }
         }
 
         for (Pair<SequentialId, ActorRef> p : components.values()) {
-            TypedActor.context().stop(p.second);
+            if (p.second.equals(valuation)) {
+                p.second.tell(PoisonPill.getInstance(), ActorRef.noSender());
+            } else {
+                TypedActor.context().stop(p.second);
+            }
         }
         TypedActor.context().stop(consolidator);
         // Only if init() resolved the extension - see its comment there. Calling of() here

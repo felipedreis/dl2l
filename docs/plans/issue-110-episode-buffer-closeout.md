@@ -205,3 +205,21 @@ evidence is the identity and invariant checks above, recorded in the diary.
 - Facade latency and cycle-rate (no deadlock or slowdown) measurement.
 - Death delivery: whether `CreatureDied` survives the `kill()` stop sequence.
 
+
+## Code-review follow-ups (fixed on this branch)
+
+1. **Death delivery.** `CreatureActor.kill()` stopped `Valuation` straight after telling it `CreatureDied`, so the
+   message was dropped. `Valuation` now gets a `PoisonPill` instead: the component mailbox is FIFO and handles a
+   `PoisonPill` after the messages ahead of it. The lethal-deviation read is wrapped so a failure only costs the
+   death close-out and teardown still completes (finding 5).
+2. **Isolation.** `Valuation` catches `RuntimeException` from the episode path, logs it and replaces the buffer with a
+   fresh one, so a broken tracker invariant cannot take down the reward valuation. `EpisodeBuffer.emit` isolates each
+   sink, and `OperantReturnSink` skips a non-finite value, since `record` would throw inside the TypedActor and
+   restart it with an empty table.
+3. **Null perception** in `persistEpisodeReturns` gives a null target and a NaN distance.
+4. **Pre-`Opened` outcomes.** `onOutcome` keeps a pre-roll of `settleCycles + 1` cycles when no segment is live, so the K
+   of an episode's first act is counted when it beats the `Opened` event.
+
+Deferred, with the reason: `focalDriveRef` visibility across the facade (matters when #104 reads it); the per-cycle
+`DecisionRecord` allocation (measure in the A0 run first); the true return of a pre-empted step (bootstrapped by
+design until #104 provides a real Q); delayed-K discounting (arrival stamping, known approximation).

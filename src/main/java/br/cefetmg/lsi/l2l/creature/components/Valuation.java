@@ -19,6 +19,7 @@ import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
 import br.cefetmg.lsi.l2l.creature.bd.EngramState;
 import br.cefetmg.lsi.l2l.creature.bd.ExpectancyState;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
+import br.cefetmg.lsi.l2l.creature.common.Perception;
 import br.cefetmg.lsi.l2l.creature.conditioning.ActionProbability;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
 import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyContext;
@@ -31,6 +32,7 @@ import br.cefetmg.lsi.l2l.stimuli.EvaluationStimulus;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
 import java.util.List;
+import java.util.logging.Level;
 import java.util.stream.Collectors;
 
 /**
@@ -62,6 +64,7 @@ public class Valuation extends CreatureComponent {
      * with it on, closed episodes are written to the operant store when one exists.
      */
     private EpisodeBuffer episodes;
+    private OperantStore operantStore;
 
     public Valuation(SequentialId id, LearningSettings learningSettings) {
         super(id);
@@ -76,13 +79,18 @@ public class Valuation extends CreatureComponent {
         memorySystem = creature.memory();
 
         if (learningSettings.isFocalDriveEnabled()) {
-            episodes = new EpisodeBuffer(HomeostaticValue.defaults());
-            OperantStore store = creature.operantStore();
-            if (store != null) {
-                episodes.addSink(new OperantReturnSink(store));
-            }
-            episodes.addSink(this::persistEpisodeReturns);
+            operantStore = creature.operantStore();
+            episodes = newEpisodeBuffer();
         }
+    }
+
+    private EpisodeBuffer newEpisodeBuffer() {
+        EpisodeBuffer buffer = new EpisodeBuffer(HomeostaticValue.defaults());
+        if (operantStore != null) {
+            buffer.addSink(new OperantReturnSink(operantStore));
+        }
+        buffer.addSink(this::persistEpisodeReturns);
+        return buffer;
     }
 
     @Override
@@ -122,6 +130,18 @@ public class Valuation extends CreatureComponent {
         if (episodes == null) {
             return;
         }
+        try {
+            dispatchEpisodeMessage(message);
+        } catch (RuntimeException e) {
+            // The episode bookkeeping is an add-on to the reward valuation above and must not take it
+            // down: a broken tracker invariant or a bad vector drops the buffered episodes (a fresh
+            // buffer, so no half-closed state survives) and the next Opened starts clean.
+            logger.log(Level.WARNING, "Valuation[" + id + "]: episode buffer reset after " + message, e);
+            episodes = newEpisodeBuffer();
+        }
+    }
+
+    private void dispatchEpisodeMessage(Object message) {
         switch (message) {
             case DecisionRecord d -> episodes.onDecision(d.cycle(), d.action(), d.h(), d.focalDrive(), d.chosenQ());
             case FocusEvents f -> f.events().forEach(episodes::onFocus);
@@ -225,11 +245,13 @@ public class Valuation extends CreatureComponent {
             ClosedStep s = steps.get(i);
             double[] h = s.h();
             double[] g = s.g();
+            Perception perception = s.action().perception;
+            WorldObjectType target = perception != null ? perception.objectType.getOrElse(null) : null;
             rows[i] = new EpisodeReturnState(id.key, episodeReturnSeq++, now, s.episodeId(), s.drive(),
                     s.closeType().name(), s.cycle(), s.closeCycle() - s.cycle(),
                     s.action().type.name(),
-                    s.action().getTarget() != null ? s.action().getTarget().name() : null,
-                    s.action().perception.distance, h, g, s.bootstrap(), s.value());
+                    target != null ? target.name() : null,
+                    perception != null ? perception.distance : Double.NaN, h, g, s.bootstrap(), s.value());
         }
         persist(rows);
     }

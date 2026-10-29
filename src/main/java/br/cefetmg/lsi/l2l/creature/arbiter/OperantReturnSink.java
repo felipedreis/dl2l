@@ -27,6 +27,11 @@ public final class OperantReturnSink implements ReturnSink {
     @Override
     public void onClosed(List<ClosedStep> steps) {
         for (ClosedStep step : steps) {
+            if (!Double.isFinite(step.value())) {
+                // record() rejects it; throwing inside the operant facade would restart that actor and
+                // wipe the table, so one bad value costs one sample instead.
+                continue;
+            }
             learner.record(step.drive(), step.action(), step.value());
         }
     }

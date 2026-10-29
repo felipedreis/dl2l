@@ -149,4 +149,31 @@ class ValuationEpisodeTest {
                 List.of(action(ActionType.SLEEP, null, 5)), HUNGRY).get(0);
         assertEquals(new Estimate(0, 1, 1), sleep);
     }
+
+    // Review follow-up: a tracker event that breaks the buffer's invariants must not escape onReceive,
+    // and the next episode must be learned from a clean buffer.
+    @Test
+    void brokenEventResetsTheBufferAndTheNextEpisodeStillLearns() {
+        List<Object> messages = new ArrayList<>();
+        messages.add(new FocusEvents(0, List.of(new FocusEvent.Resumed(0, HUNGER))));
+        messages.addAll(inOrder());
+
+        List<Estimate> recovered = estimates(drained(messages));
+
+        assertEquals(estimates(drained(inOrder())), recovered);
+    }
+
+    // Review follow-up: the death close-out reaches the buffer and writes the open episode as DEATH.
+    @Test
+    void creatureDiedClosesTheOpenEpisodeAsDeath() {
+        TestingHarness h = TestingHarness.builder().learningSettings(settings()).build();
+        h.creature().memory().tickDecisionCycle();
+        h.creature().valuation().tell(new FocusEvents(1, List.of(new FocusEvent.Opened(1, HUNGER))));
+        h.creature().valuation().tell(new DecisionRecord(1, EAT, HUNGRY, HUNGER, Double.NaN));
+        h.creature().valuation().tell(new br.cefetmg.lsi.l2l.creature.CreatureDied(1, new double[] {20, 0, 0, 0}));
+        h.processUntilQuiescent();
+
+        List<EpisodeReturnState> rows = h.bdSink().ofType(EpisodeReturnState.class);
+        assertEquals(List.of("DEATH"), rows.stream().map(EpisodeReturnState::getCloseType).toList());
+    }
 }

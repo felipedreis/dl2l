@@ -10,6 +10,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Holds the decisions of open episodes and writes them out when their episode closes, with the
@@ -47,6 +49,8 @@ public final class EpisodeBuffer {
 
     /** The close is held for one cycle before it is written (see the class javadoc). */
     public static final int DEFAULT_SETTLE_CYCLES = 1;
+
+    private static final Logger LOGGER = Logger.getLogger(EpisodeBuffer.class.getName());
 
     private static final class Step {
         final int cycle;
@@ -93,6 +97,8 @@ public final class EpisodeBuffer {
     private final Deque<Pending> pending = new ArrayDeque<>();
     private Segment open;
     private long nextEpisodeId = 0;
+    /** Latest cycle seen on a decision or an outcome; anchors the pre-roll of {@link #outcomes}. */
+    private int latestCycle = Integer.MIN_VALUE;
 
     /**
      * @param value        the value function {@code V(G | H)} applied to every written step
@@ -154,6 +160,7 @@ public final class EpisodeBuffer {
             throw new IllegalArgumentException("chosenQ must not be infinite: " + chosenQ);
         }
         this.chosenQ.put(cycle, chosenQ);
+        latestCycle = Math.max(latestCycle, cycle);
         writeSettled(cycle);
         if (focalDrive != null && open != null && open.drive.equals(focalDrive)) {
             open.steps.add(new Step(cycle, action, h.clone(), chosenQ));
@@ -163,17 +170,17 @@ public final class EpisodeBuffer {
     }
 
     /**
-     * Realised K of one attributed act, stamped with the cycle it arrived in. Dropped when no segment is
-     * live, since no decision can own it.
+     * Realised K of one attributed act, stamped with the cycle it arrived in. With no segment live it is
+     * kept for a short pre-roll (see {@link #pruneOutcomes}), since the K of an episode's first act can
+     * arrive before the {@code Opened} event that makes the segment live.
      *
      * @throws IllegalArgumentException if {@code k} has the wrong dimension or a non-finite entry
      */
     public void onOutcome(int cycle, double[] k) {
         checkVector(k, "k");
-        if (open == null && pending.isEmpty()) {
-            return;
-        }
+        latestCycle = Math.max(latestCycle, cycle);
         addToOutcomes(cycle, k);
+        pruneOutcomes();
     }
 
     /**
@@ -312,7 +319,12 @@ public final class EpisodeBuffer {
         }
         List<ClosedStep> unmodifiable = List.copyOf(steps);
         for (ReturnSink sink : sinks) {
-            sink.onClosed(unmodifiable);
+            try {
+                sink.onClosed(unmodifiable);
+            } catch (RuntimeException e) {
+                // One failing sink must not starve the others or abort the close of the rest of the queue.
+                LOGGER.log(Level.WARNING, "return sink failed for " + unmodifiable.size() + " closed steps", e);
+            }
         }
     }
 
@@ -323,7 +335,11 @@ public final class EpisodeBuffer {
         }
     }
 
-    /** Drops outcomes no live segment can still need: those before the oldest live segment's open cycle. */
+    /**
+     * Drops outcomes no live segment can still need: those before the oldest live segment's open cycle.
+     * With no live segment, keeps a pre-roll of the last {@code settleCycles + 1} cycles for an
+     * {@code Opened} that has not been processed yet.
+     */
     private void pruneOutcomes() {
         Integer lowest = null;
         if (!pending.isEmpty()) {
@@ -332,7 +348,9 @@ public final class EpisodeBuffer {
             lowest = open.openCycle;
         }
         if (lowest == null) {
-            outcomes.clear();
+            if (latestCycle != Integer.MIN_VALUE) {
+                outcomes.headMap(latestCycle - settleCycles - 1).clear();
+            }
         } else {
             outcomes.headMap(lowest).clear();
         }

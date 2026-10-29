@@ -428,4 +428,52 @@ class EpisodeBufferTest {
         assertThrows(IllegalStateException.class, () -> b.onFocus(new FocusEvent.Suspended(4, PAIN, HUNGER)));
         assertThrows(IllegalStateException.class, () -> b.onFocus(new FocusEvent.Resumed(4, PAIN)));
     }
+
+    // Review follow-up: the K of an episode's first act can arrive before the Opened event is processed.
+    @Test
+    void outcomeArrivingBeforeOpenedStillCountsForTheFirstStep() {
+        EpisodeBuffer b = new EpisodeBuffer(zeroSetPoint(), GAMMA, 1);
+        Collector c = new Collector();
+        b.addSink(c);
+
+        b.onOutcome(3, RELIEF);
+        b.onFocus(new FocusEvent.Opened(3, HUNGER));
+        decide(b, 3, ActionType.EAT, HUNGRY, HUNGER, Double.NaN);
+        b.onFocus(new FocusEvent.Closed(4, HUNGER, FocusEvent.Outcome.REGULATED));
+        decide(b, 5, ActionType.WANDER, NO_K, null, Double.NaN);
+
+        assertEquals(1.0, at(c.all(), 3).value(), TOL);
+    }
+
+    @Test
+    void oldOutcomesWithNoLiveSegmentAreEventuallyDropped() {
+        EpisodeBuffer b = new EpisodeBuffer(zeroSetPoint(), GAMMA, 1);
+        Collector c = new Collector();
+        b.addSink(c);
+
+        b.onOutcome(1, RELIEF);
+        decide(b, 10, ActionType.WANDER, NO_K, null, Double.NaN);
+        b.onFocus(new FocusEvent.Opened(10, HUNGER));
+        decide(b, 10, ActionType.EAT, HUNGRY, HUNGER, Double.NaN);
+        b.onFocus(new FocusEvent.Closed(11, HUNGER, FocusEvent.Outcome.REGULATED));
+        decide(b, 12, ActionType.WANDER, NO_K, null, Double.NaN);
+
+        assertEquals(0.0, at(c.all(), 10).value(), TOL);
+    }
+
+    // Review follow-up: a sink that throws must not starve the sinks after it.
+    @Test
+    void failingSinkDoesNotStopTheNextSink() {
+        EpisodeBuffer b = new EpisodeBuffer(zeroSetPoint(), GAMMA, 1);
+        Collector c = new Collector();
+        b.addSink(steps -> { throw new IllegalStateException("boom"); });
+        b.addSink(c);
+
+        b.onFocus(new FocusEvent.Opened(3, HUNGER));
+        decide(b, 3, ActionType.EAT, HUNGRY, HUNGER, Double.NaN);
+        b.onFocus(new FocusEvent.Closed(4, HUNGER, FocusEvent.Outcome.REGULATED));
+        decide(b, 5, ActionType.WANDER, NO_K, null, Double.NaN);
+
+        assertEquals(1, c.all().size());
+    }
 }
