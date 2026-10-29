@@ -1,0 +1,18 @@
+# Issue #110 verification (not an A-arm experiment): does the episode close-out produce
+# episode_return rows and fill the operant table on a real run? See docs/plans/issue-110-episode-buffer-closeout.md.
+name: p110_a0_check
+trials: 1
+seeds: [110]
+conditions:
+- key: a0_operant
+  simulation: simulations/p110_a0_operant.conf
+  label: A0 + focal drive + operant
+  color: '#3b7dd8'
+data_dir: ml/data_p110_a0_check
+extract:
+  format: parquet
+  backup: true
+  tables: all
+upload:
+  enabled: true
+  prefix: p110_a0_check
