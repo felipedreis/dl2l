@@ -2,6 +2,11 @@ package br.cefetmg.lsi.l2l.creature.memory;
 
 import br.cefetmg.lsi.l2l.common.SequentialId;
 
+import br.cefetmg.lsi.l2l.creature.ComponentRef;
+import br.cefetmg.lsi.l2l.creature.arbiter.ClosedStep;
+import br.cefetmg.lsi.l2l.creature.arbiter.DecisionRecord;
+import br.cefetmg.lsi.l2l.creature.arbiter.FocusEvent;
+
 import java.util.List;
 
 public interface MemorySystem {
@@ -35,4 +40,31 @@ public interface MemorySystem {
      * it (including consolidated traces) is evicted almost immediately.
      */
     List<Engram> getRecentConsummatoryEngrams(int windowSize);
+
+    /**
+     * Issue #110: turns on the episode buffer, a write-only working memory between the arbiter's
+     * decisions and the valuation of their outcomes. Until called (it is not, with focalDriveEnabled
+     * off) the {@code record*} methods do nothing. Steps the buffer writes are sent to {@code valuation}
+     * as a {@code ClosedEpisodes} message.
+     */
+    void enableEpisodes(ComponentRef valuation);
+
+    /** One decision, from FullAppraisal. Asynchronous. */
+    void recordDecision(DecisionRecord decision);
+
+    /** The tracker's episode events of one cycle, in emission order, from FullAppraisal. Asynchronous. */
+    void recordFocusEvents(List<FocusEvent> events);
+
+    /**
+     * The attributed realised K of one act, from HomeostaticRegulation, in {@code FocusTracker.DRIVES}
+     * order. Asynchronous; stamped with this system's decision cycle when it is processed.
+     */
+    void recordOutcome(double[] k);
+
+    /**
+     * The creature died: closes the open and held episodes with the lethal deviation as their last
+     * outcome and returns the written steps. Synchronous, because the caller is about to stop; empty
+     * when the episodes are not enabled.
+     */
+    List<ClosedStep> closeOnDeath(int cycle, double[] lethalDeviation);
 }

@@ -224,7 +224,7 @@ Deferred, with the reason: `focalDriveRef` visibility across the facade (matters
 `DecisionRecord` allocation (measure in the A0 run first); the true return of a pre-empted step (bootstrapped by
 design until #104 provides a real Q); delayed-K discounting (arrival stamping, known approximation).
 
-## Revision after PR review: the buffer lives behind the memory system (proposed, not implemented)
+## Revision after PR review: the buffer lives behind the memory system (implemented)
 
 Review comment (PR #124, `FullAppraisal.java:332`): the `EpisodeBuffer` is a write-only working memory, so it belongs
 behind `MemorySystem`; `FullAppraisal` and `Valuation` should reach it through the memory system, as the buffer
@@ -256,3 +256,13 @@ between decision/focus and experience valuation.
    `ValuationEpisodeTest` is reworked to go through the memory facade.
 
 **Out of scope here:** #104's read path, the focal-drive ref race.
+
+**Implemented as** (push chosen; the plan said push was recommended and the review went ahead without objecting):
+`MemorySystemActor` owns the `EpisodeBuffer` and enables it through `enableEpisodes(ComponentRef valuation)`, called
+from `CreatureActor.init` with the flag on. The buffer's sink collects the written steps and the memory actor sends
+them to `Valuation` as `ClosedEpisodes` at the end of each call. `ReturnSink` and `EpisodeBuffer` are unchanged (the
+sink is the memory actor's own collector rather than removed), so `EpisodeBufferTest` is unchanged. The buffer reset on
+a broken invariant moved from `Valuation` into the memory actor (`episodeCall`). `Valuation` values `ClosedEpisodes`
+into the operant store and `episode_return`, and on `CreatureDied` calls `memory.closeOnDeath` (synchronous) and values
+the result. `FocusEvents` and `DriveOutcomeMessage` were removed; `DecisionRecord` stays as the argument of
+`recordDecision`. `ValuationEpisodeTest` now drives the memory system's producer methods.

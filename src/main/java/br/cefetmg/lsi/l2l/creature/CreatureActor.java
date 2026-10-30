@@ -220,6 +220,12 @@ public class CreatureActor implements Creature {
             components.put(componentType, new Pair<>(cid, component));
         }
 
+        // Issue #110: the memory system buffers episodes between the arbiter's decisions and their
+        // valuation, and sends the closed ones to Valuation.
+        if (focalDriveInUse) {
+            memory.enableEpisodes(valuation());
+        }
+
         // Issue #79 Phase B: captured while running ON the actor's own thread (init() is
         // itself invoked through the typed-actor proxy - see Holder.java), so this proxy is
         // safe to invoke from the scheduler's thread below; calls through it are dispatched

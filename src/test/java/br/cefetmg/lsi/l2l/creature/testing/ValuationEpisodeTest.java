@@ -4,11 +4,10 @@ import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.arbiter.DecisionRecord;
-import br.cefetmg.lsi.l2l.creature.arbiter.DriveOutcomeMessage;
 import br.cefetmg.lsi.l2l.creature.arbiter.Estimate;
 import br.cefetmg.lsi.l2l.creature.arbiter.FocusEvent;
-import br.cefetmg.lsi.l2l.creature.arbiter.FocusEvents;
 import br.cefetmg.lsi.l2l.creature.arbiter.OperantStore;
+import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.creature.bd.EpisodeReturnState;
 import br.cefetmg.lsi.l2l.creature.common.Action;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
@@ -19,6 +18,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -59,40 +59,56 @@ class ValuationEpisodeTest {
                 false, false, false, false, true, true, true);
     }
 
-    private static List<Object> inOrder() {
+    /** One producer call into the memory system, in the order a producer would make it. */
+    private interface Call extends Consumer<MemorySystem> {
+    }
+
+    private static Call focus(FocusEvent e) {
+        return m -> m.recordFocusEvents(List.of(e));
+    }
+
+    private static Call decision(int cycle, Action a, double[] h, String focal) {
+        return m -> m.recordDecision(new DecisionRecord(cycle, a, h, focal, Double.NaN));
+    }
+
+    private static Call outcome(double[] k) {
+        return m -> m.recordOutcome(k);
+    }
+
+    private static List<Call> inOrder() {
         return List.of(
-                new FocusEvents(1, List.of(new FocusEvent.Opened(1, HUNGER))),
-                new DecisionRecord(1, APPROACH, HUNGRY, HUNGER, Double.NaN),
-                new DecisionRecord(2, EAT, HUNGRY, HUNGER, Double.NaN),
-                new DriveOutcomeMessage(RELIEF),
-                new FocusEvents(3, List.of(new FocusEvent.Closed(3, HUNGER, FocusEvent.Outcome.REGULATED))),
-                new DecisionRecord(3, WANDER, HUNGRY, null, Double.NaN),
-                new DecisionRecord(4, WANDER, HUNGRY, null, Double.NaN));
+                focus(new FocusEvent.Opened(1, HUNGER)),
+                decision(1, APPROACH, HUNGRY, HUNGER),
+                decision(2, EAT, HUNGRY, HUNGER),
+                outcome(RELIEF),
+                focus(new FocusEvent.Closed(3, HUNGER, FocusEvent.Outcome.REGULATED)),
+                decision(3, WANDER, HUNGRY, null),
+                decision(4, WANDER, HUNGRY, null));
     }
 
     /** The outcome overtakes nothing but arrives after the close event. */
-    private static List<Object> outcomeAfterClose() {
-        List<Object> m = new ArrayList<>(inOrder());
-        Object k = m.remove(3);
+    private static List<Call> outcomeAfterClose() {
+        List<Call> m = new ArrayList<>(inOrder());
+        Call k = m.remove(3);
         m.add(4, k);
         return m;
     }
 
     /** The outcome arrives after the decision that carries the close, but before the settling one. */
-    private static List<Object> outcomeAfterCloseDecision() {
-        List<Object> m = new ArrayList<>(inOrder());
-        Object k = m.remove(3);
+    private static List<Call> outcomeAfterCloseDecision() {
+        List<Call> m = new ArrayList<>(inOrder());
+        Call k = m.remove(3);
         m.add(5, k);
         return m;
     }
 
     /** Runs {@code messages} through a fresh creature's Valuation, with the decision cycle held at 2. */
-    private static TestingHarness drained(List<Object> messages) {
+    private static TestingHarness drained(List<Call> messages) {
         TestingHarness h = TestingHarness.builder().learningSettings(settings()).build();
         h.creature().memory().tickDecisionCycle();
         h.creature().memory().tickDecisionCycle();
-        for (Object m : messages) {
-            h.creature().valuation().tell(m);
+        for (Call m : messages) {
+            m.accept(h.creature().memory());
         }
         h.processUntilQuiescent();
         return h;
@@ -123,8 +139,8 @@ class ValuationEpisodeTest {
 
         h.creature().memory().tickDecisionCycle();
         h.creature().memory().tickDecisionCycle();
-        for (Object m : inOrder()) {
-            h.creature().valuation().tell(m);
+        for (Call m : inOrder()) {
+            m.accept(h.creature().memory());
         }
         h.processUntilQuiescent();
 
@@ -154,8 +170,8 @@ class ValuationEpisodeTest {
     // and the next episode must be learned from a clean buffer.
     @Test
     void brokenEventResetsTheBufferAndTheNextEpisodeStillLearns() {
-        List<Object> messages = new ArrayList<>();
-        messages.add(new FocusEvents(0, List.of(new FocusEvent.Resumed(0, HUNGER))));
+        List<Call> messages = new ArrayList<>();
+        messages.add(focus(new FocusEvent.Resumed(0, HUNGER)));
         messages.addAll(inOrder());
 
         List<Estimate> recovered = estimates(drained(messages));
@@ -168,8 +184,8 @@ class ValuationEpisodeTest {
     void creatureDiedClosesTheOpenEpisodeAsDeath() {
         TestingHarness h = TestingHarness.builder().learningSettings(settings()).build();
         h.creature().memory().tickDecisionCycle();
-        h.creature().valuation().tell(new FocusEvents(1, List.of(new FocusEvent.Opened(1, HUNGER))));
-        h.creature().valuation().tell(new DecisionRecord(1, EAT, HUNGRY, HUNGER, Double.NaN));
+        focus(new FocusEvent.Opened(1, HUNGER)).accept(h.creature().memory());
+        decision(1, EAT, HUNGRY, HUNGER).accept(h.creature().memory());
         h.creature().valuation().tell(new br.cefetmg.lsi.l2l.creature.CreatureDied(1, new double[] {20, 0, 0, 0}));
         h.processUntilQuiescent();
 

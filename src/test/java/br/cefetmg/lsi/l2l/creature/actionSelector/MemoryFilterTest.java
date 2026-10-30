@@ -436,6 +436,15 @@ public class MemoryFilterTest {
 
         void add(Engram e) { engrams.add(e); }
 
+        // Episode buffer (issue #110): not used by the memory filter.
+        @Override public void enableEpisodes(br.cefetmg.lsi.l2l.creature.ComponentRef valuation) { }
+        @Override public void recordDecision(br.cefetmg.lsi.l2l.creature.arbiter.DecisionRecord decision) { }
+        @Override public void recordFocusEvents(List<br.cefetmg.lsi.l2l.creature.arbiter.FocusEvent> events) { }
+        @Override public void recordOutcome(double[] k) { }
+        @Override public List<br.cefetmg.lsi.l2l.creature.arbiter.ClosedStep> closeOnDeath(int cycle, double[] lethalDeviation) {
+            return List.of();
+        }
+
         @Override public List<Engram> getRecentEngrams(int windowSize) {
             return last(engrams, windowSize);
         }

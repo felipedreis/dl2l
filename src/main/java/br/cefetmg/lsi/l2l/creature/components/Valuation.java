@@ -3,12 +3,8 @@ package br.cefetmg.lsi.l2l.creature.components;
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.CreatureDied;
+import br.cefetmg.lsi.l2l.creature.arbiter.ClosedEpisodes;
 import br.cefetmg.lsi.l2l.creature.arbiter.ClosedStep;
-import br.cefetmg.lsi.l2l.creature.arbiter.DecisionRecord;
-import br.cefetmg.lsi.l2l.creature.arbiter.DriveOutcomeMessage;
-import br.cefetmg.lsi.l2l.creature.arbiter.EpisodeBuffer;
-import br.cefetmg.lsi.l2l.creature.arbiter.FocusEvents;
-import br.cefetmg.lsi.l2l.creature.arbiter.HomeostaticValue;
 import br.cefetmg.lsi.l2l.creature.arbiter.OperantReturnSink;
 import br.cefetmg.lsi.l2l.creature.arbiter.OperantStore;
 import br.cefetmg.lsi.l2l.creature.bd.ActionProbabilityState;
@@ -60,11 +56,11 @@ public class Valuation extends CreatureComponent {
     private long episodeReturnSeq = 0;
 
     /**
-     * Issue #110: the episode buffer, single writer, owned here. Null unless {@code focalDriveEnabled};
-     * with it on, closed episodes are written to the operant store when one exists.
+     * Issue #110: the operant table closed episodes are valued into, or null. The episodes themselves are
+     * buffered by the memory system, which sends them here as {@link ClosedEpisodes}.
      */
-    private EpisodeBuffer episodes;
     private OperantStore operantStore;
+    private OperantReturnSink operantSink;
 
     public Valuation(SequentialId id, LearningSettings learningSettings) {
         super(id);
@@ -80,17 +76,10 @@ public class Valuation extends CreatureComponent {
 
         if (learningSettings.isFocalDriveEnabled()) {
             operantStore = creature.operantStore();
-            episodes = newEpisodeBuffer();
+            if (operantStore != null) {
+                operantSink = new OperantReturnSink(operantStore);
+            }
         }
-    }
-
-    private EpisodeBuffer newEpisodeBuffer() {
-        EpisodeBuffer buffer = new EpisodeBuffer(HomeostaticValue.defaults());
-        if (operantStore != null) {
-            buffer.addSink(new OperantReturnSink(operantStore));
-        }
-        buffer.addSink(this::persistEpisodeReturns);
-        return buffer;
     }
 
     @Override
@@ -121,35 +110,34 @@ public class Valuation extends CreatureComponent {
     }
 
     /**
-     * Issue #110: feeds the episode buffer. The three producers (FullAppraisal's decisions and focus
-     * events, HomeostaticRegulation's outcomes) arrive on separate channels, so the buffer's settle rule
-     * (see {@link EpisodeBuffer}) is what makes the result independent of their interleaving. An outcome
-     * is stamped with the decision cycle at its arrival, as the warm-trace consolidation already does.
+     * Issue #110: values the steps the memory system's episode buffer wrote when their episode closed:
+     * into the operant table, then into the {@code episode_return} table. {@link CreatureDied} is the
+     * death close-out; the memory system returns the steps synchronously, because this component is
+     * stopped right after the message. The episode bookkeeping is an add-on to the reward valuation
+     * above and must not take it down, so a failure here is logged and costs only these steps.
      */
     private void onEpisodeMessage(Object message) {
-        if (episodes == null) {
-            return;
-        }
         try {
-            dispatchEpisodeMessage(message);
+            switch (message) {
+                case ClosedEpisodes c -> valuateEpisodes(c.steps());
+                case CreatureDied died when learningSettings.isFocalDriveEnabled() ->
+                        valuateEpisodes(memorySystem.closeOnDeath(died.cycle(), died.lethalDeviation()));
+                default -> {
+                }
+            }
         } catch (RuntimeException e) {
-            // The episode bookkeeping is an add-on to the reward valuation above and must not take it
-            // down: a broken tracker invariant or a bad vector drops the buffered episodes (a fresh
-            // buffer, so no half-closed state survives) and the next Opened starts clean.
-            logger.log(Level.WARNING, "Valuation[" + id + "]: episode buffer reset after " + message, e);
-            episodes = newEpisodeBuffer();
+            logger.log(Level.WARNING, "Valuation[" + id + "]: episode valuation failed for " + message, e);
         }
     }
 
-    private void dispatchEpisodeMessage(Object message) {
-        switch (message) {
-            case DecisionRecord d -> episodes.onDecision(d.cycle(), d.action(), d.h(), d.focalDrive(), d.chosenQ());
-            case FocusEvents f -> f.events().forEach(episodes::onFocus);
-            case DriveOutcomeMessage k -> episodes.onOutcome((int) memorySystem.currentDecisionCycle(), k.k());
-            case CreatureDied died -> episodes.onDeath(died.cycle(), died.lethalDeviation());
-            default -> {
-            }
+    private void valuateEpisodes(List<ClosedStep> steps) {
+        if (steps.isEmpty()) {
+            return;
         }
+        if (operantSink != null) {
+            operantSink.onClosed(steps);
+        }
+        persistEpisodeReturns(steps);
     }
 
     /** Legacy path: emotion-blind binary valence, magnitude discarded (pre-issue-57 behaviour). */

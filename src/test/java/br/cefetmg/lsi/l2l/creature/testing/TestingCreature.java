@@ -125,6 +125,10 @@ public final class TestingCreature implements Creature {
             // CreatureComponentPersistBufferingTest instead.
             component.setPersistBufferThresholdForTesting(0);
         });
+
+        if (learningSettings.isFocalDriveEnabled()) {
+            memory.enableEpisodes(refs.get(Valuation.class));
+        }
     }
 
     private void register(SequentialId componentId, CreatureComponent component) {

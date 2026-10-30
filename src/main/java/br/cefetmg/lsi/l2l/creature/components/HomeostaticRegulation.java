@@ -5,7 +5,6 @@ import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
-import br.cefetmg.lsi.l2l.creature.arbiter.DriveOutcomeMessage;
 import br.cefetmg.lsi.l2l.creature.bd.DriveOutcomeState;
 import br.cefetmg.lsi.l2l.creature.bd.EmotionalState;
 import br.cefetmg.lsi.l2l.creature.bd.InternalDynamicState;
@@ -128,10 +127,10 @@ public class HomeostaticRegulation extends CreatureComponent {
         else if (stimulus instanceof AnalgesicStimulus a)   { action = a.action; objectType = a.objectType; target = a.origin; }
         else if (stimulus instanceof TediumStimulus t)      { action = t.action; }
 
-        // Issue #110: the attributed K goes to Valuation's episode buffer. Baseline drift is not sent.
+        // Issue #110: the attributed K goes to the memory system's episode buffer. Baseline drift is not sent.
         // Order is FocusTracker.DRIVES (hunger, sleep, pain, tedium). Nothing is sent with the flag off.
         if (learningSettings.isFocalDriveEnabled() && action != null) {
-            creature.valuation().tell(new DriveOutcomeMessage(new double[] {dHunger, dSleep, dPain, dTedium}));
+            creature.memory().recordOutcome(new double[] {dHunger, dSleep, dPain, dTedium});
         }
 
         persist(new DriveOutcomeState(id.key, driveOutcomeSeq++, System.currentTimeMillis(),

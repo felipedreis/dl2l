@@ -3,7 +3,6 @@ package br.cefetmg.lsi.l2l.creature.components;
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.creature.arbiter.DecisionRecord;
 import br.cefetmg.lsi.l2l.creature.arbiter.FocusEvent;
-import br.cefetmg.lsi.l2l.creature.arbiter.FocusEvents;
 import br.cefetmg.lsi.l2l.creature.arbiter.FocusTracker;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.Seeds;
@@ -321,20 +320,20 @@ public class FullAppraisal extends CreatureComponent {
     }
 
     /**
-     * Issue #110: sends this cycle's tracker events, then the decision, to {@code Valuation}, which holds
-     * them in its episode buffer. Events go first so a decision is always processed under the focus it
-     * was made with. Only when the tracker exists (focalDriveEnabled), so with the flag off nothing is sent.
+     * Issue #110: sends this cycle's tracker events, then the decision, to the memory system, whose episode
+     * buffer sits between the decisions and the valuation of their outcomes. Events go first so a decision
+     * is always processed under the focus it was made with. Only when the tracker exists (focalDriveEnabled),
+     * so with the flag off nothing is sent.
      */
     private void sendArbiterMessages(Action action) {
         if (focusTracker == null) {
             return;
         }
-        ComponentRef valuation = creature.valuation();
         int cycle = (int) memorySystem.currentDecisionCycle();
         if (!cycleFocusEvents.isEmpty()) {
-            valuation.tell(new FocusEvents(cycle, cycleFocusEvents));
+            memorySystem.recordFocusEvents(List.copyOf(cycleFocusEvents));
         }
-        valuation.tell(new DecisionRecord(cycle, action, cycleLevels, focalDrive, Double.NaN));
+        memorySystem.recordDecision(new DecisionRecord(cycle, action, cycleLevels, focalDrive, Double.NaN));
     }
 
     /**
