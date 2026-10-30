@@ -223,3 +223,36 @@ evidence is the identity and invariant checks above, recorded in the diary.
 Deferred, with the reason: `focalDriveRef` visibility across the facade (matters when #104 reads it); the per-cycle
 `DecisionRecord` allocation (measure in the A0 run first); the true return of a pre-empted step (bootstrapped by
 design until #104 provides a real Q); delayed-K discounting (arrival stamping, known approximation).
+
+## Revision after PR review: the buffer lives behind the memory system (proposed, not implemented)
+
+Review comment (PR #124, `FullAppraisal.java:332`): the `EpisodeBuffer` is a write-only working memory, so it belongs
+behind `MemorySystem`; `FullAppraisal` and `Valuation` should reach it through the memory system, as the buffer
+between decision/focus and experience valuation.
+
+**Shape**
+- `MemorySystem` (TypedActor, already per creature and already owner of the decision-cycle epoch) gains the episode
+  methods; `MemorySystemActor` owns the one `EpisodeBuffer` instance. No other component holds it.
+- Write side, all `void` (asynchronous tells on the TypedActor, FIFO per caller):
+  `FullAppraisal` -> `recordDecision(DecisionRecord)` and `recordFocusEvents(List<FocusEvent>)`;
+  `HomeostaticRegulation` -> `recordOutcome(double[] k)`. The `DecisionRecord` / `FocusEvents` / `DriveOutcomeMessage`
+  messages to `Valuation` go away.
+- Cycle stamping moves inside the memory actor: an outcome is stamped with the actor's own decision cycle when it is
+  processed, so the blocking `currentDecisionCycle()` call per outcome disappears (review finding 4's arrival-stamp
+  concern is then one clock, not two).
+- Read side (valuation): `Valuation` calls `memory.drainClosedEpisodes()` and valuates what comes back: it writes the
+  operant store and persists `episode_return`. Sinks stay in `Valuation` (it owns persistence and the learner), the
+  buffer no longer needs sinks; `ReturnSink` is replaced by the returned `List<ClosedStep>`.
+- Death: `kill()` still tells `Valuation` `CreatureDied` followed by a `PoisonPill`. `Valuation` calls
+  `memory.closeOnDeath(cycle, lethalDeviation)` and valuates the returned steps. Memory is stopped after Valuation.
+- Per-cycle `DecisionRecord` allocation (deferred finding) is untouched.
+
+**Open questions**
+1. *Pull or push to valuation.* Pull (above): `Valuation` drains when it next runs, so closed episodes are valuated one
+   Valuation message late. Push: the memory actor tells `Valuation` a `ClosedEpisodes` message as soon as it settles; no
+   blocking call and no lateness, but memory then holds a `Valuation` ref. Recommendation: **push**, since the memory
+   system already gets refs from `CreatureActor` and the flow stays message-driven.
+2. *Where the buffer's tests live.* `EpisodeBuffer` itself is unchanged and keeps `EpisodeBufferTest`;
+   `ValuationEpisodeTest` is reworked to go through the memory facade.
+
+**Out of scope here:** #104's read path, the focal-drive ref race.
