@@ -54,8 +54,12 @@ public final class OperantEstimator implements OperantStore {
     /** Weight of the prior spread {@link #SIGMA0}, in observations. */
     private static final double NU0 = 1.0;
 
-    /** Cell key. {@code null} in a field means that bucket is {@code NONE}. */
-    private record Key(String focalDrive, WorldObjectType objectType, int distanceBin, ActionType actionType) {
+    /**
+     * Cell key. {@code null} in a field means that bucket is {@code NONE}. The object type is keyed by its
+     * {@link WorldObjectType#name()}, not by the instance: some types (e.g. {@code Self}) have no value equality,
+     * so keying by instance would never let a cell accumulate from one perception to the next.
+     */
+    private record Key(String focalDrive, String objectType, int distanceBin, ActionType actionType) {
     }
 
     private final double[] distanceEdges;
@@ -145,7 +149,7 @@ public final class OperantEstimator implements OperantStore {
         if (target == null) {
             return new Key(drive, null, 0, action.type);
         }
-        return new Key(drive, target, distanceBin(action.perception.distance), action.type);
+        return new Key(drive, target.name(), distanceBin(action.perception.distance), action.type);
     }
 
     /** Bin {@code i} holds distances in {@code (edge[i-1], edge[i]]}; the last bin is open-ended. */

@@ -148,7 +148,7 @@ public final class Arbiter {
         }
 
         if (n == 1) {
-            return new ArbitrationDecision(1, consultations, decidingType, 0, cands.get(0),
+            return new ArbitrationDecision(1, cands, deciding, consultations, decidingType, 0, cands.get(0),
                     deciding.get(0), null, ArbitrationDecision.ExplorationSource.SINGLE);
         }
 
@@ -173,7 +173,7 @@ public final class Arbiter {
                     : ArbitrationDecision.ExplorationSource.THOMPSON;
         }
 
-        return new ArbitrationDecision(n, consultations, decidingType, chosenIndex, cands.get(chosenIndex),
+        return new ArbitrationDecision(n, cands, deciding, consultations, decidingType, chosenIndex, cands.get(chosenIndex),
                 deciding.get(chosenIndex), deciding.get(secondIndex(deciding)), source);
     }
 

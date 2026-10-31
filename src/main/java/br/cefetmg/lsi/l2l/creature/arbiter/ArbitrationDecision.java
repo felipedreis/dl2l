@@ -12,6 +12,10 @@ import java.util.List;
  * Immutable: the lists are copied on the way in.
  *
  * @param candidateCount     number of candidates the arbiter chose among
+ * @param candidates         the candidates, in the order the arbiter was given them
+ * @param estimates          the deciding controller's estimate of each candidate, in the same order; this is
+ *                           what lets the caller read the Q of an action other than the chosen one (the
+ *                           hysteresis gate can replace the choice)
  * @param consultations      the controllers consulted, cheapest first, with each one's decisiveness
  * @param decidingController the controller whose estimates were drawn from and reported
  * @param chosenIndex        index of the chosen action in the candidate list
@@ -22,6 +26,8 @@ import java.util.List;
  * @param source             how the action was picked
  */
 public record ArbitrationDecision(int candidateCount,
+                                  List<Action> candidates,
+                                  List<Estimate> estimates,
                                   List<Consultation> consultations,
                                   Arbiter.ControllerType decidingController,
                                   int chosenIndex,
@@ -51,6 +57,11 @@ public record ArbitrationDecision(int candidateCount,
                 || chosenEstimate == null || source == null) {
             throw new IllegalArgumentException("decision fields must not be null");
         }
+        if (candidates == null || estimates == null) {
+            throw new IllegalArgumentException("candidates and estimates must not be null");
+        }
+        candidates = List.copyOf(candidates);
+        estimates = List.copyOf(estimates);
         consultations = List.copyOf(consultations);
     }
 }

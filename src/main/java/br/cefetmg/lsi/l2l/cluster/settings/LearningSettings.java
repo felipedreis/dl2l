@@ -86,6 +86,14 @@ public class LearningSettings implements Serializable {
     // --- Operant estimator behind the episode close-out (issue #110) — default-off; needs focalDriveEnabled ---
     private final boolean operantEstimatorEnabled;
 
+    /**
+     * Which mechanism chooses the action (issue #104). {@code FILTER_BASED} is the legacy filter chain;
+     * {@code ARBITER} is the uncertainty arbiter over the operant estimator.
+     */
+    public enum ActionSelectorMode { FILTER_BASED, ARBITER }
+
+    private final ActionSelectorMode actionSelector;
+
     public LearningSettings(boolean circadianEnabled,
                             boolean consolidationEnabled,
                             List<ActionSelectionType> enabledFilters) {
@@ -160,11 +168,6 @@ public class LearningSettings implements Serializable {
                 endocrineEnabled, tickGatedCognition, focalDriveEnabled, false);
     }
 
-    /**
-     * @throws IllegalArgumentException if {@code operantEstimatorEnabled} is set without
-     *                                  {@code focalDriveEnabled}: the estimator is only fed by episodes,
-     *                                  and episodes exist only under the focal drive
-     */
     public LearningSettings(boolean circadianEnabled,
                             boolean consolidationEnabled,
                             List<ActionSelectionType> enabledFilters,
@@ -177,9 +180,52 @@ public class LearningSettings implements Serializable {
                             boolean tickGatedCognition,
                             boolean focalDriveEnabled,
                             boolean operantEstimatorEnabled) {
+        this(circadianEnabled, consolidationEnabled, enabledFilters, expectancyEnabled, expectancyMode,
+                neuromodulationEnabled, actionTendencyEnabled, orexinEnabled, endocrineEnabled, tickGatedCognition,
+                focalDriveEnabled, operantEstimatorEnabled, ActionSelectorMode.FILTER_BASED);
+    }
+
+    /**
+     * @throws IllegalArgumentException if {@code operantEstimatorEnabled} is set without
+     *                                  {@code focalDriveEnabled}: the estimator is only fed by episodes,
+     *                                  and episodes exist only under the focal drive; or if {@code actionSelector}
+     *                                  is {@code ARBITER} and any of these holds: the operant estimator is off
+     *                                  (the arbiter's only controller reads it); {@code enabledFilters} holds a
+     *                                  filter other than {@code TARGET_DISTANCE} (the arbiter replaces the rest);
+     *                                  neuromodulation is on (tau is a constant, see #104 Q7)
+     */
+    public LearningSettings(boolean circadianEnabled,
+                            boolean consolidationEnabled,
+                            List<ActionSelectionType> enabledFilters,
+                            boolean expectancyEnabled,
+                            ExpectancyMode expectancyMode,
+                            boolean neuromodulationEnabled,
+                            boolean actionTendencyEnabled,
+                            boolean orexinEnabled,
+                            boolean endocrineEnabled,
+                            boolean tickGatedCognition,
+                            boolean focalDriveEnabled,
+                            boolean operantEstimatorEnabled,
+                            ActionSelectorMode actionSelector) {
         if (operantEstimatorEnabled && !focalDriveEnabled) {
             throw new IllegalArgumentException("operantEstimatorEnabled requires focalDriveEnabled");
         }
+        ActionSelectorMode mode = actionSelector == null ? ActionSelectorMode.FILTER_BASED : actionSelector;
+        if (mode == ActionSelectorMode.ARBITER) {
+            if (!operantEstimatorEnabled) {
+                throw new IllegalArgumentException("actionSelector = ARBITER requires operantEstimatorEnabled");
+            }
+            for (ActionSelectionType type : enabledFilters) {
+                if (type != ActionSelectionType.TARGET_DISTANCE) {
+                    throw new IllegalArgumentException("actionSelector = ARBITER replaces the filter " + type
+                            + "; only TARGET_DISTANCE may be enabled");
+                }
+            }
+            if (neuromodulationEnabled) {
+                throw new IllegalArgumentException("actionSelector = ARBITER requires neuromodulationEnabled = false");
+            }
+        }
+        this.actionSelector = mode;
         this.circadianEnabled       = circadianEnabled;
         this.consolidationEnabled   = consolidationEnabled;
         this.enabledFilters         = Collections.unmodifiableList(new ArrayList<>(enabledFilters));
@@ -192,6 +238,19 @@ public class LearningSettings implements Serializable {
         this.tickGatedCognition     = tickGatedCognition;
         this.focalDriveEnabled      = focalDriveEnabled;
         this.operantEstimatorEnabled = operantEstimatorEnabled;
+    }
+
+    /**
+     * Issue #104: which mechanism chooses the action. {@code FILTER_BASED} unless configured otherwise, so the
+     * legacy behaviour is unchanged by default.
+     */
+    public ActionSelectorMode getActionSelector() {
+        return actionSelector;
+    }
+
+    /** Whether the arbiter chooses the action (issue #104). */
+    public boolean isArbiterSelector() {
+        return actionSelector == ActionSelectorMode.ARBITER;
     }
 
     /** Default: all subsystems enabled, full filter chain in canonical order. */

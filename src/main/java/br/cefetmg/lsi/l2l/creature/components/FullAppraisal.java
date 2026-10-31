@@ -1,6 +1,8 @@
 package br.cefetmg.lsi.l2l.creature.components;
 
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
+import br.cefetmg.lsi.l2l.creature.arbiter.Arbiter;
+import br.cefetmg.lsi.l2l.creature.arbiter.ArbitrationDecision;
 import br.cefetmg.lsi.l2l.creature.arbiter.DecisionRecord;
 import br.cefetmg.lsi.l2l.creature.arbiter.FocusEvent;
 import br.cefetmg.lsi.l2l.creature.arbiter.FocusTracker;
@@ -8,6 +10,7 @@ import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.Seeds;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionFilter;
+import br.cefetmg.lsi.l2l.creature.actionSelector.ArbiterActionSelector;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionProbabilityFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionSelector;
 import br.cefetmg.lsi.l2l.creature.actionSelector.FilterBasedActionSelector;
@@ -65,6 +68,12 @@ public class FullAppraisal extends CreatureComponent {
     private final AtomicReference<WorldModelFilter> wmFilterRef;
 
     private ActionSelector actionSelection;
+    /** Issue #104: the arbiter selector when {@code actionSelector = ARBITER}, else null (the same object as actionSelection). */
+    private ArbiterActionSelector arbiterSelection;
+    /** Issue #104: this cycle's selection inputs, kept for the chosenQ lookup after the hysteresis gate. */
+    private SelectionContext cycleContext;
+    /** Issue #104: this cycle's arbiter decision; null unless {@code actionSelector = ARBITER}. */
+    private ArbitrationDecision cycleDecision;
     private MemorySystem memorySystem;
     private WorldModelEngine worldModelEngine;
     private WorldModelFilter worldModelFilter;
@@ -142,6 +151,19 @@ public class FullAppraisal extends CreatureComponent {
         // so e.g. a hungry creature pursues EAT/APPROACH instead of SLEEP before the learned filters.
         if (learningSettings.isActionTendencyEnabled()) {
             filterList.add(new ActionTendencyFilter(learningSettings.getActionTendencies()));
+        }
+        // Issue #104: the arbiter replaces the legacy filters (validated away in LearningSettings) and keeps
+        // the pre-filters that still apply. Its random stream exists only in this mode.
+        if (learningSettings.isArbiterSelector()) {
+            if (learningSettings.isFilterEnabled(ActionSelectionType.TARGET_DISTANCE)) {
+                filterList.add(new TargetDistanceFilter());
+            }
+            arbiterSelection = new ArbiterActionSelector(filterList, new Arbiter(
+                    List.of(new Arbiter.Controller(Arbiter.ControllerType.OPERANT, creature.operantStore())),
+                    Arbiter.Params.defaults(),
+                    new Random(Seeds.derive(rootSeed, "creature", id.key, "arbiter"))));
+            actionSelection = arbiterSelection;
+            return;
         }
         for (ActionSelectionType type : LearningSettings.MASTER_FILTER_ORDER) {
             if (!learningSettings.isFilterEnabled(type)) continue;
@@ -272,8 +294,10 @@ public class FullAppraisal extends CreatureComponent {
         }
         List<Action> possibleActions = definePossibleActions(emotional.getPerceptions());
         Emotion toRegulate = emotionToRegulate(emotional);
-        SelectionContext ctx = new SelectionContext(toRegulate, cycleLevels, focalDrive, emotional.behaviouralEfficiency);
-        return actionSelection.selectOne(possibleActions, ctx);
+        cycleContext = new SelectionContext(toRegulate, cycleLevels, focalDrive, emotional.behaviouralEfficiency);
+        Action chosen = actionSelection.selectOne(possibleActions, cycleContext);
+        cycleDecision = arbiterSelection == null ? null : arbiterSelection.takeLastDecision().orElse(null);
+        return chosen;
     }
 
     /**
@@ -321,7 +345,26 @@ public class FullAppraisal extends CreatureComponent {
         if (!cycleFocusEvents.isEmpty()) {
             memorySystem.recordFocusEvents(List.copyOf(cycleFocusEvents));
         }
-        memorySystem.recordDecision(new DecisionRecord(cycle, action, cycleLevels, focalDrive, Double.NaN));
+        memorySystem.recordDecision(new DecisionRecord(cycle, action, cycleLevels, focalDrive, executedQ(action)));
+    }
+
+    /**
+     * Issue #104: the arbiter's Q of the action actually executed, which is what the pre-emption bootstrap
+     * needs. The hysteresis gate runs before this and can replace the arbiter's choice, so the decision's
+     * candidates are searched first; the action is then either one of them (its Q is already in the decision)
+     * or, when pre-filtering dropped it, asked for once. {@code NaN} outside the arbiter mode.
+     */
+    private double executedQ(Action executed) {
+        if (cycleDecision == null) {
+            return Double.NaN;
+        }
+        List<Action> candidates = cycleDecision.candidates();
+        for (int i = 0; i < candidates.size(); i++) {
+            if (candidates.get(i).equals(executed)) {
+                return cycleDecision.estimates().get(i).q();
+            }
+        }
+        return arbiterSelection.valueOf(executed, cycleContext).q();
     }
 
     /**

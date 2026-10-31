@@ -147,7 +147,7 @@ public final class EpisodeBuffer {
      * @param action     action chosen; must not be null
      * @param h          drive levels at decision time, in {@link FocusTracker#DRIVES} order; copied
      * @param focalDrive focal drive of the decision, or {@code null} when no episode was open
-     * @param chosenQ    the arbiter's Q of the chosen candidate; {@code NaN} until #104
+     * @param chosenQ    the arbiter's Q of the executed action; {@code NaN} outside the arbiter mode (issue #104)
      * @throws IllegalArgumentException if {@code action} is null, {@code h} has the wrong dimension or a
      *                                  non-finite entry, or {@code chosenQ} is infinite
      */
