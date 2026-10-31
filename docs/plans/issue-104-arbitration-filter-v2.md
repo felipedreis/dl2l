@@ -1,6 +1,10 @@
 # Issue #104 — `ArbitrationFilter`: decisiveness, Thompson sampling with constant τ, random floor
 
 Status: **draft, awaiting approval** (open questions Q1–Q10 below each carry a recommendation).
+Decided by the user: **Q1 = explicit focal-drive argument.** The `AtomicReference<String>` shared between `FullAppraisal`
+(writer) and the operant estimator facade (reader) is a flaw: actors do not share state. `ValueEstimator.estimate` takes the
+focal drive as an argument, and `focalDriveRef` is removed from `CreatureActor`, `FullAppraisal`, `TestingCreature` and
+`OperantEstimator`. (`wmFilterRef` is a separate, older bridge and is not touched here.)
 Context: arbiter story map (`docs/plans/2026-q4-research-plan.md`), step **A2** ("arbiter with the operant table only,
 drive-reduction value V(K|H)"); arbitration paper draft (`docs/bib/uncertainty_arbitration.pdf`) §4.5 (decisiveness,
 budget, `decide()` pseudocode pp. 11–12, Thompson sampling, ε floor), §4.4 (what each controller reports), App. A step 8
