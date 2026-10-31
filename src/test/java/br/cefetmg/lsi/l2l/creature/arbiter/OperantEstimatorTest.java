@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -35,19 +36,20 @@ class OperantEstimatorTest {
         return act(type, null, distance, id);
     }
 
+    // The tests that do not vary the drive read the hunger cell.
     private static Estimate one(ValueEstimator e, Action a) {
-        return e.estimate(List.of(a), H).get(0);
+        return oneIn(e, a, HUNGER);
     }
 
-    private static OperantEstimator withDrive(String drive) {
-        return new OperantEstimator(() -> drive);
+    private static Estimate oneIn(ValueEstimator e, Action a, String focalDrive) {
+        return e.estimate(List.of(a), H, focalDrive).get(0);
     }
 
     // ---- Done-when property (#88) ----------------------------------------------------------
 
     @Test
     void constantPositiveValueShrinksQAndNarrowsSeAtEveryStep() {
-        OperantEstimator e = withDrive(HUNGER);
+        OperantEstimator e = new OperantEstimator();
         Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
         double prevQ = Double.NEGATIVE_INFINITY;
         double prevSe = Double.POSITIVE_INFINITY;
@@ -67,7 +69,7 @@ class OperantEstimatorTest {
 
     @Test
     void constantNegativeValueShrinksQTowardMeanFromBelow() {
-        OperantEstimator e = withDrive(HUNGER);
+        OperantEstimator e = new OperantEstimator();
         Action eat = act(ActionType.EAT, FruitType.ROTTEN_APPLE, 10, 1);
         double prevQ = Double.POSITIVE_INFINITY;
         double prevSe = Double.POSITIVE_INFINITY;
@@ -86,7 +88,7 @@ class OperantEstimatorTest {
     @Test
     void equalMeanCellsWithFewerObservationsHaveSmallerMagnitudeQ() {
         for (double mean : new double[] {0.5, -0.5}) {
-            OperantEstimator e = withDrive(HUNGER);
+            OperantEstimator e = new OperantEstimator();
             Action few = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
             Action many = act(ActionType.EAT, FruitType.GREEN_APPLE, 10, 2);
             for (int i = 0; i < 5; i++) {
@@ -106,7 +108,7 @@ class OperantEstimatorTest {
 
     @Test
     void unseenCellIsUninformed() {
-        Estimate e = one(withDrive(HUNGER), act(ActionType.EAT, FruitType.RED_APPLE, 10, 1));
+        Estimate e = one(new OperantEstimator(), act(ActionType.EAT, FruitType.RED_APPLE, 10, 1));
         assertEquals(new Estimate(0, 1, 1), e);
     }
 
@@ -117,7 +119,7 @@ class OperantEstimatorTest {
         for (int i = 0; i < 200; i++) {
             values.add(rnd.nextGaussian() * 2 + 0.7);
         }
-        OperantEstimator e = new OperantEstimator(() -> HUNGER, new double[] {50, 100}, 1.0);
+        OperantEstimator e = new OperantEstimator(new double[] {50, 100}, 1.0);
         Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
         for (double v : values) {
             e.record(HUNGER, eat, v);
@@ -139,7 +141,7 @@ class OperantEstimatorTest {
     @Test
     void decayedCountFollowsClosedForm() {
         double decay = 0.9;
-        OperantEstimator e = new OperantEstimator(() -> HUNGER, new double[] {50, 100}, decay);
+        OperantEstimator e = new OperantEstimator(new double[] {50, 100}, decay);
         Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
         for (int k = 1; k <= 7; k++) {
             e.record(HUNGER, eat, 1.0);
@@ -154,9 +156,9 @@ class OperantEstimatorTest {
     @Test
     void defaultDecayIsHalfPercentLessThanOne() {
         Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
-        OperantEstimator defaults = withDrive(HUNGER);
-        OperantEstimator explicit = new OperantEstimator(() -> HUNGER, new double[] {50, 100}, 0.995);
-        OperantEstimator noForgetting = new OperantEstimator(() -> HUNGER, new double[] {50, 100}, 1.0);
+        OperantEstimator defaults = new OperantEstimator();
+        OperantEstimator explicit = new OperantEstimator(new double[] {50, 100}, 0.995);
+        OperantEstimator noForgetting = new OperantEstimator(new double[] {50, 100}, 1.0);
         for (int i = 0; i < 30; i++) {
             double v = i % 3 == 0 ? 1.0 : -0.25;
             defaults.record(HUNGER, eat, v);
@@ -170,8 +172,8 @@ class OperantEstimatorTest {
     @Test
     void oldEvidenceFadesUnderDecay() {
         Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
-        OperantEstimator decayed = new OperantEstimator(() -> HUNGER, new double[] {50, 100}, 0.9);
-        OperantEstimator kept = new OperantEstimator(() -> HUNGER, new double[] {50, 100}, 1.0);
+        OperantEstimator decayed = new OperantEstimator(new double[] {50, 100}, 0.9);
+        OperantEstimator kept = new OperantEstimator(new double[] {50, 100}, 1.0);
         decayed.record(HUNGER, eat, 100.0);
         kept.record(HUNGER, eat, 100.0);
         for (int i = 0; i < 50; i++) {
@@ -187,7 +189,7 @@ class OperantEstimatorTest {
 
     @Test
     void sigmaStaysAtPriorBeforeThreeObservations() {
-        OperantEstimator e = new OperantEstimator(() -> HUNGER, new double[] {50, 100}, 1.0);
+        OperantEstimator e = new OperantEstimator(new double[] {50, 100}, 1.0);
         Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
         e.record(HUNGER, eat, 0.3);
         e.record(HUNGER, eat, 0.3);
@@ -199,7 +201,7 @@ class OperantEstimatorTest {
 
     @Test
     void sigmaIsThePriorAtOneObservationAndFallsWithoutAStepAfterwards() {
-        OperantEstimator e = new OperantEstimator(() -> HUNGER, new double[] {50, 100}, 1.0);
+        OperantEstimator e = new OperantEstimator(new double[] {50, 100}, 1.0);
         Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
         assertEquals(1.0, one(e, eat).sigma(), 0.0, "unseen");
         double prev = 1.0;
@@ -214,7 +216,7 @@ class OperantEstimatorTest {
 
     @Test
     void sigmaBlendsSampleVarianceWithThePriorFromThreeObservations() {
-        OperantEstimator e = new OperantEstimator(() -> HUNGER, new double[] {50, 100}, 1.0);
+        OperantEstimator e = new OperantEstimator(new double[] {50, 100}, 1.0);
         Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
         for (double v : new double[] {1, 2, 4}) {
             e.record(HUNGER, eat, v);
@@ -226,7 +228,7 @@ class OperantEstimatorTest {
 
     @Test
     void constantOutcomeKeepsSigmaPositiveSoCalibrationAndDecisivenessStayDefined() {
-        OperantEstimator e = new OperantEstimator(() -> HUNGER, new double[] {50, 100}, 1.0);
+        OperantEstimator e = new OperantEstimator(new double[] {50, 100}, 1.0);
         Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
         for (int i = 0; i < 100; i++) {
             e.record(HUNGER, eat, 0.5);
@@ -238,7 +240,7 @@ class OperantEstimatorTest {
 
     @Test
     void sigmaDoesNotShrinkWithEvidenceButSeDoes() {
-        OperantEstimator e = new OperantEstimator(() -> HUNGER, new double[] {50, 100}, 1.0);
+        OperantEstimator e = new OperantEstimator(new double[] {50, 100}, 1.0);
         Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
         for (int i = 0; i < 4; i++) {
             e.record(HUNGER, eat, i % 2);
@@ -257,30 +259,46 @@ class OperantEstimatorTest {
 
     @Test
     void cellsAreSeparatedByDriveObjectBinAndAction() {
-        String[] drive = {HUNGER};
-        OperantEstimator e = new OperantEstimator(() -> drive[0]);
+        OperantEstimator e = new OperantEstimator();
         Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
         for (int i = 0; i < 5; i++) {
             e.record(HUNGER, eat, 1.0);
         }
-        Estimate seen = one(e, eat);
+        Estimate seen = oneIn(e, eat, HUNGER);
         assertTrue(seen.q() > 0);
 
-        drive[0] = SLEEP;
-        assertEquals(new Estimate(0, 1, 1), one(e, eat), "other focal drive");
-        drive[0] = null;
-        assertEquals(new Estimate(0, 1, 1), one(e, eat), "no focal drive is its own cell");
-        drive[0] = HUNGER;
-        assertEquals(seen, one(e, eat), "same drive reads the same cell");
+        assertEquals(new Estimate(0, 1, 1), oneIn(e, eat, SLEEP), "other focal drive");
+        assertEquals(new Estimate(0, 1, 1), oneIn(e, eat, null), "no focal drive is its own cell");
+        assertEquals(seen, oneIn(e, eat, HUNGER), "same drive reads the same cell");
 
-        assertEquals(new Estimate(0, 1, 1), one(e, act(ActionType.EAT, FruitType.GREEN_APPLE, 10, 2)), "object type");
-        assertEquals(new Estimate(0, 1, 1), one(e, act(ActionType.EAT, FruitType.RED_APPLE, 120, 3)), "distance bin");
-        assertEquals(new Estimate(0, 1, 1), one(e, act(ActionType.APPROACH, FruitType.RED_APPLE, 10, 4)), "action type");
+        assertEquals(new Estimate(0, 1, 1), oneIn(e, act(ActionType.EAT, FruitType.GREEN_APPLE, 10, 2), HUNGER), "object type");
+        assertEquals(new Estimate(0, 1, 1), oneIn(e, act(ActionType.EAT, FruitType.RED_APPLE, 120, 3), HUNGER), "distance bin");
+        assertEquals(new Estimate(0, 1, 1), oneIn(e, act(ActionType.APPROACH, FruitType.RED_APPLE, 10, 4), HUNGER), "action type");
+    }
+
+    @Test
+    void estimateReadsTheDriveItIsGivenAndLeavesItsArgumentsUntouched() {
+        OperantEstimator e = new OperantEstimator();
+        Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
+        Action wander = noObject(ActionType.WANDER, 10, 2);
+        e.record(HUNGER, eat, 1.0);
+        List<Action> candidates = new ArrayList<>(List.of(eat, wander));
+        double[] h = {0.1, 0.2, 0.3, 0.4};
+        double[] hBefore = h.clone();
+        List<Action> before = List.copyOf(candidates);
+
+        List<Estimate> hungry = e.estimate(candidates, h, HUNGER);
+        List<Estimate> sleepy = e.estimate(candidates, h, SLEEP);
+
+        assertTrue(hungry.get(0).q() > 0, "under hunger the recorded cell is read");
+        assertEquals(new Estimate(0, 1, 1), sleepy.get(0), "under sleep it is a different, unseen cell");
+        assertEquals(before, candidates, "the candidate list is not mutated");
+        assertArrayEquals(hBefore, h, "h is not mutated");
     }
 
     @Test
     void distanceBinBoundariesAreInclusiveOnTheLowerBin() {
-        OperantEstimator e = withDrive(HUNGER);
+        OperantEstimator e = new OperantEstimator();
         Estimate unseen = new Estimate(0, 1, 1);
         e.record(HUNGER, act(ActionType.EAT, FruitType.RED_APPLE, 50, 1), 1.0);
         assertTrue(one(e, act(ActionType.EAT, FruitType.RED_APPLE, 49, 2)).q() > 0, "49 is in bin 0 with 50");
@@ -297,7 +315,7 @@ class OperantEstimatorTest {
 
     @Test
     void customEdgesDefineTheBins() {
-        OperantEstimator e = new OperantEstimator(() -> HUNGER, new double[] {10}, 1.0);
+        OperantEstimator e = new OperantEstimator(new double[] {10}, 1.0);
         e.record(HUNGER, act(ActionType.EAT, FruitType.RED_APPLE, 10, 1), 1.0);
         assertTrue(one(e, act(ActionType.EAT, FruitType.RED_APPLE, 3, 2)).q() > 0, "10 and below share bin 0");
         assertEquals(new Estimate(0, 1, 1), one(e, act(ActionType.EAT, FruitType.RED_APPLE, 10.1, 3)), "above 10 is bin 1");
@@ -305,7 +323,7 @@ class OperantEstimatorTest {
 
     @Test
     void candidateWithoutObjectUsesNoneBucketAndBinZero() {
-        OperantEstimator e = withDrive(HUNGER);
+        OperantEstimator e = new OperantEstimator();
         e.record(HUNGER, noObject(ActionType.WANDER, 10, 1), 0.8);
         assertTrue(one(e, noObject(ActionType.WANDER, 140, 2)).q() > 0, "distance is ignored: bin 0 for every distance");
         assertEquals(new Estimate(0, 1, 1), one(e, act(ActionType.WANDER, FruitType.RED_APPLE, 10, 3)),
@@ -314,7 +332,7 @@ class OperantEstimatorTest {
 
     @Test
     void noObjectCandidatesDoNotCollideWithObjectCells() {
-        OperantEstimator e = withDrive(HUNGER);
+        OperantEstimator e = new OperantEstimator();
         e.record(HUNGER, noObject(ActionType.EAT, 10, 1), 0.8);
         assertEquals(new Estimate(0, 1, 1), one(e, act(ActionType.EAT, FruitType.RED_APPLE, 10, 2)));
     }
@@ -323,7 +341,7 @@ class OperantEstimatorTest {
 
     @Test
     void estimatePreservesOrderAndSize() {
-        OperantEstimator e = withDrive(HUNGER);
+        OperantEstimator e = new OperantEstimator();
         Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
         Action approach = act(ActionType.APPROACH, FruitType.GREEN_APPLE, 10, 2);
         Action wander = noObject(ActionType.WANDER, 10, 3);
@@ -332,7 +350,7 @@ class OperantEstimatorTest {
         e.record(HUNGER, wander, 0.25);
 
         List<Action> candidates = List.of(wander, eat, approach, eat);
-        List<Estimate> out = e.estimate(candidates, H);
+        List<Estimate> out = e.estimate(candidates, H, HUNGER);
         assertEquals(4, out.size());
         assertEquals(one(e, wander), out.get(0));
         assertEquals(one(e, eat), out.get(1));
@@ -342,21 +360,21 @@ class OperantEstimatorTest {
 
     @Test
     void estimateOfEmptyListIsEmpty() {
-        assertTrue(withDrive(HUNGER).estimate(List.of(), H).isEmpty());
+        assertTrue(new OperantEstimator().estimate(List.of(), H, HUNGER).isEmpty());
     }
 
     @Test
     void estimateResultIsUnmodifiable() {
-        List<Estimate> out = withDrive(HUNGER).estimate(
-                List.of(act(ActionType.EAT, FruitType.RED_APPLE, 10, 1)), H);
+        List<Estimate> out = new OperantEstimator().estimate(
+                List.of(act(ActionType.EAT, FruitType.RED_APPLE, 10, 1)), H, HUNGER);
         assertThrows(UnsupportedOperationException.class, () -> out.add(new Estimate(0, 1, 1)));
     }
 
     @Test
     void estimateIsReadOnly() {
         Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
-        OperantEstimator touched = withDrive(HUNGER);
-        OperantEstimator untouched = withDrive(HUNGER);
+        OperantEstimator touched = new OperantEstimator();
+        OperantEstimator untouched = new OperantEstimator();
         for (int i = 0; i < 10; i++) {
             one(touched, eat);
             one(touched, act(ActionType.APPROACH, FruitType.GREEN_APPLE, 10, 2));
@@ -374,7 +392,7 @@ class OperantEstimatorTest {
 
     @Test
     void recordRejectsNonFiniteValuesAndLeavesTableUnchanged() {
-        OperantEstimator e = withDrive(HUNGER);
+        OperantEstimator e = new OperantEstimator();
         Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
         assertThrows(IllegalArgumentException.class, () -> e.record(HUNGER, eat, Double.NaN));
         assertThrows(IllegalArgumentException.class, () -> e.record(HUNGER, eat, Double.POSITIVE_INFINITY));
@@ -388,24 +406,23 @@ class OperantEstimatorTest {
     void decayMustBeInZeroOneInclusiveOfOne() {
         for (double bad : new double[] {0.0, -0.1, 1.0001, Double.NaN, Double.POSITIVE_INFINITY}) {
             assertThrows(IllegalArgumentException.class,
-                    () -> new OperantEstimator(() -> HUNGER, new double[] {50, 100}, bad), "decay " + bad);
+                    () -> new OperantEstimator(new double[] {50, 100}, bad), "decay " + bad);
         }
-        new OperantEstimator(() -> HUNGER, new double[] {50, 100}, 1.0);
-        new OperantEstimator(() -> HUNGER, new double[] {50, 100}, 0.5);
+        new OperantEstimator(new double[] {50, 100}, 1.0);
+        new OperantEstimator(new double[] {50, 100}, 0.5);
     }
 
     @Test
     void constructorRejectsBadArgumentsAndAcceptsNoEdges() {
-        assertThrows(IllegalArgumentException.class, () -> new OperantEstimator(null));
-        assertThrows(IllegalArgumentException.class, () -> new OperantEstimator(() -> HUNGER, null, 0.995));
+        assertThrows(IllegalArgumentException.class, () -> new OperantEstimator(null, 0.995));
         assertThrows(IllegalArgumentException.class,
-                () -> new OperantEstimator(() -> HUNGER, new double[] {100, 50}, 0.995));
+                () -> new OperantEstimator(new double[] {100, 50}, 0.995));
         assertThrows(IllegalArgumentException.class,
-                () -> new OperantEstimator(() -> HUNGER, new double[] {50, 50}, 0.995));
+                () -> new OperantEstimator(new double[] {50, 50}, 0.995));
         assertThrows(IllegalArgumentException.class,
-                () -> new OperantEstimator(() -> HUNGER, new double[] {Double.NaN}, 0.995));
+                () -> new OperantEstimator(new double[] {Double.NaN}, 0.995));
 
-        OperantEstimator oneBin = new OperantEstimator(() -> HUNGER, new double[0], 1.0);
+        OperantEstimator oneBin = new OperantEstimator(new double[0], 1.0);
         Action eat = act(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
         oneBin.record(HUNGER, eat, 1.0);
         assertTrue(one(oneBin, act(ActionType.EAT, FruitType.RED_APPLE, 500, 2)).q() > 0, "no edges: one bin");
@@ -413,10 +430,10 @@ class OperantEstimatorTest {
 
     @Test
     void recordAndEstimateRejectNullAction() {
-        OperantEstimator e = withDrive(HUNGER);
+        OperantEstimator e = new OperantEstimator();
         assertThrows(IllegalArgumentException.class, () -> e.record(HUNGER, null, 1.0));
-        assertThrows(IllegalArgumentException.class, () -> e.estimate(java.util.Arrays.asList((Action) null), H));
-        assertThrows(IllegalArgumentException.class, () -> e.estimate(null, H));
+        assertThrows(IllegalArgumentException.class, () -> e.estimate(java.util.Arrays.asList((Action) null), H, HUNGER));
+        assertThrows(IllegalArgumentException.class, () -> e.estimate(null, H, HUNGER));
     }
 
     // ---- WelfordTable alone ----------------------------------------------------------------

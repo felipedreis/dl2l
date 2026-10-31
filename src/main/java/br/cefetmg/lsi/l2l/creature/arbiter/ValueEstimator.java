@@ -20,8 +20,11 @@ public interface ValueEstimator {
      * @param candidates candidate actions to evaluate
      * @param h          drive levels: one entry per {@link FocusTracker#DRIVES} element, in
      *                   {@code DRIVES} order. Implementations must not mutate it.
+     * @param focalDrive the focal drive the estimate is for, or {@code null} when no episode is open.
+     *                   Passed explicitly rather than read from shared state (issue #104, Q1): the
+     *                   estimator's answer depends on its arguments and its own table only.
      * @return one {@link Estimate} per candidate, in the same order and of the same size as
      *         {@code candidates}; empty when {@code candidates} is empty. No element may be null.
      */
-    List<Estimate> estimate(List<Action> candidates, double[] h);
+    List<Estimate> estimate(List<Action> candidates, double[] h, String focalDrive);
 }

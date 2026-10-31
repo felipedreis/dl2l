@@ -92,8 +92,6 @@ public class FullAppraisal extends CreatureComponent {
     private FocusTracker focusTracker;
     /** Focal drive of the decision being made; null when the flag is off or no episode is open. */
     private String focalDrive;
-    /** Issue #110: published focal drive, read by the operant estimator's supplier; null when unused. */
-    private final AtomicReference<String> focalDriveRef;
     /** Issue #110: the tracker's events of the current cycle, sent with the decision; empty when none. */
     private List<FocusEvent> cycleFocusEvents = List.of();
     /** Issue #110: drive levels of the current cycle in {@link FocusTracker#DRIVES} order. */
@@ -111,22 +109,11 @@ public class FullAppraisal extends CreatureComponent {
     /** {@code rootSeed} is the run seed (SimulationSettingsExtension.seed()); see issue #95. */
     public FullAppraisal(SequentialId id, LearningSettings learningSettings, MLServiceExtension.Impl mlExt,
                          AtomicReference<WorldModelFilter> wmFilterRef, long rootSeed) {
-        this(id, learningSettings, mlExt, wmFilterRef, rootSeed, null);
-    }
-
-    /**
-     * @param focalDriveRef issue #110: receives the focal drive of every cycle (null when none) so the
-     *                      operant estimator's supplier can read it; may be null
-     */
-    public FullAppraisal(SequentialId id, LearningSettings learningSettings, MLServiceExtension.Impl mlExt,
-                         AtomicReference<WorldModelFilter> wmFilterRef, long rootSeed,
-                         AtomicReference<String> focalDriveRef) {
         super(id);
         this.rootSeed = rootSeed;
         this.learningSettings = learningSettings;
         this.mlExt = mlExt;
         this.wmFilterRef = wmFilterRef;
-        this.focalDriveRef = focalDriveRef;
     }
 
     @Override
@@ -307,9 +294,6 @@ public class FullAppraisal extends CreatureComponent {
         Optional<String> focal = focusTracker.focalDrive();
         if (focal.isPresent() && emotional.drives.containsKey(focal.get())) {
             focalDrive = focal.get();
-        }
-        if (focalDriveRef != null) {
-            focalDriveRef.set(focalDrive);
         }
         return focalDrive != null ? emotional.drives.get(focalDrive) : emotional.getMaxEmotion();
     }

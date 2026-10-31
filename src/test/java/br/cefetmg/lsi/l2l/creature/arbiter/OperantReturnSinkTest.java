@@ -26,8 +26,7 @@ class OperantReturnSinkTest {
 
     @Test
     void closedEpisodeIsWrittenIntoTheCellItWasDecidedInAndReadBackByTheEstimator() {
-        String[] focal = {HUNGER};
-        OperantEstimator estimator = new OperantEstimator(() -> focal[0]);
+        OperantEstimator estimator = new OperantEstimator();
         EpisodeBuffer buffer = new EpisodeBuffer(
                 new HomeostaticValue(new double[4], new double[] {1, 1, 1, 1}), 0.5, 1);
         buffer.addSink(new OperantReturnSink(estimator));
@@ -41,28 +40,26 @@ class OperantReturnSinkTest {
         buffer.onDecision(5, eat, NO_K, null, Double.NaN);
 
         // G_3 = 0.5 * -1 = -0.5, value = 2 - (2 - 0.5) = 0.5, so Q = 0.5 / (1 + 1) = 0.25 in the EAT cell.
-        var estimate = estimator.estimate(List.of(eat), ZERO_H).get(0);
+        var estimate = estimator.estimate(List.of(eat), ZERO_H, HUNGER).get(0);
         assertEquals(0.25, estimate.q(), TOL);
         assertEquals(1 / Math.sqrt(2), estimate.se(), TOL);
     }
 
     @Test
     void recordedValueMovesTheEstimateOfItsCellOnly() {
-        String[] focal = {HUNGER};
-        OperantEstimator estimator = new OperantEstimator(() -> focal[0]);
+        OperantEstimator estimator = new OperantEstimator();
         Action eat = new Action(ActionType.EAT, new Perception(FruitType.GREEN_APPLE, new SequentialId(7), 10, 0));
-        assertEquals(0, estimator.estimate(List.of(eat), ZERO_H).get(0).q(), TOL);
+        assertEquals(0, estimator.estimate(List.of(eat), ZERO_H, HUNGER).get(0).q(), TOL);
 
         // Value 0.5 for one observation: Q = (1 * 0.5 + 0) / (1 + 1) = 0.25; SE = sigma / sqrt(1 + 1)
         // with sigma = SIGMA0 = 1 while n <= 1.
         new OperantReturnSink(estimator).onClosed(List.of(stepFor(HUNGER, eat, 0.5)));
-        var written = estimator.estimate(List.of(eat), ZERO_H).get(0);
+        var written = estimator.estimate(List.of(eat), ZERO_H, HUNGER).get(0);
         assertEquals(0.25, written.q(), TOL);
         assertEquals(1 / Math.sqrt(2), written.se(), TOL);
 
         // The same action under another focal drive is another cell: still unseen.
-        focal[0] = SLEEP;
-        var other = estimator.estimate(List.of(eat), ZERO_H).get(0);
+        var other = estimator.estimate(List.of(eat), ZERO_H, SLEEP).get(0);
         assertEquals(0, other.q(), TOL);
         assertEquals(1, other.se(), TOL);
     }
@@ -81,7 +78,7 @@ class OperantReturnSinkTest {
     // operant facade and wipe the table.
     @Test
     void nonFiniteValueIsSkippedAndTheRestOfTheBatchStillWritten() {
-        OperantEstimator estimator = new OperantEstimator(() -> HUNGER);
+        OperantEstimator estimator = new OperantEstimator();
         OperantReturnSink sink = new OperantReturnSink(estimator);
         Action eat = new Action(ActionType.EAT, new Perception(FruitType.GREEN_APPLE, new SequentialId(7), 10, 0));
         Action wander = new Action(ActionType.WANDER, new Perception(null, new SequentialId(8), 10, 0));
@@ -90,8 +87,8 @@ class OperantReturnSinkTest {
                 step(eat, Double.NaN),
                 step(wander, 1.0)));
 
-        assertEquals(new Estimate(0, 1, 1), estimator.estimate(List.of(eat), ZERO_H).get(0));
-        assertEquals(0.5, estimator.estimate(List.of(wander), ZERO_H).get(0).q(), TOL);
+        assertEquals(new Estimate(0, 1, 1), estimator.estimate(List.of(eat), ZERO_H, HUNGER).get(0));
+        assertEquals(0.5, estimator.estimate(List.of(wander), ZERO_H, HUNGER).get(0).q(), TOL);
     }
 
     private static ClosedStep step(Action action, double value) {
