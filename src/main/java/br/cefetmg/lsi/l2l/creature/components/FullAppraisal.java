@@ -9,7 +9,9 @@ import br.cefetmg.lsi.l2l.common.Seeds;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionProbabilityFilter;
-import br.cefetmg.lsi.l2l.creature.actionSelector.ActionSelection;
+import br.cefetmg.lsi.l2l.creature.actionSelector.ActionSelector;
+import br.cefetmg.lsi.l2l.creature.actionSelector.FilterBasedActionSelector;
+import br.cefetmg.lsi.l2l.creature.actionSelector.SelectionContext;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionTendencyFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.MemoryFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.RandomFilter;
@@ -62,7 +64,7 @@ public class FullAppraisal extends CreatureComponent {
     // Populated after preStart() creates the filter; shared with JepaExpectancyPredictor.
     private final AtomicReference<WorldModelFilter> wmFilterRef;
 
-    private ActionSelection actionSelection;
+    private ActionSelector actionSelection;
     private MemorySystem memorySystem;
     private WorldModelEngine worldModelEngine;
     private WorldModelFilter worldModelFilter;
@@ -179,7 +181,7 @@ public class FullAppraisal extends CreatureComponent {
                 default              -> logger.warning("FullAppraisal: unknown filter type " + type + ", skipping");
             }
         }
-        actionSelection = new ActionSelection(filterList);
+        actionSelection = new FilterBasedActionSelector(filterList);
     }
 
     @Override
@@ -282,7 +284,9 @@ public class FullAppraisal extends CreatureComponent {
             }
         }
         List<Action> possibleActions = definePossibleActions(emotional.getPerceptions());
-        return actionSelection.selectOne(possibleActions, emotionToRegulate(emotional));
+        Emotion toRegulate = emotionToRegulate(emotional);
+        SelectionContext ctx = new SelectionContext(toRegulate, cycleLevels, focalDrive, emotional.behaviouralEfficiency);
+        return actionSelection.selectOne(possibleActions, ctx);
     }
 
     /**
@@ -426,7 +430,7 @@ public class FullAppraisal extends CreatureComponent {
         ChangeStimulusState change = new ChangeStimulusStateBuilder(this, id)
                 .buildOneReceivedOneEmitted(emotional, cortical);
         ChosenActionState chosenActionState = new ChosenActionState(change,
-                actionSelection.getLastUsedFilterType(), action.type, action.perception.id,
+                actionSelection.lastSelectionType(), action.type, action.perception.id,
                 inferenceMs, focalDrive);
         persist(change, chosenActionState);
         persistMemoryDecision();

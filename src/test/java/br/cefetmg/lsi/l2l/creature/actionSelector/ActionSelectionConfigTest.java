@@ -15,13 +15,15 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Tests that the ActionSelection filter chain is built correctly from LearningSettings,
+ * Tests that the FilterBasedActionSelector filter chain is built correctly from LearningSettings,
  * that priority order is preserved for enabled subsets, and that disabling individual
  * filters removes them from the chain without affecting the others.
  */
 public class ActionSelectionConfigTest {
 
     private static final Emotion EMOTION = new Emotion("hunger");
+    // The chain reads only toRegulate; the other context inputs are for the arbiter (#104).
+    private static final SelectionContext CTX = new SelectionContext(EMOTION, null, null, 1.0);
 
     // Minimal Perception stub — only needs to exist, not carry meaningful data.
     private static final Perception SELF_PERCEPTION = new Perception(null, null, 0, 0);
@@ -57,7 +59,7 @@ public class ActionSelectionConfigTest {
     }
 
     // -----------------------------------------------------------------------
-    // ActionSelection with List<ActionFilter>
+    // FilterBasedActionSelector with List<ActionFilter>
     // -----------------------------------------------------------------------
 
     @Test
@@ -65,15 +67,15 @@ public class ActionSelectionConfigTest {
         // PassOneFilter always returns the first element → chain stops at this filter.
         ActionFilter passOne = new PassFirstFilter();
 
-        ActionSelection sel = new ActionSelection(List.of(passOne));
-        Action chosen = sel.selectOne(twoActions(), EMOTION);
+        FilterBasedActionSelector sel = new FilterBasedActionSelector(List.of(passOne));
+        Action chosen = sel.selectOne(twoActions(), CTX);
         assertEquals(ActionType.WANDER, chosen.type, "First filter should pick first action");
     }
 
     @Test
     void random_only_chain_selects_one_from_many() {
-        ActionSelection sel = new ActionSelection(List.of(new RandomFilter(new java.util.Random(1))));
-        Action chosen = sel.selectOne(twoActions(), EMOTION);
+        FilterBasedActionSelector sel = new FilterBasedActionSelector(List.of(new RandomFilter(new java.util.Random(1))));
+        Action chosen = sel.selectOne(twoActions(), CTX);
         assertNotNull(chosen);
         assertTrue(chosen.type == ActionType.WANDER || chosen.type == ActionType.SLEEP);
     }
@@ -81,9 +83,9 @@ public class ActionSelectionConfigTest {
     @Test
     void empty_filter_list_leaves_actions_untouched_and_picks_first() {
         // With no filters the list is returned as-is; the caller picks index 0.
-        ActionSelection sel = new ActionSelection(List.of());
+        FilterBasedActionSelector sel = new FilterBasedActionSelector(List.of());
         List<Action> actions = twoActions();
-        Action chosen = sel.selectOne(actions, EMOTION);
+        Action chosen = sel.selectOne(actions, CTX);
         assertEquals(actions.get(0), chosen);
     }
 

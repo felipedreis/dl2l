@@ -405,7 +405,7 @@ public class MemoryFilterTest {
         return hits / (double) DRAWS;
     }
 
-    /** ActionSelection hands filters a mutable list; mirror that rather than testing on List.of(). */
+    /** FilterBasedActionSelector hands filters a mutable list; mirror that rather than testing on List.of(). */
     private static List<Action> actions(Action... acts) {
         return new ArrayList<>(List.of(acts));
     }
