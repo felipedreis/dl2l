@@ -398,3 +398,49 @@ focal drive; (3) `Arbiter` core and its tests; (4) `ArbiterActionSelector`, sett
   the A2 arm is part of the pre-registration (#107), where θ, ε and the null-focus question are fixed.
 - **Q10. Exploration source "greedy": defined as "Thompson's pick equals argmax Q"?** Recommendation: **yes**, computed
   in `Arbiter` so #105 only stores it.
+
+## Deviations (implementation, 2026-10-31)
+
+Implemented in five commits on `feature/issue-104-arbitration-filter` (step 1 `0f01dc7`, step 2 `de473cc`, step 3 `3c25516`,
+step 4 `2129a66`, step 5 this commit). Each deviation below is a place where the plan as written could not be followed exactly.
+
+1. **`ArbitrationDecision` carries the candidates and the deciding controller's estimate of each** (`candidates`,
+   `estimates`). §2's field list omitted them, but §4 needs "the decision keeps its estimates for all candidates" for the
+   hysteresis-gate lookup of `chosenQ`.
+2. **`OperantEstimator` keys object types by `WorldObjectType.name()`, not by instance.** `Self` has no value equality, so
+   each `Self.get()` was a different cell: the self-perception cells (WANDER and SLEEP with nothing in view) could never
+   accumulate a learned value, in the harness and in production. Found by `ArbitrationFunctionalTest`. `Self` itself is
+   unchanged, because changing its equality would reach the legacy filters and break flag-off parity. This file was not in
+   the plan's Files list.
+3. **Test 16 label.** The plan's test 16 expects the `ACTION_TENDENCY` label on a single candidate; §4 says `ARBITER` on every
+   arbiter cycle. The test checks `ARBITER`. The single-candidate case is distinguished by the decision's `SINGLE` source
+   (#105), not by the label.
+4. **Tests 15 and 16 expected values.** The cut decision is made after focus has moved to the pain drive, so its Q is read
+   from the pain cell, not the hunger cell. Test 16 trains the self cell under both drives and asserts the bootstrap equals
+   the store's pain-cell Q. Test 15 asserts the bootstrap is one of the trained APPROACH Q or the untrained zero, and does not
+   claim a non-zero bootstrap (under pain the tendency prior leaves AVOID and WANDER, both untrained there). The non-zero path is
+   pinned exactly by test 16. The plan's "20 x" and "about 0.6 / 0.7" fixtures were replaced by single-observation cells, whose
+   expected values are closed-form.
+5. **`TARGET_DISTANCE` pre-filter is gated by `enabledFilters`.** §4's wiring builds the pre-filters unconditionally. The
+   implementation adds `TargetDistanceFilter` only when `TARGET_DISTANCE` is enabled, because `enabledFilters` is the one
+   place the config says which pre-filters run and §6 says the A2 conf sets `enabledFilters = [TARGET_DISTANCE]`.
+6. **Verification spec filter list.** §Verification says `enabledFilters = [TARGET_DISTANCE, ARBITER]`. That contradicts §6
+   (`ARBITER` is not a filter and is rejected in `enabledFilters`). The conf uses `actionSelector = ARBITER` and
+   `enabledFilters = [TARGET_DISTANCE]`.
+7. **`SelectionContext.h` may be null** (focal drive tracker off, so no drive levels exist). The plan says `h` is copied;
+   it is copied when present. The arbiter rejects a null `h` in ARBITER mode, which the settings validation makes unreachable.
+8. **`valueOf(action, ctx)`** is implemented as a one-candidate `Arbiter.decide`, not by a new `Arbiter` method. With one
+   candidate the first controller consulted decides, draws nothing, and returns its estimate, which is exactly the spec.
+9. **Flag-off parity golden (test 17).** The plan asks for a golden comparison against the pre-issue code. It is implemented
+   as a SHA-256 digest of the 300-cycle sequence (`cb54d44e...517b0`), recorded by running the same test in a detached
+   worktree at `5c59153`, where the arbiter does not exist. The sequence is printed as well. The worktree was removed afterwards.
+10. **Commit trailer.** The trailer is `Co-Authored-By: Claude Sonnet 5.5`, as the brief asks. The session's attribution note
+    asked for Haiku 5.5; the brief's instruction was followed because the note defers to the user's own instructions.
+
+## Check run `p104_a2_check` (pending, not run)
+
+`simulations/p104_a2_check.conf` and `experiments/p104_a2_check.yml` are created and the spec validates
+(`python3 scripts/validate_experiment.py experiments/p104_a2_check.yml`: OK). **The experiment has not been run**; the user
+runs it. The numbers the Verification section asks for (ARBITER share, non-zero pre-emption bootstraps, null-focus share,
+per-action shares against p110, cycle rate against p110) do not exist yet and are not reported here. This note will be filled
+from the extracted Parquet after the run.

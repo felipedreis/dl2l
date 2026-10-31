@@ -1,0 +1,18 @@
+# Issue #104 verification (not an A-arm experiment): does the arbiter choose, and does its chosen Q reach the
+# episode bootstrap, on a real run? See docs/plans/issue-104-arbitration-filter.md, Verification.
+name: p104_a2_check
+trials: 1
+seeds: [104]
+conditions:
+- key: a2_arbiter
+  simulation: simulations/p104_a2_check.conf
+  label: A2 arbiter over the operant table (check)
+  color: '#d8733b'
+data_dir: ml/data_p104_a2_check
+extract:
+  format: parquet
+  backup: true
+  tables: all
+upload:
+  enabled: true
+  prefix: p104_a2_check

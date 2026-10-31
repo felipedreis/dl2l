@@ -240,6 +240,21 @@ public class LearningSettingsTest {
     }
 
     @Test
+    void p104_a2_check_conf_is_a0_with_focal_drive_operant_and_the_arbiter() {
+        LearningSettings a2 = new Simulation(com.typesafe.config.ConfigFactory
+                .parseFile(new java.io.File("simulations/p104_a2_check.conf"))).getLearningSettings();
+        LearningSettings a0 = new Simulation(com.typesafe.config.ConfigFactory
+                .parseFile(new java.io.File("simulations/arbiter_a0.conf"))).getLearningSettings();
+
+        assertTrue(a2.isFocalDriveEnabled());
+        assertTrue(a2.isOperantEstimatorEnabled());
+        assertTrue(a2.isArbiterSelector());
+        assertEquals(List.of(ActionSelectionType.TARGET_DISTANCE), a2.getEnabledFilters());
+        assertEquals(a0.isActionTendencyEnabled(), a2.isActionTendencyEnabled());
+        assertEquals(a0.isNeuromodulationEnabled(), a2.isNeuromodulationEnabled());
+    }
+
+    @Test
     void arbiter_a0_conf_is_the_p84_legacy_nomem_stack_with_focal_drive_off() {
         LearningSettings a0 = new Simulation(com.typesafe.config.ConfigFactory
                 .parseFile(new java.io.File("simulations/arbiter_a0.conf"))).getLearningSettings();
