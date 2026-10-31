@@ -127,6 +127,12 @@ public class HomeostaticRegulation extends CreatureComponent {
         else if (stimulus instanceof AnalgesicStimulus a)   { action = a.action; objectType = a.objectType; target = a.origin; }
         else if (stimulus instanceof TediumStimulus t)      { action = t.action; }
 
+        // Issue #110: the attributed K goes to the memory system's episode buffer. Baseline drift is not sent.
+        // Order is FocusTracker.DRIVES (hunger, sleep, pain, tedium). Nothing is sent with the flag off.
+        if (learningSettings.isFocalDriveEnabled() && action != null) {
+            creature.memory().recordOutcome(new double[] {dHunger, dSleep, dPain, dTedium});
+        }
+
         persist(new DriveOutcomeState(id.key, driveOutcomeSeq++, System.currentTimeMillis(),
                 action != null ? action.name() : DriveOutcomeState.BASELINE,
                 objectType != null ? objectType.name() : null,

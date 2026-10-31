@@ -1,10 +1,19 @@
 package br.cefetmg.lsi.l2l.creature.memory;
 
+import br.cefetmg.lsi.l2l.creature.ComponentRef;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.SequentialId;
+import br.cefetmg.lsi.l2l.creature.arbiter.ClosedEpisodes;
+import br.cefetmg.lsi.l2l.creature.arbiter.ClosedStep;
+import br.cefetmg.lsi.l2l.creature.arbiter.DecisionRecord;
+import br.cefetmg.lsi.l2l.creature.arbiter.EpisodeBuffer;
+import br.cefetmg.lsi.l2l.creature.arbiter.FocusEvent;
+import br.cefetmg.lsi.l2l.creature.arbiter.HomeostaticValue;
 import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
 
 import java.util.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 public class MemorySystemActor implements MemorySystem {
@@ -28,6 +37,14 @@ public class MemorySystemActor implements MemorySystem {
     private final MetricsExtension.Impl metricsExt;
 
     private long decisionCycle = 0;
+
+    private static final Logger LOGGER = Logger.getLogger(MemorySystemActor.class.getName());
+
+    /** Issue #110: null until {@link #enableEpisodes}. Single writer: this actor. */
+    private EpisodeBuffer episodes;
+    private ComponentRef valuation;
+    /** Steps the buffer wrote during the current call, sent to Valuation (or returned on death) at its end. */
+    private final List<ClosedStep> written = new ArrayList<>();
 
     public MemorySystemActor() {
         this(null, null);
@@ -112,5 +129,72 @@ public class MemorySystemActor implements MemorySystem {
     @Override
     public List<Engram> getRecentConsummatoryEngrams(int windowSize) {
         return consummatoryEngrams.recent(windowSize);
+    }
+
+    @Override
+    public void enableEpisodes(ComponentRef valuation) {
+        this.valuation = valuation;
+        this.episodes = newEpisodeBuffer();
+    }
+
+    private EpisodeBuffer newEpisodeBuffer() {
+        EpisodeBuffer buffer = new EpisodeBuffer(HomeostaticValue.defaults());
+        buffer.addSink(written::addAll);
+        return buffer;
+    }
+
+    @Override
+    public void recordDecision(DecisionRecord d) {
+        episodeCall(() -> episodes.onDecision(d.cycle(), d.action(), d.h(), d.focalDrive(), d.chosenQ()));
+    }
+
+    @Override
+    public void recordFocusEvents(List<FocusEvent> events) {
+        episodeCall(() -> events.forEach(episodes::onFocus));
+    }
+
+    @Override
+    public void recordOutcome(double[] k) {
+        episodeCall(() -> episodes.onOutcome((int) decisionCycle, k));
+    }
+
+    @Override
+    public List<ClosedStep> closeOnDeath(int cycle, double[] lethalDeviation) {
+        if (episodes == null) {
+            return List.of();
+        }
+        written.clear();
+        try {
+            episodes.onDeath(cycle, lethalDeviation);
+        } catch (RuntimeException e) {
+            LOGGER.log(Level.WARNING, "episode buffer: death close-out failed for " + creatureId, e);
+        }
+        List<ClosedStep> out = List.copyOf(written);
+        written.clear();
+        return out;
+    }
+
+    /**
+     * Runs one buffer call, then sends what it wrote to Valuation. The episode bookkeeping is an add-on:
+     * a broken tracker invariant or a bad vector drops the buffered episodes (a fresh buffer, so no
+     * half-closed state survives) and the next {@code Opened} starts clean, instead of failing the
+     * memory system that the cognitive cycle depends on.
+     */
+    private void episodeCall(Runnable call) {
+        if (episodes == null) {
+            return;
+        }
+        written.clear();
+        try {
+            call.run();
+        } catch (RuntimeException e) {
+            LOGGER.log(Level.WARNING, "episode buffer reset for " + creatureId, e);
+            episodes = newEpisodeBuffer();
+            written.clear();
+        }
+        if (!written.isEmpty()) {
+            valuation.tell(new ClosedEpisodes(written));
+            written.clear();
+        }
     }
 }

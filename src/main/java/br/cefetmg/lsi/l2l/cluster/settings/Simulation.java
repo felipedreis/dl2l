@@ -132,9 +132,14 @@ public class Simulation {
         // Issue #99 — focal drive replaces the per-cycle most-aroused emotion (default-off).
         boolean focalDriveEnabled = ls.hasPath("focalDriveEnabled") && ls.getBoolean("focalDriveEnabled");
 
+        // Issue #110 — operant estimator fed by closed episodes (default-off). Requires the focal
+        // drive; the LearningSettings constructor rejects the combination otherwise.
+        boolean operantEstimatorEnabled = ls.hasPath("operantEstimatorEnabled") && ls.getBoolean("operantEstimatorEnabled");
+
         return new LearningSettings(circadianEnabled, consolidationEnabled, enabledFilters,
                 expectancyEnabled, expectancyMode, neuromodulationEnabled, actionTendencyEnabled,
-                orexinEnabled, endocrineEnabled, tickGatedCognition, focalDriveEnabled);
+                orexinEnabled, endocrineEnabled, tickGatedCognition, focalDriveEnabled,
+                operantEstimatorEnabled);
     }
 
     public Long getNumHolders() {

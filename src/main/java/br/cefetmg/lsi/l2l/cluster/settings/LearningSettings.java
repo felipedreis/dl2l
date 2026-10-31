@@ -83,6 +83,9 @@ public class LearningSettings implements Serializable {
     // --- Focal drive (issue #99) — default-off: filters see the per-cycle most-aroused emotion ---
     private final boolean focalDriveEnabled;
 
+    // --- Operant estimator behind the episode close-out (issue #110) — default-off; needs focalDriveEnabled ---
+    private final boolean operantEstimatorEnabled;
+
     public LearningSettings(boolean circadianEnabled,
                             boolean consolidationEnabled,
                             List<ActionSelectionType> enabledFilters) {
@@ -152,6 +155,31 @@ public class LearningSettings implements Serializable {
                             boolean endocrineEnabled,
                             boolean tickGatedCognition,
                             boolean focalDriveEnabled) {
+        this(circadianEnabled, consolidationEnabled, enabledFilters, expectancyEnabled,
+                expectancyMode, neuromodulationEnabled, actionTendencyEnabled, orexinEnabled,
+                endocrineEnabled, tickGatedCognition, focalDriveEnabled, false);
+    }
+
+    /**
+     * @throws IllegalArgumentException if {@code operantEstimatorEnabled} is set without
+     *                                  {@code focalDriveEnabled}: the estimator is only fed by episodes,
+     *                                  and episodes exist only under the focal drive
+     */
+    public LearningSettings(boolean circadianEnabled,
+                            boolean consolidationEnabled,
+                            List<ActionSelectionType> enabledFilters,
+                            boolean expectancyEnabled,
+                            ExpectancyMode expectancyMode,
+                            boolean neuromodulationEnabled,
+                            boolean actionTendencyEnabled,
+                            boolean orexinEnabled,
+                            boolean endocrineEnabled,
+                            boolean tickGatedCognition,
+                            boolean focalDriveEnabled,
+                            boolean operantEstimatorEnabled) {
+        if (operantEstimatorEnabled && !focalDriveEnabled) {
+            throw new IllegalArgumentException("operantEstimatorEnabled requires focalDriveEnabled");
+        }
         this.circadianEnabled       = circadianEnabled;
         this.consolidationEnabled   = consolidationEnabled;
         this.enabledFilters         = Collections.unmodifiableList(new ArrayList<>(enabledFilters));
@@ -163,6 +191,7 @@ public class LearningSettings implements Serializable {
         this.endocrineEnabled       = endocrineEnabled;
         this.tickGatedCognition     = tickGatedCognition;
         this.focalDriveEnabled      = focalDriveEnabled;
+        this.operantEstimatorEnabled = operantEstimatorEnabled;
     }
 
     /** Default: all subsystems enabled, full filter chain in canonical order. */
@@ -195,6 +224,14 @@ public class LearningSettings implements Serializable {
      */
     public boolean isFocalDriveEnabled() {
         return focalDriveEnabled;
+    }
+
+    /**
+     * Issue #110: whether the operant estimator is created behind a TypedActor facade and fed the
+     * values of closed episodes. Always false unless {@link #isFocalDriveEnabled()}.
+     */
+    public boolean isOperantEstimatorEnabled() {
+        return operantEstimatorEnabled;
     }
 
     /** Whether the expectancy → RPE → dopamine learning loop is active (else legacy binary valence). */

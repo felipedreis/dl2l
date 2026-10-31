@@ -81,6 +81,31 @@ TABLES = {
         """,
         None,
     ),
+    # Issue #110: one row per closed decision of an episode, with its discounted return G_t per drive
+    # (g_*), the drive levels at decision (h_*), the bootstrap term (NULL unless pre-empted) and the value
+    # V(G | H) that was written to the operant table. Ordered per creature in write order.
+    "episode_returns": (
+        """
+        SELECT creature_key,
+               seq,
+               time_ms,
+               episode_id,
+               drive,
+               close_type,
+               step_cycle,
+               steps_to_close,
+               action,
+               object_type,
+               distance,
+               h_hunger, h_sleep, h_pain, h_tedium,
+               g_hunger, g_sleep, g_pain, g_tedium,
+               bootstrap,
+               value
+        FROM data.episode_return
+        ORDER BY creature_key, seq
+        """,
+        None,
+    ),
     "drives": (
         """
         SELECT css.key  AS creature_key,
@@ -326,7 +351,7 @@ TABLE_ORDER = [
     "perceptions", "smell_perceptions", "mouth_interactions", "sleep_episodes", "neuromodulators",
     "endocrine", "expectancy", "engrams", "consolidation_episodes",
     "consolidation_batches", "memory_traces", "conditioning", "memory_decisions",
-    "run_info",
+    "episode_returns", "run_info",
 ]
 
 assert set(TABLE_ORDER) == set(TABLES)

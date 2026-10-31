@@ -44,7 +44,7 @@ import java.util.function.Supplier;
  * <p>Not thread-safe, and no owner is assumed: where this instance lives and who writes to it is
  * decided by the wiring issues, not here. Each creature's estimator should be its own actor's state.
  */
-public final class OperantEstimator implements ValueEstimator, ValueLearner {
+public final class OperantEstimator implements OperantStore {
 
     /** Per-update forgetting factor of the paper, section 4.4. */
     public static final double DEFAULT_DECAY = 0.995;

@@ -2,13 +2,20 @@ package br.cefetmg.lsi.l2l.creature.components;
 
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.common.SequentialId;
+import br.cefetmg.lsi.l2l.creature.CreatureDied;
+import br.cefetmg.lsi.l2l.creature.arbiter.ClosedEpisodes;
+import br.cefetmg.lsi.l2l.creature.arbiter.ClosedStep;
+import br.cefetmg.lsi.l2l.creature.arbiter.OperantReturnSink;
+import br.cefetmg.lsi.l2l.creature.arbiter.OperantStore;
 import br.cefetmg.lsi.l2l.creature.bd.ActionProbabilityState;
+import br.cefetmg.lsi.l2l.creature.bd.EpisodeReturnState;
+import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
 import br.cefetmg.lsi.l2l.creature.bd.EngramState;
 import br.cefetmg.lsi.l2l.creature.bd.ExpectancyState;
-import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
+import br.cefetmg.lsi.l2l.creature.common.Perception;
 import br.cefetmg.lsi.l2l.creature.conditioning.ActionProbability;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
 import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyContext;
@@ -18,10 +25,10 @@ import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.creature.memory.ShortTermMemory;
 import br.cefetmg.lsi.l2l.stimuli.DopaminergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.EvaluationStimulus;
-import br.cefetmg.lsi.l2l.stimuli.Stimulus;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
 import java.util.List;
+import java.util.logging.Level;
 import java.util.stream.Collectors;
 
 /**
@@ -45,6 +52,15 @@ public class Valuation extends CreatureComponent {
 
     /** Orders {@link ActionProbabilityState} events within a cycle, which can hold several. */
     private long conditioningSeq = 0;
+    /** Orders {@link EpisodeReturnState} rows within a creature. */
+    private long episodeReturnSeq = 0;
+
+    /**
+     * Issue #110: the operant table closed episodes are valued into, or null. The episodes themselves are
+     * buffered by the memory system, which sends them here as {@link ClosedEpisodes}.
+     */
+    private OperantStore operantStore;
+    private OperantReturnSink operantSink;
 
     public Valuation(SequentialId id, LearningSettings learningSettings) {
         super(id);
@@ -57,13 +73,20 @@ public class Valuation extends CreatureComponent {
         operantConditioning = creature.operantConditioning();
         expectancy = creature.expectancy();
         memorySystem = creature.memory();
+
+        if (learningSettings.isFocalDriveEnabled()) {
+            operantStore = creature.operantStore();
+            if (operantStore != null) {
+                operantSink = new OperantReturnSink(operantStore);
+            }
+        }
     }
 
     @Override
     public void onReceive(Object message) {
-        List<Stimulus> stimuli = (List) message;
+        List stimuli = (List) message;
 
-        for (Stimulus aStimuli : stimuli) {
+        for (Object aStimuli : stimuli) {
 
             if (aStimuli instanceof EvaluationStimulus) {
 
@@ -79,9 +102,42 @@ public class Valuation extends CreatureComponent {
                         .buildOneReceivedOneEmitted(evaluation, null);
 
                 persist(change);
+            } else {
+                onEpisodeMessage(aStimuli);
             }
 
         }
+    }
+
+    /**
+     * Issue #110: values the steps the memory system's episode buffer wrote when their episode closed:
+     * into the operant table, then into the {@code episode_return} table. {@link CreatureDied} is the
+     * death close-out; the memory system returns the steps synchronously, because this component is
+     * stopped right after the message. The episode bookkeeping is an add-on to the reward valuation
+     * above and must not take it down, so a failure here is logged and costs only these steps.
+     */
+    private void onEpisodeMessage(Object message) {
+        try {
+            switch (message) {
+                case ClosedEpisodes c -> valuateEpisodes(c.steps());
+                case CreatureDied died when learningSettings.isFocalDriveEnabled() ->
+                        valuateEpisodes(memorySystem.closeOnDeath(died.cycle(), died.lethalDeviation()));
+                default -> {
+                }
+            }
+        } catch (RuntimeException e) {
+            logger.log(Level.WARNING, "Valuation[" + id + "]: episode valuation failed for " + message, e);
+        }
+    }
+
+    private void valuateEpisodes(List<ClosedStep> steps) {
+        if (steps.isEmpty()) {
+            return;
+        }
+        if (operantSink != null) {
+            operantSink.onClosed(steps);
+        }
+        persistEpisodeReturns(steps);
     }
 
     /** Legacy path: emotion-blind binary valence, magnitude discarded (pre-issue-57 behaviour). */
@@ -162,6 +218,28 @@ public class Valuation extends CreatureComponent {
             ActionProbability ap = probabilities.get(i);
             rows[i] = new ActionProbabilityState(id.key, seq, now, cycle, target.name(),
                     ap.getAction(), ap.getProbability(), reinforced, delta);
+        }
+        persist(rows);
+    }
+
+    /**
+     * Issue #110: one {@link EpisodeReturnState} per closed step, in one persist call so the batch lands in
+     * one BDActor transaction. The steps arrive in decision order from the buffer.
+     */
+    private void persistEpisodeReturns(List<ClosedStep> steps) {
+        long now = System.currentTimeMillis();
+        PersistenceState[] rows = new PersistenceState[steps.size()];
+        for (int i = 0; i < rows.length; i++) {
+            ClosedStep s = steps.get(i);
+            double[] h = s.h();
+            double[] g = s.g();
+            Perception perception = s.action().perception;
+            WorldObjectType target = perception != null ? perception.objectType.getOrElse(null) : null;
+            rows[i] = new EpisodeReturnState(id.key, episodeReturnSeq++, now, s.episodeId(), s.drive(),
+                    s.closeType().name(), s.cycle(), s.closeCycle() - s.cycle(),
+                    s.action().type.name(),
+                    target != null ? target.name() : null,
+                    perception != null ? perception.distance : Double.NaN, h, g, s.bootstrap(), s.value());
         }
         persist(rows);
     }

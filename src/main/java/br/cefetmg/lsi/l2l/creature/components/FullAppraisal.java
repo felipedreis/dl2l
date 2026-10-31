@@ -1,6 +1,8 @@
 package br.cefetmg.lsi.l2l.creature.components;
 
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
+import br.cefetmg.lsi.l2l.creature.arbiter.DecisionRecord;
+import br.cefetmg.lsi.l2l.creature.arbiter.FocusEvent;
 import br.cefetmg.lsi.l2l.creature.arbiter.FocusTracker;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.Seeds;
@@ -21,6 +23,7 @@ import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
 import br.cefetmg.lsi.l2l.creature.bd.ChosenActionState;
 import br.cefetmg.lsi.l2l.creature.bd.MemoryDecisionState;
+import br.cefetmg.lsi.l2l.creature.ComponentRef;
 import br.cefetmg.lsi.l2l.creature.common.Action;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.creature.common.Perception;
@@ -87,6 +90,12 @@ public class FullAppraisal extends CreatureComponent {
     private FocusTracker focusTracker;
     /** Focal drive of the decision being made; null when the flag is off or no episode is open. */
     private String focalDrive;
+    /** Issue #110: published focal drive, read by the operant estimator's supplier; null when unused. */
+    private final AtomicReference<String> focalDriveRef;
+    /** Issue #110: the tracker's events of the current cycle, sent with the decision; empty when none. */
+    private List<FocusEvent> cycleFocusEvents = List.of();
+    /** Issue #110: drive levels of the current cycle in {@link FocusTracker#DRIVES} order. */
+    private double[] cycleLevels;
 
     public FullAppraisal(SequentialId id, LearningSettings learningSettings, MLServiceExtension.Impl mlExt) {
         this(id, learningSettings, mlExt, null);
@@ -100,11 +109,22 @@ public class FullAppraisal extends CreatureComponent {
     /** {@code rootSeed} is the run seed (SimulationSettingsExtension.seed()); see issue #95. */
     public FullAppraisal(SequentialId id, LearningSettings learningSettings, MLServiceExtension.Impl mlExt,
                          AtomicReference<WorldModelFilter> wmFilterRef, long rootSeed) {
+        this(id, learningSettings, mlExt, wmFilterRef, rootSeed, null);
+    }
+
+    /**
+     * @param focalDriveRef issue #110: receives the focal drive of every cycle (null when none) so the
+     *                      operant estimator's supplier can read it; may be null
+     */
+    public FullAppraisal(SequentialId id, LearningSettings learningSettings, MLServiceExtension.Impl mlExt,
+                         AtomicReference<WorldModelFilter> wmFilterRef, long rootSeed,
+                         AtomicReference<String> focalDriveRef) {
         super(id);
         this.rootSeed = rootSeed;
         this.learningSettings = learningSettings;
         this.mlExt = mlExt;
         this.wmFilterRef = wmFilterRef;
+        this.focalDriveRef = focalDriveRef;
     }
 
     @Override
@@ -229,6 +249,7 @@ public class FullAppraisal extends CreatureComponent {
         dispatchTediumStimulus(action.type);
 
         action = enforceHysteresisGate(action, emotional.behaviouralEfficiency);
+        sendArbiterMessages(action);
         CorticalStimulus cortical = updateSleepState(action, emotional.behaviouralEfficiency);
 
         creature.effectorCortex().tell(cortical);
@@ -277,13 +298,42 @@ public class FullAppraisal extends CreatureComponent {
         }
         Map<String, Double> levels = new HashMap<>();
         emotional.drives.forEach((name, emotion) -> levels.put(name, emotion.getLevel()));
-        focusTracker.update((int) cognitiveCycle, levels);
+        cycleFocusEvents = focusTracker.update((int) cognitiveCycle, levels);
+        cycleLevels = levelVector(levels);
         Optional<String> focal = focusTracker.focalDrive();
         if (focal.isPresent() && emotional.drives.containsKey(focal.get())) {
             focalDrive = focal.get();
-            return emotional.drives.get(focalDrive);
         }
-        return emotional.getMaxEmotion();
+        if (focalDriveRef != null) {
+            focalDriveRef.set(focalDrive);
+        }
+        return focalDrive != null ? emotional.drives.get(focalDrive) : emotional.getMaxEmotion();
+    }
+
+    /** Issue #110: drive levels in {@link FocusTracker#DRIVES} order; a drive missing from the map is at H*. */
+    private static double[] levelVector(Map<String, Double> levels) {
+        double[] h = new double[FocusTracker.DRIVES.size()];
+        for (int i = 0; i < h.length; i++) {
+            h[i] = levels.getOrDefault(FocusTracker.DRIVES.get(i), Constants.MIN_AROUSAL_LEVEL);
+        }
+        return h;
+    }
+
+    /**
+     * Issue #110: sends this cycle's tracker events, then the decision, to the memory system, whose episode
+     * buffer sits between the decisions and the valuation of their outcomes. Events go first so a decision
+     * is always processed under the focus it was made with. Only when the tracker exists (focalDriveEnabled),
+     * so with the flag off nothing is sent.
+     */
+    private void sendArbiterMessages(Action action) {
+        if (focusTracker == null) {
+            return;
+        }
+        int cycle = (int) memorySystem.currentDecisionCycle();
+        if (!cycleFocusEvents.isEmpty()) {
+            memorySystem.recordFocusEvents(List.copyOf(cycleFocusEvents));
+        }
+        memorySystem.recordDecision(new DecisionRecord(cycle, action, cycleLevels, focalDrive, Double.NaN));
     }
 
     /**

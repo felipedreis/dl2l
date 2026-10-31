@@ -12,6 +12,9 @@ import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.bd.CreatureState;
 import br.cefetmg.lsi.l2l.creature.bd.PersistenceExtension;
 import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
+import br.cefetmg.lsi.l2l.creature.arbiter.FocusTracker;
+import br.cefetmg.lsi.l2l.creature.arbiter.OperantEstimator;
+import br.cefetmg.lsi.l2l.creature.arbiter.OperantStore;
 import br.cefetmg.lsi.l2l.creature.components.*;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioningActor;
@@ -75,6 +78,11 @@ public class CreatureActor implements Creature {
     private ExpectancyPredictor expectancy;
 
     private MemorySystem memory;
+
+    /** Issue #110: learning operant table behind a facade; null unless operantEstimatorEnabled. */
+    private OperantStore operantStore;
+    /** Issue #110: whether focalDriveEnabled, so episode messages and the death message are sent. */
+    private boolean focalDriveInUse;
 
     private ActorRef consolidator;
 
@@ -144,6 +152,18 @@ public class CreatureActor implements Creature {
         // Register under this creature's key so components can find it via learningSettings(id.key).
         ext.configure(id.key, effective);
 
+        // Issue #110: the focal drive is published here each cycle by FullAppraisal, and read by the
+        // operant estimator's supplier. The estimator is a TypedActor facade, so Valuation (the writer,
+        // through OperantReturnSink) and FullAppraisal (the reader, from #104) share one table.
+        focalDriveInUse = effective.isFocalDriveEnabled();
+        final AtomicReference<String> focalDriveRef = focalDriveInUse ? new AtomicReference<>() : null;
+        if (effective.isOperantEstimatorEnabled()) {
+            operantStore = TypedActor.get(TypedActor.context())
+                    .typedActorOf(new TypedProps<>(OperantStore.class,
+                            (Creator<OperantEstimator>) () -> new OperantEstimator(focalDriveRef::get)),
+                            "operantEstimator");
+        }
+
         // Expectancy predictor (TypedActor facade — serialises the single writer, Valuation).
         // JEPA mode: JepaExpectancyPredictor reads the WorldModelFilter's per-cycle prediction cache.
         // The filter is created lazily in FullAppraisal.preStart(); the AtomicReference bridges
@@ -188,7 +208,7 @@ public class CreatureActor implements Creature {
                 ? MLServiceExtension.of(context.system()) : null;
 
         SequentialId componentId = id;
-        for (Map.Entry<Class<?>, Function<SequentialId, CreatureComponent>> entry : componentFactories(effective, mlExt, wmFilterRef, ext.seed()).entrySet()) {
+        for (Map.Entry<Class<?>, Function<SequentialId, CreatureComponent>> entry : componentFactories(effective, mlExt, wmFilterRef, focalDriveRef, ext.seed()).entrySet()) {
             componentId = componentId.next();
             final SequentialId cid = componentId;
             final Class<?> componentType = entry.getKey();
@@ -198,6 +218,12 @@ public class CreatureActor implements Creature {
                     Props.create(ComponentActor.class, creator).withDispatcher("component-dispatcher"),
                     componentType.getSimpleName().toLowerCase());
             components.put(componentType, new Pair<>(cid, component));
+        }
+
+        // Issue #110: the memory system buffers episodes between the arbiter's decisions and their
+        // valuation, and sends the closed ones to Valuation.
+        if (focalDriveInUse) {
+            memory.enableEpisodes(valuation());
         }
 
         // Issue #79 Phase B: captured while running ON the actor's own thread (init() is
@@ -229,7 +255,7 @@ public class CreatureActor implements Creature {
 
     private LinkedHashMap<Class<?>, Function<SequentialId, CreatureComponent>> componentFactories(
             LearningSettings effective, MLServiceExtension.Impl mlExt,
-            AtomicReference<WorldModelFilter> wmFilterRef, long seed) {
+            AtomicReference<WorldModelFilter> wmFilterRef, AtomicReference<String> focalDriveRef, long seed) {
         LinkedHashMap<Class<?>, Function<SequentialId, CreatureComponent>> factories = new LinkedHashMap<>();
         factories.put(Eye.class,                   Eye::new);
         factories.put(Body.class,                  Body::new);
@@ -238,7 +264,7 @@ public class CreatureActor implements Creature {
         factories.put(SensoryCortex.class,         SensoryCortex::new);
         factories.put(EffectorCortex.class,        EffectorCortex::new);
         factories.put(PartialAppraisal.class,      id -> new PartialAppraisal(id, effective));
-        factories.put(FullAppraisal.class,         id -> new FullAppraisal(id, effective, mlExt, wmFilterRef, seed));
+        factories.put(FullAppraisal.class,         id -> new FullAppraisal(id, effective, mlExt, wmFilterRef, seed, focalDriveRef));
         factories.put(HomeostaticRegulation.class, id -> new HomeostaticRegulation(id, effective));
         factories.put(Valuation.class,             id -> new Valuation(id, effective));
         factories.put(NeuromodulatorSystem.class,  NeuromodulatorSystem::new);
@@ -246,12 +272,46 @@ public class CreatureActor implements Creature {
         return factories;
     }
 
+    /**
+     * Issue #110: the change that killed the creature, in {@link FocusTracker#DRIVES} order. Death is
+     * the dominant basic drive reaching its lethal ceiling; the deviation pushes that drive to the
+     * ceiling, the others are unchanged.
+     */
+    private double[] lethalDeviation() {
+        double[] k = new double[FocusTracker.DRIVES.size()];
+        int i = FocusTracker.DRIVES.indexOf(emotionalSystem.getMaxDriveArousal().getName());
+        if (i >= 0) {
+            k[i] = Constants.MAX_AROUSAL_LEVEL;
+        }
+        return k;
+    }
+
     public void kill() {
         clock.cancel();
         state.setDeadTime(System.currentTimeMillis());
 
+        // Issue #110: with the focal drive on, Valuation is told of the death and then stopped with a
+        // PoisonPill instead of stop(): the component mailbox is FIFO and handles a PoisonPill after the
+        // messages ahead of it (ComponentMessageQueue), so CreatureDied is processed before Valuation
+        // goes. The lethal deviation reads the emotional system through blocking calls; if that fails the
+        // teardown must still run, so a failure only costs the death close-out.
+        ActorRef valuation = focalDriveInUse ? components.get(Valuation.class).second : null;
+        if (valuation != null) {
+            try {
+                valuation.tell(
+                        new CreatureDied((int) memory.currentDecisionCycle(), lethalDeviation()),
+                        ActorRef.noSender());
+            } catch (RuntimeException e) {
+                logger.warning("Creature " + id + ": death close-out skipped: " + e);
+            }
+        }
+
         for (Pair<SequentialId, ActorRef> p : components.values()) {
-            TypedActor.context().stop(p.second);
+            if (p.second.equals(valuation)) {
+                p.second.tell(PoisonPill.getInstance(), ActorRef.noSender());
+            } else {
+                TypedActor.context().stop(p.second);
+            }
         }
         TypedActor.context().stop(consolidator);
         // Only if init() resolved the extension - see its comment there. Calling of() here
@@ -367,6 +427,11 @@ public class CreatureActor implements Creature {
     @Override
     public MemorySystem memory() {
         return memory;
+    }
+
+    @Override
+    public OperantStore operantStore() {
+        return operantStore;
     }
 
     @Override

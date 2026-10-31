@@ -343,6 +343,33 @@ public final class TableSchemas {
                         col("changestimulusstate_id", ColType.STRING, (DriveOutcomeState dos) ->
                                 uuidOrNull(dos.getChangeStimulusState() != null ? dos.getChangeStimulusState().getId() : null))))));
 
+        // Issue #110: one row per closed episode step, with its discounted return. Table name follows the
+        // issue's spec (not the *_state suffix); nullable bootstrap is NaN-mapped to null.
+        all.add(table("episode_return", EpisodeReturnState.class, EpisodeReturnState::getId, concat(
+                List.of(
+                        col("creature_key", ColType.INT64, EpisodeReturnState::getCreatureKey),
+                        col("seq", ColType.INT64, EpisodeReturnState::getSeq),
+                        col("time_ms", ColType.INT64, EpisodeReturnState::getTimeMs),
+                        col("episode_id", ColType.INT64, EpisodeReturnState::getEpisodeId),
+                        col("drive", ColType.STRING, EpisodeReturnState::getDrive),
+                        col("close_type", ColType.STRING, EpisodeReturnState::getCloseType),
+                        col("step_cycle", ColType.INT64, EpisodeReturnState::getStepCycle),
+                        col("steps_to_close", ColType.INT64, EpisodeReturnState::getStepsToClose),
+                        col("action", ColType.STRING, EpisodeReturnState::getAction),
+                        col("object_type", ColType.STRING, EpisodeReturnState::getObjectType),
+                        col("distance", ColType.DOUBLE, EpisodeReturnState::getDistance),
+                        col("h_hunger", ColType.DOUBLE, (EpisodeReturnState e) -> e.getH(0)),
+                        col("h_sleep", ColType.DOUBLE, (EpisodeReturnState e) -> e.getH(1)),
+                        col("h_pain", ColType.DOUBLE, (EpisodeReturnState e) -> e.getH(2)),
+                        col("h_tedium", ColType.DOUBLE, (EpisodeReturnState e) -> e.getH(3)),
+                        col("g_hunger", ColType.DOUBLE, (EpisodeReturnState e) -> e.getG(0)),
+                        col("g_sleep", ColType.DOUBLE, (EpisodeReturnState e) -> e.getG(1)),
+                        col("g_pain", ColType.DOUBLE, (EpisodeReturnState e) -> e.getG(2)),
+                        col("g_tedium", ColType.DOUBLE, (EpisodeReturnState e) -> e.getG(3)),
+                        col("bootstrap", ColType.DOUBLE, (EpisodeReturnState e) ->
+                                Double.isNaN(e.getBootstrap()) ? null : e.getBootstrap()),
+                        col("value", ColType.DOUBLE, EpisodeReturnState::getValue)))));
+
                 all.add(table("run_info", RunInfoState.class, RunInfoState::getId, List.of(
                 col("seed", ColType.INT64, RunInfoState::getSeed),
                 col("seed_generated", ColType.BOOLEAN, RunInfoState::isSeedGenerated),

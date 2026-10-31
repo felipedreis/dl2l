@@ -1,5 +1,6 @@
 package br.cefetmg.lsi.l2l.creature;
 
+import br.cefetmg.lsi.l2l.creature.arbiter.OperantStore;
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.creature.components.EmotionalSystem;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
@@ -46,6 +47,9 @@ public interface Creature {
 
     OperantConditioning operantConditioning();
     MemorySystem memory();
+
+    /// Learning operant table fed by closed episodes (issue #110); null unless operantEstimatorEnabled
+    OperantStore operantStore();
 
     /// Symbolic reward-expectancy predictor (baseline for the dopaminergic RPE)
     ExpectancyPredictor expectancy();
