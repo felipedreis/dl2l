@@ -1,10 +1,14 @@
-# Issue #104 — `ArbitrationFilter`: decisiveness, Thompson sampling with constant τ, random floor
+# Issue #104 — the arbiter: decisiveness, Thompson sampling with constant τ, random floor (`ArbiterActionSelector`)
 
 Status: **draft, awaiting approval** (open questions Q1–Q10 below each carry a recommendation).
 Decided by the user: **Q1 = explicit focal-drive argument.** The `AtomicReference<String>` shared between `FullAppraisal`
 (writer) and the operant estimator facade (reader) is a flaw: actors do not share state. `ValueEstimator.estimate` takes the
 focal drive as an argument, and `focalDriveRef` is removed from `CreatureActor`, `FullAppraisal`, `TestingCreature` and
 `OperantEstimator`. (`wmFilterRef` is a separate, older bridge and is not touched here.)
+Decided by the user: **the arbiter is a selection mechanism, not a filter.** An `ActionSelector` interface is extracted in this
+issue; the existing `ActionSelection` is renamed `FilterBasedActionSelector` and implements it; the arbiter is a second
+implementation, `ArbiterActionSelector`, that reuses the pre-filters that still apply (action tendency, nearest target) and then
+runs the `Arbiter` core. This replaces v2's `ArbitrationFilter implements ActionFilter` and its settings workarounds.
 Context: arbiter story map (`docs/plans/2026-q4-research-plan.md`), step **A2** ("arbiter with the operant table only,
 drive-reduction value V(K|H)"); arbitration paper draft (`docs/bib/uncertainty_arbitration.pdf`) §4.5 (decisiveness,
 budget, `decide()` pseudocode pp. 11–12, Thompson sampling, ε floor), §4.4 (what each controller reports), App. A step 8
@@ -24,15 +28,21 @@ Unblocks #105 (ArbitrationDecisionState table), #109 (A2 campaign), #114 (budget
 - An immutable `ArbitrationDecision` record describing what happened (consulted controllers and their conf, deciding
   controller, chosen and runner-up estimates, exploration source). Built now so #105 is plumbing only; **not persisted
   as its own table here** (see Q6).
-- `ArbitrationFilter implements ActionFilter` (package `creature.actionSelector`): thin adapter that holds the per-cycle
-  inputs (h, focal drive), calls the `Arbiter`, returns exactly one action, and exposes `takeLastDecision()` (same
-  pattern as `MemoryFilter`).
-- `ActionSelectionType.ARBITER` (appended to the enum; the column is written by name, so existing data is unaffected).
-- `LearningSettings`: `ARBITER` accepted in `enabledFilters`, with validation (requires `operantEstimatorEnabled`, which
-  already requires `focalDriveEnabled`; excludes `MEMORY`, `AFFORDANCE`, `WORLD_MODEL`, `RANDOM`). With it on, the chain
-  is **action tendency (own flag) → TARGET_DISTANCE → ARBITER**.
-- `FullAppraisal` wiring: construct the filter in `preStart`, feed it `h` and the focal drive each cycle, and fill
-  `DecisionRecord.chosenQ` with a real value (no longer `NaN`) when the arbiter is on.
+- **`ActionSelector` interface** (package `creature.actionSelector`), extracted from `ActionSelection` as the first,
+  behaviour-neutral commit of this issue: `Action selectOne(List<Action> candidates, SelectionContext ctx)` and
+  `ActionSelectionType lastSelectionType()` (what `getLastUsedFilterType()` is today). `SelectionContext` is an immutable record
+  `(Emotion toRegulate, double[] h, String focalDrive, double efficiency)`; `h` is copied.
+- **`FilterBasedActionSelector`**: today's `ActionSelection`, renamed, implementing `ActionSelector`. It reads only
+  `ctx.toRegulate()`. Behaviour identical (the existing selection tests pass unchanged apart from the rename).
+- **`ArbiterActionSelector implements ActionSelector`**: runs the pre-filters (`ActionTendencyFilter`, `TargetDistanceFilter`, both
+  reused as they are) and then always calls the `Arbiter` on what is left, single candidate included, so the executed action's Q
+  is known on every cycle. Exposes `takeLastDecision()` (as `MemoryFilter` does) and `valueOf(Action, ctx)`.
+- `ActionSelectionType.ARBITER` as a **label only** (what `ChosenActionState` persists when the arbiter selector decided); it is
+  not an `ActionFilter` type and is rejected in `enabledFilters`.
+- `LearningSettings`: a new field selects the mechanism, `actionSelector` ∈ {`FILTER_BASED` (default), `ARBITER`}. `ARBITER`
+  requires `operantEstimatorEnabled` (which already requires `focalDriveEnabled`).
+- `FullAppraisal` wiring: build the selector chosen by `actionSelector` in `preStart`, pass a `SelectionContext` each cycle, and
+  fill `DecisionRecord.chosenQ` with a real value (no longer `NaN`) when the arbiter is on.
 - Read path to the operant table: the focal drive is passed **explicitly** into the estimate call instead of through the
   `AtomicReference<String>` supplier (Q1). This is the "focal-drive ref race" that #110 left out of scope for #104.
 - A verification run spec `experiments/p104_a2_check.yml` + `simulations/p104_a2_check.conf`.
@@ -47,8 +57,8 @@ Unblocks #105 (ArbitrationDecisionState table), #109 (A2 campaign), #114 (budget
 - Per-decision telemetry table (`ArbitrationDecisionState`): #105. SE calibration: #115. Fixed-order mode: #116.
 - The A2 campaign itself (pre-registered, multi-trial): #107/#109. The run here is a smoke check, not a hypothesis test.
 - Changing who owns the operant table (it stays behind the `OperantStore` TypedActor facade from #110; see Q4).
-- The legacy chain (`MemoryFilter`, `ActionProbabilityFilter`, `WorldModelFilter`, `RandomFilter`) is untouched. With
-  `ARBITER` off, behaviour is bit-for-bit what it is today.
+- The legacy filters (`MemoryFilter`, `ActionProbabilityFilter`, `WorldModelFilter`, `RandomFilter`) are untouched. With
+  `actionSelector = FILTER_BASED`, behaviour is bit-for-bit what it is today.
 
 ## What exists today (verified in code)
 
@@ -133,49 +143,57 @@ Immutable record: `candidateCount`, `List<Consultation>` (`ControllerType`, `con
 null when n = 1), `ExplorationSource` (`SINGLE | GREEDY | THOMPSON | EPSILON`). Lists copied in the compact constructor.
 Not persisted here; `toString` used in a `fine` log line.
 
-### 3. `actionSelector/ArbitrationFilter.java`
+### 3. The selector interface and its two implementations (`creature/actionSelector`)
 
 ```java
-public class ArbitrationFilter implements ActionFilter {
-    public ArbitrationFilter(Arbiter arbiter);
-    public void setCycleInput(double[] h, String focalDrive);   // per cycle, before selectOne (cf. updateInternalState)
-    public List<Action> filter(List<Action> actions, Emotion toRegulate);   // List.of(decision.chosen())
-    public Optional<ArbitrationDecision> takeLastDecision();    // clears, like MemoryFilter
-    public Estimate valueOf(Action executed);                   // one consult of the cheapest controller, for chosenQ
-    public ActionSelectionType getFilterType();                 // ARBITER
+public interface ActionSelector {
+    Action selectOne(List<Action> candidates, SelectionContext ctx);
+    ActionSelectionType lastSelectionType();           // the type persisted in ChosenActionState
+}
+public record SelectionContext(Emotion toRegulate, double[] h, String focalDrive, double efficiency) { }   // h copied
+
+public class FilterBasedActionSelector implements ActionSelector { ... }     // ex-ActionSelection, same loop
+
+public class ArbiterActionSelector implements ActionSelector {
+    public ArbiterActionSelector(List<ActionFilter> preFilters, Arbiter arbiter);
+    public Action selectOne(List<Action> candidates, SelectionContext ctx);   // pre-filters, then arbiter.decide(...)
+    public Optional<ArbitrationDecision> takeLastDecision();                  // clears, like MemoryFilter
+    public Estimate valueOf(Action executed, SelectionContext ctx);           // one consult of the cheapest controller
+    public ActionSelectionType lastSelectionType();                           // always ARBITER
 }
 ```
 
-`toRegulate` is ignored: the arbiter's "emotion" is the focal drive set by `setCycleInput`, which is what keys the operant
-cells. `filter` throws `IllegalStateException` if `setCycleInput` was not called this cycle (h is reset to null after
-each `filter`), which catches wiring mistakes in tests instead of silently estimating against stale levels.
+`ArbiterActionSelector.selectOne` runs the pre-filters in order, stopping early when one candidate is left (nothing left to
+narrow), and then **always** calls `arbiter.decide(candidates, ctx.h(), ctx.focalDrive())`: with one candidate the `Arbiter`
+returns it with source `SINGLE` and consumes no random numbers, but its Q is still estimated. `toRegulate` reaches only the
+pre-filters (the tendency filter reads it); the arbiter keys its cells by `ctx.focalDrive()`. The per-cycle inputs travel in the
+context argument, so the selector holds no cycle state between calls (v2's `setCycleInput` and its guard are gone).
+`FilterBasedActionSelector` ignores `h`, `focalDrive` and `efficiency`; `FullAppraisal` builds one context per cycle for either.
+
+Reuse: the arbiter keeps the filters whose behaviour still applies (the tendency prior, the nearest-instance rule of
+`TargetDistanceFilter`); the filters the arbiter replaces (`MemoryFilter`, `ActionProbabilityFilter`, `WorldModelFilter`,
+`RandomFilter`) are simply never built in this mode.
 
 ### 4. `FullAppraisal` wiring
 
-- `preStart`: if `isFilterEnabled(ARBITER)`, after the `MASTER_FILTER_ORDER` loop append
-  `arbitrationFilter = new ArbitrationFilter(new Arbiter(List.of(new Controller(OPERANT, creature.operantStore())),
-  Params.defaults(), new Random(Seeds.derive(rootSeed, "creature", id.key, "arbiter"))))`.
-  `ARBITER` is **not** added to `MASTER_FILTER_ORDER`, because that list is also the default `enabledFilters` and
-  adding it would make `new LearningSettings()` invalid (it would combine ARBITER with every legacy filter and with
-  `operantEstimatorEnabled = false`). The arbiter is terminal by construction: appended last.
-- `selectAction`: compute `toRegulate = emotionToRegulate(emotional)` **before** pushing inputs (today it is evaluated
-  inline as the `selectOne` argument, after the filter inputs are set), then
-  `arbitrationFilter.setCycleInput(cycleLevels, focalDrive)`, then `selectOne(possibleActions, toRegulate)`.
-- `chosenQ`: after the gate, in `sendArbiterMessages(action)`:
-  - if the arbiter decided this cycle and `action` is the decision's chosen candidate (`Action.equals`: type + perception
-    id) → `decision.chosenEstimate().q()`;
-  - else if the action is among the decision's candidates (gate replaced it with a SLEEP that was a candidate) → that
-    candidate's Q from the deciding controller (kept in the decision; one array lookup, no extra call);
-  - else (chain ended before the arbiter with one candidate, or the gate's SLEEP was not a candidate) →
-    `arbitrationFilter.valueOf(action).q()`: one estimate call for one candidate.
-  So `chosenQ` is always "the deciding (or cheapest) controller's Q of the action actually executed", which is what the
-  pre-emption bootstrap needs, and the arbiter costs at most one blocking ask per cycle except on gate-overridden
-  cycles whose SLEEP was filtered out by the action tendency (two asks).
-- `ChosenActionState` keeps the existing semantics: type = last filter that ran. A single-candidate cycle is still
-  labelled `ACTION_TENDENCY`/`TARGET_DISTANCE` (truthful: the arbiter did not choose). Gate overrides keep the
+- `preStart`: `actionSelection` becomes an `ActionSelector`. With `actionSelector = FILTER_BASED` it is built exactly as today
+  (`new FilterBasedActionSelector(filterList)`). With `ARBITER` it is
+  `new ArbiterActionSelector(preFilters, new Arbiter(List.of(new Controller(OPERANT, creature.operantStore())),
+  Params.defaults(), new Random(Seeds.derive(rootSeed, "creature", id.key, "arbiter"))))`, where `preFilters` is
+  `ActionTendencyFilter` (own flag) then `TargetDistanceFilter`.
+- `selectAction`: compute `toRegulate = emotionToRegulate(emotional)` first (today it is evaluated inline as the `selectOne`
+  argument, after the filter inputs are set), then build `SelectionContext(toRegulate, cycleLevels, focalDrive,
+  emotional.behaviouralEfficiency)` and call `selectOne(possibleActions, ctx)`.
+- `chosenQ`, after the gate, in `sendArbiterMessages(action)` (ARBITER mode only; `FILTER_BASED` keeps `NaN`): the arbiter ran
+  this cycle, so the decision exists; if `action` is the decision's chosen candidate (`Action.equals`: type + perception id) →
+  `decision.chosenEstimate().q()`; else if the gate replaced it with a SLEEP that was among the candidates → that candidate's Q
+  from the deciding controller (the decision keeps its estimates for all candidates); else (the gate's SLEEP had been filtered
+  out by the tendency filter) → `valueOf(action, ctx).q()`, one extra estimate call, rare. So `chosenQ` is always the Q of the
+  action actually executed, which is what the pre-emption bootstrap needs, with one blocking ask per cycle in the normal case.
+- `ChosenActionState` type = `actionSelection.lastSelectionType()`: `ARBITER` on every arbiter cycle (the decision's source,
+  `SINGLE`/`GREEDY`/`THOMPSON`/`EPSILON`, distinguishes a single-candidate cycle; #105 records it). Gate overrides keep the
   existing mislabel (see Q8).
-- Flag off: `arbitrationFilter == null`, nothing above runs, `chosenQ` stays `NaN`. The arbiter's random stream is a
-  separate derived seed, so other streams' draws are unchanged even with the flag on.
+- Mode off: the arbiter selector, its estimator reads and its random stream do not exist; other streams' draws are unchanged.
 
 ### 5. Explicit focal drive on the read path (Q1)
 
@@ -189,16 +207,19 @@ drive too (§4.2: the focal drive's precision weight is raised in retrieval).
 
 ### 6. Settings
 
-`LearningSettings` constructor validation (thrown at parse like the existing `operantEstimatorEnabled` check):
+`LearningSettings` gets `actionSelector` (enum `ActionSelectorMode { FILTER_BASED, ARBITER }`, default `FILTER_BASED`), parsed by
+`Simulation.getLearningSettings` like the other keys. Constructor validation, thrown at parse like the existing
+`operantEstimatorEnabled` check:
 - `ARBITER` ⇒ `operantEstimatorEnabled` (⇒ `focalDriveEnabled`).
-- `ARBITER` ⇒ none of `MEMORY`, `AFFORDANCE`, `WORLD_MODEL`, `RANDOM` (the arbiter replaces them; §4 "replaces the
-  memory, operant and world-model filters"; RANDOM's role is the ε floor).
+- `ARBITER` ⇒ `enabledFilters` contains at most `TARGET_DISTANCE` (the other legacy filters are replaced by the arbiter; the
+  `ARBITER` label constant is not a filter type and is rejected there). The A2 conf sets `enabledFilters = [TARGET_DISTANCE]`.
 - `ARBITER` ⇒ not `neuromodulationEnabled` (τ is constant; see Q7).
-No new boolean flag; `Simulation.getLearningSettings` already parses `enabledFilters` by `valueOf`.
+`MASTER_FILTER_ORDER` and the default `new LearningSettings()` are unchanged, which removes the problem v2 worked around (adding
+`ARBITER` to the default filter list would have made the default settings invalid).
 
 ### 7. Concurrency and immutability
 
-- `Arbiter`, `ArbitrationFilter` and their `Random` are `FullAppraisal`'s own state, created in `preStart`, never shared.
+- `Arbiter`, `ArbiterActionSelector` and their `Random` are `FullAppraisal`'s own state, created in `preStart`, never shared.
 - What crosses the facade: `List.copyOf(candidates)`, `h.clone()`, a `String`; what comes back: an unmodifiable list of
   immutable `Estimate` records. `Action`/`Perception` have final fields.
 - The blocking ask is the same pattern and count the legacy `ActionProbabilityFilter` pays via `getProbabilities`
@@ -213,7 +234,7 @@ No new boolean flag; `Simulation.getLearningSettings` already parses `enabledFil
 | A2 | §4.5 formula | Undefined for one candidate, Q1 = Q2, or SE1 = SE2 = 0. | conf = 1, 0.5, and 1 (if Q1 > Q2) respectively; always in [0.5, 1]. |
 | A3 | Pseudocode `best_conf = 0.0`, `conf > best_conf` | Tie between controllers' conf. | Strict `>`: cheaper wins. |
 | A4 | §4.5 decisiveness | Uses only the two highest Q: a third candidate with a huge SE (possibly the true best) does not lower conf. | Kept as written (paper's definition); Thompson still samples it. Note for #115. |
-| A5 | `ActionSelection` | Stops before the arbiter whenever a pre-filter leaves one candidate (frequent: hungry with an empty visual field → WANDER(Self) only), so the arbiter is not called and `chosenQ` would stay NaN. | `chosenQ` comes from `valueOf(executed)` on those cycles; `ChosenActionState` keeps the truthful label. `ActionSelection` unchanged. |
+| A5 | `ActionSelection` | Stops before the arbiter whenever a pre-filter leaves one candidate (frequent: hungry with an empty visual field → WANDER(Self) only), so as a filter the arbiter would not be called and `chosenQ` would stay NaN. | Resolved by the selector split: `ArbiterActionSelector` always runs the arbiter, single candidate included (source `SINGLE`), so `chosenQ` is known every cycle. |
 | A6 | Hysteresis gate | The gate can replace the arbiter's choice with SLEEP *after* selection; `DecisionRecord.action` is post-gate. A `chosenQ` of the arbiter's pre-gate choice would mismatch the executed action. | `chosenQ` is the Q of the **executed** action (§4). The gate is untouched. |
 | A7 | Candidates are (action, target) pairs | Target-agnostic actions (SLEEP, WANDER, OBSERVE) appear once per visible object type, so the ε floor and Thompson's max over more draws favour them when many types are in view. The legacy `RandomFilter` has the same bias. | Kept (paper §4: candidates are the pairs; #103 keys SLEEP by object type on purpose). `candidateCount` recorded for #105; revisit if A2 shows SLEEP/WANDER inflation (Q5). |
 | A8 | Focus vs. operant key | With no open episode, `focalDrive = null` → the `NONE` focal bucket, which is never trained (only closed episodes write the table). Calm-state choice is then Thompson over `N(0, 1)` for every candidate: effectively uniform. Meanwhile the tendency filter still sees the most-aroused emotion. | Accepted for #104 (the paper's idle state has no habit to consult). Measured in the check run (share of decisions with null focus). See Q3. |
@@ -221,7 +242,7 @@ No new boolean flag; `Simulation.getLearningSettings` already parses `enabledFil
 | A10 | ε placement | Pseudocode consults controllers before the ε check, so estimates are paid for even on ε cycles. | Kept: the estimates are needed for `chosenQ` and #105 anyway. |
 | A11 | `ValueEstimator` contract | No focal-drive argument, yet the operant key includes it; production bridges it through a shared `AtomicReference`. | Explicit argument (§5, Q1). |
 | A12 | τ(dopamine) | §4.5 and App. A step 8 route tonic dopamine to τ; the issue says constant τ "because neuromodulation is off". No issue owns the coupling. | τ = 1 constant; ARBITER + neuromodulation rejected at parse (Q7). |
-| A13 | Issue DoD "arbiter decisions persisted" | #105 owns the decision table. | DoD met by `chosen_action_state.actionselectiontype = 'ARBITER'` rows (→ `actions.selection_type`) plus non-NaN `chosenQ` reaching `episode_return.bootstrap`. Q6. |
+| A13 | Issue DoD "arbiter decisions persisted" | #105 owns the decision table. | DoD met by `chosen_action_state.actionselectiontype = 'ARBITER'` rows (every arbiter cycle) (→ `actions.selection_type`) plus non-NaN `chosenQ` reaching `episode_return.bootstrap`. Q6. |
 
 ## Tests
 
@@ -257,12 +278,15 @@ candidate per action type on fixed perceptions.
    also holds).
 8. **Validation:** empty candidates → IAE; `Params` out of range → IAE; zero controllers → IAE.
 
-### `ArbitrationFilterTest`
+### `ActionSelectorTest` (the extracted interface, real implementations)
 
-9. `filter` returns a one-element list with the decision's chosen action; `takeLastDecision` returns it once, then
-   empty; `filter` without `setCycleInput` → `IllegalStateException`; the focal drive passed is the cell used (train
-   EAT under "hunger" only → under "hunger" EAT wins with conf ≈ 1, under "sleep" conf = 0.5).
-10. `valueOf(action)` equals the cheapest controller's estimate for `[action]`.
+9a. `FilterBasedActionSelector`: the existing `ActionSelectionConfigTest` cases pass after the rename (same loop, same type
+    reporting); it ignores `h` and `focalDrive`.
+9b. `ArbiterActionSelector`: returns one candidate; pre-filters run first (the tendency prior narrows, the nearest-instance rule
+    keeps one object per type); one candidate left → the arbiter still runs (`SINGLE`, no random draw consumed, Q known);
+    `takeLastDecision` returns the decision once, then empty; the focal drive in the context is the cell used (train EAT under
+    "hunger" only → under "hunger" EAT wins with conf ≈ 1, under "sleep" conf = 0.5); `lastSelectionType()` is `ARBITER`.
+10. `valueOf(action, ctx)` equals the cheapest controller's estimate for `[action]`.
 
 ### `OperantEstimatorTest` (updated for §5)
 
@@ -271,14 +295,14 @@ candidate per action type on fixed perceptions.
 
 ### `LearningSettingsTest`
 
-12. `ARBITER` without `operantEstimatorEnabled` → IAE; with any of MEMORY / AFFORDANCE / WORLD_MODEL / RANDOM → IAE;
-    with `neuromodulationEnabled` → IAE; valid HOCON parses (`enabledFilters = [TARGET_DISTANCE, ARBITER]`);
-    `new LearningSettings()` still valid and does not enable ARBITER; `simulations/p104_a2_check.conf` parses to A0 +
-    focal + operant + `[TARGET_DISTANCE, ARBITER]` (same shape as the existing A0 conf test).
+12. `actionSelector = ARBITER` without `operantEstimatorEnabled` → IAE; with any of MEMORY / AFFORDANCE / WORLD_MODEL / RANDOM /
+    ARBITER in `enabledFilters` → IAE; with `neuromodulationEnabled` → IAE; valid HOCON parses (`actionSelector = ARBITER`,
+    `enabledFilters = [TARGET_DISTANCE]`); `new LearningSettings()` is still valid and `FILTER_BASED`;
+    `simulations/p104_a2_check.conf` parses to A0 + focal + operant + `ARBITER` (same shape as the existing A0 conf test).
 
 ### `ArbitrationFunctionalTest` (harness, real creature)
 
-13. **Chain and label:** A2 settings, seeded; a hungry creature seeing a red apple at distance (pattern of
+13. **Selection and label:** A2 settings, seeded; a hungry creature seeing a red apple at distance (pattern of
     `TestingCreatureTest.see_red_apple_at_distance_triggers_full_chain_and_approach`) → `ChosenActionState` rows with
     `ARBITER` are written to `bdSink`, and the effector receives a cortical stimulus for an action that was a candidate.
 14. **Learned habit steers choice:** pre-train the harness's operant store (`creature().operantStore().record(...)`,
@@ -315,14 +339,20 @@ candidate per action type on fixed perceptions.
 
 ## Files
 
-New: `creature/arbiter/Arbiter.java`, `creature/arbiter/ArbitrationDecision.java`,
-`creature/actionSelector/ArbitrationFilter.java`, `simulations/p104_a2_check.conf`, `experiments/p104_a2_check.yml`,
-tests `ArbiterTest`, `ArbitrationFilterTest`, `ArbitrationFunctionalTest`.
-Changed: `bd/ActionSelectionType.java` (+`ARBITER`), `cluster/settings/LearningSettings.java` (validation, javadoc),
-`components/FullAppraisal.java`, `arbiter/ValueEstimator.java`, `arbiter/OperantEstimator.java`, `CreatureActor.java`,
-test `TestingCreature.java`, `arbiter/DecisionRecord.java` + `EpisodeBuffer.java` (javadoc: chosenQ no longer "NaN until
-#104"), `OperantEstimatorTest`, `LearningSettingsTest`.
+New: `creature/actionSelector/ActionSelector.java`, `SelectionContext.java`, `ArbiterActionSelector.java`;
+`creature/arbiter/Arbiter.java`, `ArbitrationDecision.java`; `simulations/p104_a2_check.conf`, `experiments/p104_a2_check.yml`;
+tests `ArbiterTest`, `ArbiterActionSelectorTest`, `ArbitrationFunctionalTest`.
+Renamed: `ActionSelection` → `FilterBasedActionSelector` (class, references in `ActionSelectionConfigTest`, `MemoryFilterTest`,
+`TestingCreatureTest`, and the javadoc mentions in `MemoryFilter`, `WorldModelFilter`, `MemoryDecisionState`).
+Changed: `bd/ActionSelectionType.java` (+`ARBITER`, label only), `cluster/settings/LearningSettings.java` and `Simulation.java`
+(`actionSelector`, validation), `components/FullAppraisal.java`, `arbiter/ValueEstimator.java`, `arbiter/OperantEstimator.java`,
+`CreatureActor.java`, test `TestingCreature.java`, `arbiter/DecisionRecord.java` + `EpisodeBuffer.java` (javadoc: chosenQ no
+longer "NaN until #104"), `OperantEstimatorTest`, `LearningSettingsTest`.
 Unchanged: `TableSchemas`, `ArrowIpcBackend`, `scripts/dl2l_data/tables.py` (no new table; `selection_type` is a string).
+
+Commit order: (1) interface extraction + rename + `SelectionContext`, no behaviour change, all existing tests green; (2) explicit
+focal drive; (3) `Arbiter` core and its tests; (4) `ArbiterActionSelector`, settings, `FullAppraisal` wiring, `chosenQ`;
+(5) check-run spec and results note.
 
 ## Risks
 
@@ -341,9 +371,9 @@ Unchanged: `TableSchemas`, `ArrowIpcBackend`, `scripts/dl2l_data/tables.py` (no 
 - **Q1. Pass the focal drive explicitly (change `ValueEstimator.estimate`) or keep the `AtomicReference` supplier?**
   Recommendation: **explicit argument**, in this issue. The supplier is shared mutable state across actors; it only
   works because the ask is blocking and issued right after the write. #113 needs the drive too.
-- **Q2. Where does `ARBITER` live: `enabledFilters` or a new boolean `arbiterEnabled`?**
-  Recommendation: **`enabledFilters`**, with the validation in §6, and **not** in `MASTER_FILTER_ORDER` (it is the
-  default list). Mirrors App. A step 8 ("a new ActionSelectionType") and needs no new parser line.
+- **Q2. (decided) Where does the arbiter live: as a filter in `enabledFilters`, or as its own selector?** Decided by the user: its
+  own `ActionSelector`, chosen by `LearningSettings.actionSelector`; the interface is extracted in this issue and the legacy
+  mechanism is `FilterBasedActionSelector`. The pre-filters that still apply are reused.
 - **Q3. Calm state (no open episode): key the operant cell by `NONE` (untrained → uniform) or by the most-aroused
   drive, as the tendency filter does?** Recommendation: **`NONE` for #104** (paper: idle has no focal drive; mixing
   most-aroused into the key would also mix cells across drives the episode never valued); report the null-focus share
