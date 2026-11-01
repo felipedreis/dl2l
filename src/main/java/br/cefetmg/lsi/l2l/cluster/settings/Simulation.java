@@ -139,7 +139,7 @@ public class Simulation {
         // Issue #104 — which mechanism chooses the action: FILTER_BASED (default) or ARBITER.
         LearningSettings.ActionSelectorMode actionSelector = LearningSettings.ActionSelectorMode.FILTER_BASED;
         if (ls.hasPath("actionSelector")) {
-            actionSelector = LearningSettings.ActionSelectorMode.valueOf(ls.getString("actionSelector").toUpperCase());
+            actionSelector = LearningSettings.ActionSelectorMode.valueOf(ls.getString("actionSelector").toUpperCase(java.util.Locale.ROOT));
         }
 
         return new LearningSettings(circadianEnabled, consolidationEnabled, enabledFilters,
