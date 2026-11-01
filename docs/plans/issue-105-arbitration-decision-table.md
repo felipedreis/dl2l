@@ -1,6 +1,8 @@
 # Issue #105 — `ArbitrationDecisionState`: one row per arbiter decision, and its extraction
 
-Status: **draft v1, awaiting approval.** No code has been changed.
+Status: **approved by the user with the reviewer's recommendations** (2026-11-01): (1) a join mismatch in the extraction
+warns and nulls the joined columns, it does not abort the extraction; (2) the `episodic_*` and `planner_*` column blocks are
+declared now; (3) `ExecutedEstimate` and the `executedQ` refactor stay in this issue. No code has been changed yet.
 Context: arbiter story map (`docs/plans/2026-q4-research-plan.md`); arbitration paper draft
 (`docs/bib/uncertainty_arbitration.pdf`) App. A step 9 "Telemetry" (p. 22), §4.4 "What each controller reports" and its
 Calibration paragraph (pp. 10–11), §4.5 decisiveness, budget, exploration (pp. 11–12), §7.1 (controller shares and
@@ -253,10 +255,14 @@ LEFT JOIN data.episode_return er ON er.creature_key = d.creature_key AND er.step
 ORDER BY d.creature_key, d.seq
 ```
 
-- Post-process (Python, same file): **fail loudly** if the join changed the row count (a duplicate
-  `(creature_key, step_cycle)` in `episode_return` would mean an invariant broke) and drop `episode_action` after
-  asserting it equals `executed_action` wherever it is non-null (a mismatch means the cycle clocks diverged; T1). Failing
-  is preferable to silently wrong calibration data.
+- Post-process (Python, same file), **warn, never abort** (an exception here would skip every later table; the extraction
+  must keep writing): (a) if the join changed the row count (a duplicate `(creature_key, step_cycle)` in `episode_return`
+  would mean an invariant broke), print a warning naming the creatures and keep the un-joined decision rows (de-duplicate
+  `episode_return` to its first row per key before joining); (b) wherever the joined `episode_return.action` differs from
+  `executed_action` (the cycle clocks diverged; T1), print a warning naming creature and cycle count and set the
+  `episode_*`, `close_type`, `steps_to_close`, `bootstrap` and `realised_value` columns to NULL on those rows, so
+  calibration never reads a mismatched value; then drop `episode_action`. The functional test 10 (join invariant) is what
+  fails the build when the invariant breaks; the extraction itself degrades gracefully.
 - `TABLE_ORDER` gets `"arbitration_decisions"` after `"episode_returns"`.
 - `extract.py`: replace the `run_info` special case with `OPTIONAL_RAW = {"run_info": "run_info", "episode_returns":
   "episode_return", "arbitration_decisions": "arbitration_decision_state"}`; a table whose raw view is missing is skipped
@@ -339,7 +345,9 @@ or the backend.
 14. Old-dump tolerance: delete `arbitration_decision_state.arrow` and `episode_return.arrow` from the raw dir → extraction
     completes, those two Parquet files are absent, the note is printed.
 15. Mismatch guard: an `episode_return` row whose `action` differs from the decision's `executed_action` → extraction
-    exits non-zero with a message naming the creature and cycle.
+    still completes, prints a warning naming the creature and the number of cycles, and the joined columns of those rows
+    are NULL (the decision columns are intact). A duplicate `(creature_key, step_cycle)` in `episode_return` → warning,
+    and the row count of `arbitration_decisions` equals the number of decision rows.
 
 ## Verification
 
@@ -395,7 +403,7 @@ Commit order:
 - **Join depends on a clock invariant**, not on an id carried in the row: one ticker for the decision cycle, ordered
   tell/ask. A restart of `FullAppraisal` (supervision) would desynchronise `cognitiveCycle` but not the row's `cycle`
   (taken from the memory system, the same value the buffer uses), so the join survives it. Guarded by the post-process
-  mismatch check and functional test 10.
+  mismatch warning (joined columns nulled) and functional test 10.
 - **Unclosed episodes at trial end** (creatures alive at `maxRuntimeMinutes`) get NULL `episode_id` although they were
   in an episode. Their realised value does not exist anyway; analyses must not read NULL `episode_id` as "no focus"
   (use `focal_drive` for that). Q3's alternative would fix the id but not the value.
