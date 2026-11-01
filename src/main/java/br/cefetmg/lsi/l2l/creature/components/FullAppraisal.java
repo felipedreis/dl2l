@@ -4,6 +4,7 @@ import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
 import br.cefetmg.lsi.l2l.creature.arbiter.Arbiter;
 import br.cefetmg.lsi.l2l.creature.arbiter.ArbitrationDecision;
 import br.cefetmg.lsi.l2l.creature.arbiter.DecisionRecord;
+import br.cefetmg.lsi.l2l.creature.arbiter.ExecutedEstimate;
 import br.cefetmg.lsi.l2l.creature.arbiter.FocusEvent;
 import br.cefetmg.lsi.l2l.creature.arbiter.FocusTracker;
 import br.cefetmg.lsi.l2l.common.Constants;
@@ -74,6 +75,8 @@ public class FullAppraisal extends CreatureComponent {
     private SelectionContext cycleContext;
     /** Issue #104: this cycle's arbiter decision; null unless {@code actionSelector = ARBITER}. */
     private ArbitrationDecision cycleDecision;
+    /** Issue #105: the executed action's estimates this cycle, after the gate; null outside the arbiter mode. */
+    private ExecutedEstimate cycleExecuted;
     private MemorySystem memorySystem;
     private WorldModelEngine worldModelEngine;
     private WorldModelFilter worldModelFilter;
@@ -345,26 +348,12 @@ public class FullAppraisal extends CreatureComponent {
         if (!cycleFocusEvents.isEmpty()) {
             memorySystem.recordFocusEvents(List.copyOf(cycleFocusEvents));
         }
-        memorySystem.recordDecision(new DecisionRecord(cycle, action, cycleLevels, focalDrive, executedQ(action)));
-    }
-
-    /**
-     * Issue #104: the arbiter's Q of the action actually executed, which is what the pre-emption bootstrap
-     * needs. The hysteresis gate runs before this and can replace the arbiter's choice, so the decision's
-     * candidates are searched first; the action is then either one of them (its Q is already in the decision)
-     * or, when pre-filtering dropped it, asked for once. {@code NaN} outside the arbiter mode.
-     */
-    private double executedQ(Action executed) {
-        if (cycleDecision == null) {
-            return Double.NaN;
-        }
-        List<Action> candidates = cycleDecision.candidates();
-        for (int i = 0; i < candidates.size(); i++) {
-            if (candidates.get(i).equals(executed)) {
-                return cycleDecision.estimates().get(i).q();
-            }
-        }
-        return arbiterSelection.valueOf(executed, cycleContext).q();
+        // Issue #105: the executed action's estimates, resolved once and shared by the decision record and
+        // (in #105's row) the persisted arbitration decision. Null outside the arbiter mode.
+        cycleExecuted = cycleDecision == null ? null
+                : ExecutedEstimate.of(cycleDecision, action, a -> arbiterSelection.valueOf(a, cycleContext));
+        memorySystem.recordDecision(new DecisionRecord(cycle, action, cycleLevels, focalDrive,
+                cycleExecuted != null ? cycleExecuted.deciding().q() : Double.NaN));
     }
 
     /**
