@@ -136,7 +136,7 @@ public final class Arbiter {
             List<Estimate> est = c.estimator().estimate(cands, h.clone(), focalDrive);
             checkShape(c.type(), est, n);
             double conf = decisiveness(est);
-            consultations.add(new ArbitrationDecision.Consultation(c.type(), conf));
+            consultations.add(new ArbitrationDecision.Consultation(c.type(), conf, est));
             if (conf > bestConf) {
                 bestConf = conf;
                 deciding = est;
@@ -147,9 +147,19 @@ public final class Arbiter {
             }
         }
 
+        ControllerType affordable = mostExpensiveAffordable();
         if (n == 1) {
-            return new ArbitrationDecision(1, cands, deciding, consultations, decidingType, 0, cands.get(0),
-                    deciding.get(0), null, ArbitrationDecision.ExplorationSource.SINGLE);
+            return new ArbitrationDecision(1, cands, deciding, consultations, decidingType, affordable, 0,
+                    cands.get(0), deciding.get(0), deciding.get(0), null, 1,
+                    ArbitrationDecision.ExplorationSource.SINGLE);
+        }
+
+        double maxQ = deciding.get(argmaxQ(deciding)).q();
+        int nTiedAtMax = 0;
+        for (Estimate e : deciding) {
+            if (e.q() == maxQ) {
+                nTiedAtMax++;
+            }
         }
 
         int chosenIndex;
@@ -168,13 +178,25 @@ public final class Arbiter {
                     chosenIndex = i;
                 }
             }
-            source = chosenIndex == argmaxQ(deciding)
+            // Issue #105: greedy means "as good as the best", so a pick tied at the highest Q is GREEDY too.
+            // Comparing indices instead labelled every pick THOMPSON among equal candidates (all-untrained cells).
+            source = deciding.get(chosenIndex).q() == maxQ
                     ? ArbitrationDecision.ExplorationSource.GREEDY
                     : ArbitrationDecision.ExplorationSource.THOMPSON;
         }
 
-        return new ArbitrationDecision(n, cands, deciding, consultations, decidingType, chosenIndex, cands.get(chosenIndex),
-                deciding.get(chosenIndex), deciding.get(secondIndex(deciding)), source);
+        return new ArbitrationDecision(n, cands, deciding, consultations, decidingType, affordable, chosenIndex,
+                cands.get(chosenIndex), deciding.get(chosenIndex), deciding.get(argmaxQ(deciding)),
+                deciding.get(secondIndex(deciding)), nTiedAtMax, source);
+    }
+
+    /**
+     * The most expensive controller the budget allows (#105, telemetry only). With no budget yet (#114 adds
+     * one) every wired controller is affordable, so this is the last one in cost order. Affordable is not
+     * consulted: the stopping rule may never ask it.
+     */
+    private ControllerType mostExpensiveAffordable() {
+        return controllers.get(controllers.size() - 1).type();
     }
 
     /**

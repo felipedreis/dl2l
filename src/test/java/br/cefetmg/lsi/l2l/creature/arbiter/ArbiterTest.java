@@ -11,9 +11,12 @@ import br.cefetmg.lsi.l2l.creature.common.Perception;
 import br.cefetmg.lsi.l2l.world.FruitType;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -340,7 +343,134 @@ class ArbiterTest {
         assertEquals(new Random(9).nextDouble(), random.nextDouble(), 0.0, "the stream was not advanced");
     }
 
-    // ---- 8. Validation ---------------------------------------------------------------------
+    // ---- 8. Telemetry (#105): labels on ties, best and runner-up, per-controller estimates ---
+
+    @Test
+    void anUntrainedEstimatorMakesEveryPickGreedyBecauseEveryCandidateIsTied() {
+        // Every cell is Estimate(0, 1, 1): any candidate is as good as the best, so no pick is THOMPSON.
+        List<Action> four = List.of(on(ActionType.EAT), on(ActionType.AVOID),
+                on(ActionType.APPROACH), on(ActionType.OBSERVE));
+        Arbiter arbiter = new Arbiter(List.of(operant(new OperantEstimator(new double[] {50, 100}, 1.0))),
+                new Params(0.8, 0.0, 1.0), new Random(3));
+        Set<Integer> picked = new HashSet<>();
+        for (int i = 0; i < 2_000; i++) {
+            ArbitrationDecision d = arbiter.decide(four, H, HUNGER);
+            assertEquals(ExplorationSource.GREEDY, d.source());
+            assertEquals(4, d.nTiedAtMax());
+            picked.add(d.chosenIndex());
+        }
+        assertEquals(4, picked.size(), "the draw still spreads over the tied candidates");
+    }
+
+    @Test
+    void aPickIsGreedyExactlyWhenItsQIsTheHighestAndTheThompsonShareMatchesTheClosedForm() {
+        // Q = (0.5, 0): the best wins the draw with probability Phi(0.5), so THOMPSON has 1 - Phi(0.5).
+        Arbiter arbiter = new Arbiter(List.of(operant(TWO)), new Params(0.8, 0.0, 1.0), new Random(11));
+        int thompson = 0;
+        for (int i = 0; i < DRAWS; i++) {
+            ArbitrationDecision d = arbiter.decide(TWO_CANDIDATES, H, HUNGER);
+            boolean below = d.chosenEstimate().q() < d.bestEstimate().q();
+            assertEquals(below ? ExplorationSource.THOMPSON : ExplorationSource.GREEDY, d.source());
+            assertEquals(1, d.nTiedAtMax());
+            if (below) {
+                thompson++;
+            }
+        }
+        double p = 1 - 0.691462;
+        assertEquals(p, (double) thompson / DRAWS, 4 * Math.sqrt(p * (1 - p) / DRAWS));
+    }
+
+    @Test
+    void theChoiceSequenceIsTheDocumentedDrawOrderAndDoesNotDependOnTheLabel() {
+        // Replays the stream by hand in the order the class documents. The label fix must leave this unchanged.
+        long seed = 104L;
+        List<Estimate> est = THREE.estimate(THREE_CANDIDATES, H, HUNGER);
+        Random replay = new Random(seed);
+        List<Integer> expected = new ArrayList<>();
+        for (int i = 0; i < 1_000; i++) {
+            if (replay.nextDouble() < 0.03) {
+                expected.add(replay.nextInt(THREE_CANDIDATES.size()));
+                continue;
+            }
+            int pick = 0;
+            double bestDraw = Double.NEGATIVE_INFINITY;
+            for (int j = 0; j < est.size(); j++) {
+                double draw = est.get(j).q() + est.get(j).se() * replay.nextGaussian();
+                if (draw > bestDraw) {
+                    bestDraw = draw;
+                    pick = j;
+                }
+            }
+            expected.add(pick);
+        }
+        assertEquals(expected, choices(seed, 1_000));
+    }
+
+    @Test
+    void bestAndRunnerUpAreTheTwoHighestQAndAreDistinctFromTheChosenWhenTheDrawMissesTheBest() {
+        OperantEstimator e = trained(Map.of(
+                ActionType.EAT, new double[] {0.4},        // Q = 0.2
+                ActionType.AVOID, new double[] {2.0},      // Q = 1.0
+                ActionType.APPROACH, new double[] {1.0})); // Q = 0.5
+        List<Action> cands = List.of(on(ActionType.EAT), on(ActionType.AVOID), on(ActionType.APPROACH));
+        List<Estimate> est = e.estimate(cands, H, HUNGER);
+        assertEquals(0.2, est.get(0).q(), TOL);
+        // First seed whose Thompson draw picks the lowest-Q candidate: chosen, best and runner-up all differ.
+        for (long seed = 1; ; seed++) {
+            ArbitrationDecision d = new Arbiter(List.of(operant(e)), new Params(0.8, 0.0, 1.0), new Random(seed))
+                    .decide(cands, H, HUNGER);
+            if (d.chosenIndex() == 0) {
+                assertEquals(est.get(0), d.chosenEstimate());
+                assertEquals(est.get(1), d.bestEstimate());
+                assertEquals(est.get(2), d.runnerUpEstimate());
+                assertEquals(ExplorationSource.THOMPSON, d.source());
+                return;
+            }
+        }
+    }
+
+    @Test
+    void aSingleCandidateIsItsOwnBestWithNoRunnerUpAndNoTie() {
+        ArbitrationDecision d = new Arbiter(List.of(operant(TWO)), Params.defaults(), new Random(9))
+                .decide(List.of(on(ActionType.EAT)), H, HUNGER);
+        assertEquals(d.chosenEstimate(), d.bestEstimate());
+        assertNull(d.runnerUpEstimate());
+        assertEquals(1, d.nTiedAtMax());
+    }
+
+    @Test
+    void eachConsultationCarriesTheEstimatesOfItsOwnController() {
+        OperantEstimator decisive = trained(Map.of(ActionType.EAT, repeat(2.0, 20), ActionType.AVOID, repeat(0.0, 20)));
+        OperantEstimator untrained = new OperantEstimator(new double[] {50, 100}, 1.0);
+        List<Action> cands = List.of(on(ActionType.EAT), on(ActionType.AVOID));
+
+        ArbitrationDecision d = new Arbiter(
+                List.of(new Controller(ControllerType.EPISODIC, untrained), operant(decisive)),
+                Params.defaults(), new Random(1)).decide(cands, H, HUNGER);
+
+        assertEquals(List.of(ControllerType.EPISODIC, ControllerType.OPERANT), consulted(d));
+        assertEquals(untrained.estimate(cands, H, HUNGER), d.consultations().get(0).estimates());
+        assertEquals(decisive.estimate(cands, H, HUNGER), d.consultations().get(1).estimates());
+        assertEquals(ControllerType.OPERANT, d.decidingController());
+    }
+
+    @Test
+    void mostExpensiveAffordableIsTheLastWiredControllerEvenWhenItIsNeverConsulted() {
+        OperantEstimator decisive = trained(Map.of(ActionType.EAT, repeat(2.0, 20), ActionType.AVOID, repeat(0.0, 20)));
+        OperantEstimator other = new OperantEstimator(new double[] {50, 100}, 1.0);
+        List<Action> cands = List.of(on(ActionType.EAT), on(ActionType.AVOID));
+
+        ArbitrationDecision d = new Arbiter(List.of(operant(decisive), new Controller(ControllerType.EPISODIC, other)),
+                Params.defaults(), new Random(1)).decide(cands, H, HUNGER);
+        assertEquals(List.of(ControllerType.OPERANT), consulted(d));
+        assertEquals(ControllerType.EPISODIC, d.mostExpensiveAffordable());
+
+        ArbitrationDecision single = new Arbiter(List.of(operant(decisive)), Params.defaults(), new Random(1))
+                .decide(cands, H, HUNGER);
+        assertEquals(ControllerType.OPERANT, single.mostExpensiveAffordable());
+    }
+
+    // ---- 9. Validation ---------------------------------------------------------------------
 
     @Test
     void decideRejectsEmptyAndNullCandidates() {
