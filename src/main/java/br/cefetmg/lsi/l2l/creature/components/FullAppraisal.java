@@ -1,6 +1,8 @@
 package br.cefetmg.lsi.l2l.creature.components;
 
 import br.cefetmg.lsi.l2l.cluster.settings.LearningSettings;
+import br.cefetmg.lsi.l2l.creature.arbiter.Arbiter;
+import br.cefetmg.lsi.l2l.creature.arbiter.ArbitrationDecision;
 import br.cefetmg.lsi.l2l.creature.arbiter.DecisionRecord;
 import br.cefetmg.lsi.l2l.creature.arbiter.FocusEvent;
 import br.cefetmg.lsi.l2l.creature.arbiter.FocusTracker;
@@ -8,8 +10,11 @@ import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.Seeds;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionFilter;
+import br.cefetmg.lsi.l2l.creature.actionSelector.ArbiterActionSelector;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionProbabilityFilter;
-import br.cefetmg.lsi.l2l.creature.actionSelector.ActionSelection;
+import br.cefetmg.lsi.l2l.creature.actionSelector.ActionSelector;
+import br.cefetmg.lsi.l2l.creature.actionSelector.FilterBasedActionSelector;
+import br.cefetmg.lsi.l2l.creature.actionSelector.SelectionContext;
 import br.cefetmg.lsi.l2l.creature.actionSelector.ActionTendencyFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.MemoryFilter;
 import br.cefetmg.lsi.l2l.creature.actionSelector.RandomFilter;
@@ -62,7 +67,13 @@ public class FullAppraisal extends CreatureComponent {
     // Populated after preStart() creates the filter; shared with JepaExpectancyPredictor.
     private final AtomicReference<WorldModelFilter> wmFilterRef;
 
-    private ActionSelection actionSelection;
+    private ActionSelector actionSelection;
+    /** Issue #104: the arbiter selector when {@code actionSelector = ARBITER}, else null (the same object as actionSelection). */
+    private ArbiterActionSelector arbiterSelection;
+    /** Issue #104: this cycle's selection inputs, kept for the chosenQ lookup after the hysteresis gate. */
+    private SelectionContext cycleContext;
+    /** Issue #104: this cycle's arbiter decision; null unless {@code actionSelector = ARBITER}. */
+    private ArbitrationDecision cycleDecision;
     private MemorySystem memorySystem;
     private WorldModelEngine worldModelEngine;
     private WorldModelFilter worldModelFilter;
@@ -90,8 +101,6 @@ public class FullAppraisal extends CreatureComponent {
     private FocusTracker focusTracker;
     /** Focal drive of the decision being made; null when the flag is off or no episode is open. */
     private String focalDrive;
-    /** Issue #110: published focal drive, read by the operant estimator's supplier; null when unused. */
-    private final AtomicReference<String> focalDriveRef;
     /** Issue #110: the tracker's events of the current cycle, sent with the decision; empty when none. */
     private List<FocusEvent> cycleFocusEvents = List.of();
     /** Issue #110: drive levels of the current cycle in {@link FocusTracker#DRIVES} order. */
@@ -109,22 +118,11 @@ public class FullAppraisal extends CreatureComponent {
     /** {@code rootSeed} is the run seed (SimulationSettingsExtension.seed()); see issue #95. */
     public FullAppraisal(SequentialId id, LearningSettings learningSettings, MLServiceExtension.Impl mlExt,
                          AtomicReference<WorldModelFilter> wmFilterRef, long rootSeed) {
-        this(id, learningSettings, mlExt, wmFilterRef, rootSeed, null);
-    }
-
-    /**
-     * @param focalDriveRef issue #110: receives the focal drive of every cycle (null when none) so the
-     *                      operant estimator's supplier can read it; may be null
-     */
-    public FullAppraisal(SequentialId id, LearningSettings learningSettings, MLServiceExtension.Impl mlExt,
-                         AtomicReference<WorldModelFilter> wmFilterRef, long rootSeed,
-                         AtomicReference<String> focalDriveRef) {
         super(id);
         this.rootSeed = rootSeed;
         this.learningSettings = learningSettings;
         this.mlExt = mlExt;
         this.wmFilterRef = wmFilterRef;
-        this.focalDriveRef = focalDriveRef;
     }
 
     @Override
@@ -154,6 +152,19 @@ public class FullAppraisal extends CreatureComponent {
         if (learningSettings.isActionTendencyEnabled()) {
             filterList.add(new ActionTendencyFilter(learningSettings.getActionTendencies()));
         }
+        // Issue #104: the arbiter replaces the legacy filters (validated away in LearningSettings) and keeps
+        // the pre-filters that still apply. Its random stream exists only in this mode.
+        if (learningSettings.isArbiterSelector()) {
+            if (learningSettings.isFilterEnabled(ActionSelectionType.TARGET_DISTANCE)) {
+                filterList.add(new TargetDistanceFilter());
+            }
+            arbiterSelection = new ArbiterActionSelector(filterList, new Arbiter(
+                    List.of(new Arbiter.Controller(Arbiter.ControllerType.OPERANT, creature.operantStore())),
+                    Arbiter.Params.defaults(),
+                    new Random(Seeds.derive(rootSeed, "creature", id.key, "arbiter"))));
+            actionSelection = arbiterSelection;
+            return;
+        }
         for (ActionSelectionType type : LearningSettings.MASTER_FILTER_ORDER) {
             if (!learningSettings.isFilterEnabled(type)) continue;
             switch (type) {
@@ -179,7 +190,7 @@ public class FullAppraisal extends CreatureComponent {
                 default              -> logger.warning("FullAppraisal: unknown filter type " + type + ", skipping");
             }
         }
-        actionSelection = new ActionSelection(filterList);
+        actionSelection = new FilterBasedActionSelector(filterList);
     }
 
     @Override
@@ -282,7 +293,11 @@ public class FullAppraisal extends CreatureComponent {
             }
         }
         List<Action> possibleActions = definePossibleActions(emotional.getPerceptions());
-        return actionSelection.selectOne(possibleActions, emotionToRegulate(emotional));
+        Emotion toRegulate = emotionToRegulate(emotional);
+        cycleContext = new SelectionContext(toRegulate, cycleLevels, focalDrive, emotional.behaviouralEfficiency);
+        Action chosen = actionSelection.selectOne(possibleActions, cycleContext);
+        cycleDecision = arbiterSelection == null ? null : arbiterSelection.takeLastDecision().orElse(null);
+        return chosen;
     }
 
     /**
@@ -303,9 +318,6 @@ public class FullAppraisal extends CreatureComponent {
         Optional<String> focal = focusTracker.focalDrive();
         if (focal.isPresent() && emotional.drives.containsKey(focal.get())) {
             focalDrive = focal.get();
-        }
-        if (focalDriveRef != null) {
-            focalDriveRef.set(focalDrive);
         }
         return focalDrive != null ? emotional.drives.get(focalDrive) : emotional.getMaxEmotion();
     }
@@ -333,7 +345,26 @@ public class FullAppraisal extends CreatureComponent {
         if (!cycleFocusEvents.isEmpty()) {
             memorySystem.recordFocusEvents(List.copyOf(cycleFocusEvents));
         }
-        memorySystem.recordDecision(new DecisionRecord(cycle, action, cycleLevels, focalDrive, Double.NaN));
+        memorySystem.recordDecision(new DecisionRecord(cycle, action, cycleLevels, focalDrive, executedQ(action)));
+    }
+
+    /**
+     * Issue #104: the arbiter's Q of the action actually executed, which is what the pre-emption bootstrap
+     * needs. The hysteresis gate runs before this and can replace the arbiter's choice, so the decision's
+     * candidates are searched first; the action is then either one of them (its Q is already in the decision)
+     * or, when pre-filtering dropped it, asked for once. {@code NaN} outside the arbiter mode.
+     */
+    private double executedQ(Action executed) {
+        if (cycleDecision == null) {
+            return Double.NaN;
+        }
+        List<Action> candidates = cycleDecision.candidates();
+        for (int i = 0; i < candidates.size(); i++) {
+            if (candidates.get(i).equals(executed)) {
+                return cycleDecision.estimates().get(i).q();
+            }
+        }
+        return arbiterSelection.valueOf(executed, cycleContext).q();
     }
 
     /**
@@ -426,7 +457,7 @@ public class FullAppraisal extends CreatureComponent {
         ChangeStimulusState change = new ChangeStimulusStateBuilder(this, id)
                 .buildOneReceivedOneEmitted(emotional, cortical);
         ChosenActionState chosenActionState = new ChosenActionState(change,
-                actionSelection.getLastUsedFilterType(), action.type, action.perception.id,
+                actionSelection.lastSelectionType(), action.type, action.perception.id,
                 inferenceMs, focalDrive);
         persist(change, chosenActionState);
         persistMemoryDecision();

@@ -190,6 +190,70 @@ public class LearningSettingsTest {
                 .parseString(simulationWith("operantEstimatorEnabled = true"))).getLearningSettings());
     }
 
+    private static LearningSettings parse(String body) {
+        return new Simulation(com.typesafe.config.ConfigFactory.parseString(simulationWith(body))).getLearningSettings();
+    }
+
+    private static final String ARBITER_BASE =
+            "focalDriveEnabled = true\noperantEstimatorEnabled = true\nactionSelector = ARBITER\n";
+
+    @Test
+    void action_selector_defaults_to_filter_based() {
+        assertEquals(LearningSettings.ActionSelectorMode.FILTER_BASED, new LearningSettings().getActionSelector());
+        assertFalse(new LearningSettings().isArbiterSelector());
+        assertEquals(LearningSettings.ActionSelectorMode.FILTER_BASED, parse("circadianEnabled = false").getActionSelector());
+    }
+
+    @Test
+    void arbiter_selector_parses_with_the_operant_estimator_and_target_distance_only() {
+        LearningSettings a = parse(ARBITER_BASE + "enabledFilters = [TARGET_DISTANCE]");
+        assertTrue(a.isArbiterSelector());
+        assertEquals(LearningSettings.ActionSelectorMode.ARBITER, a.getActionSelector());
+        assertEquals(List.of(ActionSelectionType.TARGET_DISTANCE), a.getEnabledFilters());
+    }
+
+    @Test
+    void arbiter_selector_requires_the_operant_estimator() {
+        assertThrows(IllegalArgumentException.class, () -> parse(
+                "focalDriveEnabled = true\nactionSelector = ARBITER\nenabledFilters = [TARGET_DISTANCE]"));
+    }
+
+    @Test
+    void arbiter_selector_rejects_every_legacy_filter_and_the_label_in_enabled_filters() {
+        for (String filter : List.of("MEMORY", "AFFORDANCE", "WORLD_MODEL", "RANDOM", "ARBITER")) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> parse(ARBITER_BASE + "enabledFilters = [TARGET_DISTANCE, " + filter + "]"), filter);
+        }
+    }
+
+    @Test
+    void arbiter_selector_rejects_neuromodulation() {
+        assertThrows(IllegalArgumentException.class,
+                () -> parse(ARBITER_BASE + "enabledFilters = [TARGET_DISTANCE]\nneuromodulationEnabled = true"));
+    }
+
+    @Test
+    void a_null_selector_in_the_constructor_is_filter_based() {
+        LearningSettings s = new LearningSettings(true, true, List.of(ActionSelectionType.RANDOM),
+                false, ExpectancyMode.DISCRETE, false, false, false, false, true, false, false, null);
+        assertEquals(LearningSettings.ActionSelectorMode.FILTER_BASED, s.getActionSelector());
+    }
+
+    @Test
+    void p104_a2_check_conf_is_a0_with_focal_drive_operant_and_the_arbiter() {
+        LearningSettings a2 = new Simulation(com.typesafe.config.ConfigFactory
+                .parseFile(new java.io.File("simulations/p104_a2_check.conf"))).getLearningSettings();
+        LearningSettings a0 = new Simulation(com.typesafe.config.ConfigFactory
+                .parseFile(new java.io.File("simulations/arbiter_a0.conf"))).getLearningSettings();
+
+        assertTrue(a2.isFocalDriveEnabled());
+        assertTrue(a2.isOperantEstimatorEnabled());
+        assertTrue(a2.isArbiterSelector());
+        assertEquals(List.of(ActionSelectionType.TARGET_DISTANCE), a2.getEnabledFilters());
+        assertEquals(a0.isActionTendencyEnabled(), a2.isActionTendencyEnabled());
+        assertEquals(a0.isNeuromodulationEnabled(), a2.isNeuromodulationEnabled());
+    }
+
     @Test
     void arbiter_a0_conf_is_the_p84_legacy_nomem_stack_with_focal_drive_off() {
         LearningSettings a0 = new Simulation(com.typesafe.config.ConfigFactory

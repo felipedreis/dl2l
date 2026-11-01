@@ -115,9 +115,8 @@ class ValuationEpisodeTest {
     }
 
     private static List<Estimate> estimates(TestingHarness h) {
-        h.creature().setFocalDriveForTesting(HUNGER);
         OperantStore store = h.creature().operantStore();
-        return store.estimate(List.of(EAT, APPROACH), HUNGRY);
+        return store.estimate(List.of(EAT, APPROACH), HUNGRY, HUNGER);
     }
 
     @Test
@@ -133,8 +132,7 @@ class ValuationEpisodeTest {
     @Test
     void closedEpisodeMovesTheRecordedCellsByTheHandComputedValues() {
         TestingHarness h = TestingHarness.builder().learningSettings(settings()).build();
-        h.creature().setFocalDriveForTesting(HUNGER);
-        Estimate eatBefore = h.creature().operantStore().estimate(List.of(EAT), HUNGRY).get(0);
+        Estimate eatBefore = h.creature().operantStore().estimate(List.of(EAT), HUNGRY, HUNGER).get(0);
         assertEquals(new Estimate(0, 1, 1), eatBefore, "an unseen cell has the prior");
 
         h.creature().memory().tickDecisionCycle();
@@ -144,7 +142,7 @@ class ValuationEpisodeTest {
         }
         h.processUntilQuiescent();
 
-        List<Estimate> after = h.creature().operantStore().estimate(List.of(EAT, APPROACH), HUNGRY);
+        List<Estimate> after = h.creature().operantStore().estimate(List.of(EAT, APPROACH), HUNGRY, HUNGER);
         assertEquals(0.5, after.get(0).q(), TOL, "EAT: value 1.0 over one observation");
         assertEquals(GAMMA / 2, after.get(1).q(), TOL, "APPROACH: value gamma over one observation");
         assertEquals(1 / Math.sqrt(2), after.get(0).se(), TOL);
@@ -162,7 +160,7 @@ class ValuationEpisodeTest {
 
         // A cell nothing was decided in stays unseen.
         Estimate sleep = h.creature().operantStore().estimate(
-                List.of(action(ActionType.SLEEP, null, 5)), HUNGRY).get(0);
+                List.of(action(ActionType.SLEEP, null, 5)), HUNGRY, HUNGER).get(0);
         assertEquals(new Estimate(0, 1, 1), sleep);
     }
 

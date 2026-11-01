@@ -8,7 +8,6 @@ import br.cefetmg.lsi.l2l.world.WorldObjectType;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.function.Supplier;
 
 /**
  * Operant table (habit) of the uncertainty arbitration paper, section 4.4: the cheapest controller.
@@ -55,38 +54,37 @@ public final class OperantEstimator implements OperantStore {
     /** Weight of the prior spread {@link #SIGMA0}, in observations. */
     private static final double NU0 = 1.0;
 
-    /** Cell key. {@code null} in a field means that bucket is {@code NONE}. */
-    private record Key(String focalDrive, WorldObjectType objectType, int distanceBin, ActionType actionType) {
+    /**
+     * Cell key. {@code null} in a field means that bucket is {@code NONE}. The object type is keyed by its
+     * {@link WorldObjectType#name()}, not by the instance: some types (e.g. {@code Self}) have no value equality,
+     * so keying by instance would never let a cell accumulate from one perception to the next.
+     */
+    private record Key(String focalDrive, String objectType, int distanceBin, ActionType actionType) {
     }
 
-    private final Supplier<String> focalDrive;
     private final double[] distanceEdges;
     private final WelfordTable<Key> table;
 
     /**
      * Default binning ({@code DEFAULT_VISION_FIELD_RADIUS / 3} and {@code 2 * .../3}) and
      * {@link #DEFAULT_DECAY}.
-     *
-     * @param focalDrive supplies the focal drive at estimate time; may return {@code null}
-     * @throws IllegalArgumentException if {@code focalDrive} is null
      */
-    public OperantEstimator(Supplier<String> focalDrive) {
-        this(focalDrive, defaultDistanceEdges(), DEFAULT_DECAY);
+    public OperantEstimator() {
+        this(defaultDistanceEdges(), DEFAULT_DECAY);
     }
 
     /**
-     * @param focalDrive    supplies the focal drive at estimate time; may return {@code null}
+     * The focal drive is not a constructor argument: it arrives with each call to {@link #estimate}, so
+     * the estimator holds no reference to any other actor's state (issue #104, Q1).
+     *
      * @param distanceEdges strictly increasing, finite upper edges of the distance bins; empty for one bin
      * @param decay         forgetting factor applied to the updated cell only; in (0, 1]
      *                      ({@code 1} forgets nothing)
-     * @throws IllegalArgumentException if {@code focalDrive} or {@code distanceEdges} is null, an edge
+     * @throws IllegalArgumentException if {@code distanceEdges} is null, an edge
      *                                  is not finite or the edges are not strictly increasing, or
      *                                  {@code decay} is not in (0, 1]
      */
-    public OperantEstimator(Supplier<String> focalDrive, double[] distanceEdges, double decay) {
-        if (focalDrive == null) {
-            throw new IllegalArgumentException("focalDrive supplier must not be null");
-        }
+    public OperantEstimator(double[] distanceEdges, double decay) {
         if (distanceEdges == null) {
             throw new IllegalArgumentException("distanceEdges must not be null");
         }
@@ -98,7 +96,6 @@ public final class OperantEstimator implements OperantStore {
                 throw new IllegalArgumentException("distanceEdges must be strictly increasing at index " + i);
             }
         }
-        this.focalDrive = focalDrive;
         this.distanceEdges = distanceEdges.clone();
         this.table = new WelfordTable<>(decay);
     }
@@ -123,22 +120,23 @@ public final class OperantEstimator implements OperantStore {
     }
 
     /**
-     * Read-only. The focal drive is read once per call from the supplier.
+     * Read-only. The cell of each candidate is keyed by the focal drive passed in, not by any state of
+     * this estimator, so the answer depends only on the arguments and the table.
      *
      * @param candidates candidate actions; may be empty
      * @param h          unused by this estimator (see the class javadoc)
+     * @param focalDrive focal drive to read the cells of; {@code null} is the {@code NONE} bucket
      * @return one estimate per candidate, in order; unmodifiable
      * @throws IllegalArgumentException if {@code candidates} is null or holds a null action
      */
     @Override
-    public List<Estimate> estimate(List<Action> candidates, double[] h) {
+    public List<Estimate> estimate(List<Action> candidates, double[] h, String focalDrive) {
         if (candidates == null) {
             throw new IllegalArgumentException("candidates must not be null");
         }
-        String drive = focalDrive.get();
         List<Estimate> out = new ArrayList<>(candidates.size());
         for (Action action : candidates) {
-            out.add(estimateOf(table.stats(keyOf(drive, action))));
+            out.add(estimateOf(table.stats(keyOf(focalDrive, action))));
         }
         return Collections.unmodifiableList(out);
     }
@@ -151,7 +149,7 @@ public final class OperantEstimator implements OperantStore {
         if (target == null) {
             return new Key(drive, null, 0, action.type);
         }
-        return new Key(drive, target, distanceBin(action.perception.distance), action.type);
+        return new Key(drive, target.name(), distanceBin(action.perception.distance), action.type);
     }
 
     /** Bin {@code i} holds distances in {@code (edge[i-1], edge[i]]}; the last bin is open-ended. */

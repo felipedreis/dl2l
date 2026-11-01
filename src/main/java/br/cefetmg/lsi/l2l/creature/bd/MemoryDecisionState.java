@@ -17,7 +17,7 @@ import java.util.UUID;
  * and not infer it from the selection type.
  *
  * <p>A row means memory was actually consulted, which is a meaningful denominator:
- * {@code ActionSelection.selectOne} stops as soon as a filter narrows the candidates to one, so an
+ * {@code FilterBasedActionSelector.selectOne} stops as soon as a filter narrows the candidates to one, so an
  * earlier filter deciding on its own means {@code MemoryFilter} never runs and no row is written.
  *
  * <p>{@code decided = false} rows are pass-throughs — memory had no object-level choice to make, or

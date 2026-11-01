@@ -152,15 +152,14 @@ public class CreatureActor implements Creature {
         // Register under this creature's key so components can find it via learningSettings(id.key).
         ext.configure(id.key, effective);
 
-        // Issue #110: the focal drive is published here each cycle by FullAppraisal, and read by the
-        // operant estimator's supplier. The estimator is a TypedActor facade, so Valuation (the writer,
-        // through OperantReturnSink) and FullAppraisal (the reader, from #104) share one table.
+        // Issue #110: the operant estimator is a TypedActor facade, so Valuation (the writer, through
+        // OperantReturnSink) and FullAppraisal (the reader, from #104) share one table. The focal drive
+        // is passed with each estimate call, not shared through a reference (#104, Q1).
         focalDriveInUse = effective.isFocalDriveEnabled();
-        final AtomicReference<String> focalDriveRef = focalDriveInUse ? new AtomicReference<>() : null;
         if (effective.isOperantEstimatorEnabled()) {
             operantStore = TypedActor.get(TypedActor.context())
                     .typedActorOf(new TypedProps<>(OperantStore.class,
-                            (Creator<OperantEstimator>) () -> new OperantEstimator(focalDriveRef::get)),
+                            (Creator<OperantEstimator>) () -> new OperantEstimator()),
                             "operantEstimator");
         }
 
@@ -208,7 +207,7 @@ public class CreatureActor implements Creature {
                 ? MLServiceExtension.of(context.system()) : null;
 
         SequentialId componentId = id;
-        for (Map.Entry<Class<?>, Function<SequentialId, CreatureComponent>> entry : componentFactories(effective, mlExt, wmFilterRef, focalDriveRef, ext.seed()).entrySet()) {
+        for (Map.Entry<Class<?>, Function<SequentialId, CreatureComponent>> entry : componentFactories(effective, mlExt, wmFilterRef, ext.seed()).entrySet()) {
             componentId = componentId.next();
             final SequentialId cid = componentId;
             final Class<?> componentType = entry.getKey();
@@ -255,7 +254,7 @@ public class CreatureActor implements Creature {
 
     private LinkedHashMap<Class<?>, Function<SequentialId, CreatureComponent>> componentFactories(
             LearningSettings effective, MLServiceExtension.Impl mlExt,
-            AtomicReference<WorldModelFilter> wmFilterRef, AtomicReference<String> focalDriveRef, long seed) {
+            AtomicReference<WorldModelFilter> wmFilterRef, long seed) {
         LinkedHashMap<Class<?>, Function<SequentialId, CreatureComponent>> factories = new LinkedHashMap<>();
         factories.put(Eye.class,                   Eye::new);
         factories.put(Body.class,                  Body::new);
@@ -264,7 +263,7 @@ public class CreatureActor implements Creature {
         factories.put(SensoryCortex.class,         SensoryCortex::new);
         factories.put(EffectorCortex.class,        EffectorCortex::new);
         factories.put(PartialAppraisal.class,      id -> new PartialAppraisal(id, effective));
-        factories.put(FullAppraisal.class,         id -> new FullAppraisal(id, effective, mlExt, wmFilterRef, seed, focalDriveRef));
+        factories.put(FullAppraisal.class,         id -> new FullAppraisal(id, effective, mlExt, wmFilterRef, seed));
         factories.put(HomeostaticRegulation.class, id -> new HomeostaticRegulation(id, effective));
         factories.put(Valuation.class,             id -> new Valuation(id, effective));
         factories.put(NeuromodulatorSystem.class,  NeuromodulatorSystem::new);

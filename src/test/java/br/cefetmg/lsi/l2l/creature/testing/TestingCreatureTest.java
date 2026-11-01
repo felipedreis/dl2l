@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class TestingCreatureTest {
 
     // For most tests we want a single deterministic filter: TARGET_DISTANCE returns the
-    // input list unless duplicates by (target, type) exist, so ActionSelection.selectOne
+    // input list unless duplicates by (target, type) exist, so FilterBasedActionSelector.selectOne
     // falls back to filtered.get(0) — which is the first action in the per-perception
     // priority list defined by FullAppraisal.actionsForPerception.
     private static LearningSettings deterministicSettings() {

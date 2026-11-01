@@ -136,10 +136,16 @@ public class Simulation {
         // drive; the LearningSettings constructor rejects the combination otherwise.
         boolean operantEstimatorEnabled = ls.hasPath("operantEstimatorEnabled") && ls.getBoolean("operantEstimatorEnabled");
 
+        // Issue #104 — which mechanism chooses the action: FILTER_BASED (default) or ARBITER.
+        LearningSettings.ActionSelectorMode actionSelector = LearningSettings.ActionSelectorMode.FILTER_BASED;
+        if (ls.hasPath("actionSelector")) {
+            actionSelector = LearningSettings.ActionSelectorMode.valueOf(ls.getString("actionSelector").toUpperCase(java.util.Locale.ROOT));
+        }
+
         return new LearningSettings(circadianEnabled, consolidationEnabled, enabledFilters,
                 expectancyEnabled, expectancyMode, neuromodulationEnabled, actionTendencyEnabled,
                 orexinEnabled, endocrineEnabled, tickGatedCognition, focalDriveEnabled,
-                operantEstimatorEnabled);
+                operantEstimatorEnabled, actionSelector);
     }
 
     public Long getNumHolders() {

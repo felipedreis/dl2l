@@ -10,7 +10,7 @@ import br.cefetmg.lsi.l2l.creature.common.Action;
  * @param action     the action that was executed (after the hysteresis gate)
  * @param h          drive levels at decision time, in {@link FocusTracker#DRIVES} order
  * @param focalDrive focal drive, or {@code null} when no episode was open
- * @param chosenQ    the arbiter's Q of the chosen candidate; {@code NaN} until #104
+ * @param chosenQ    the arbiter's Q of the executed action; {@code NaN} outside the arbiter mode (issue #104)
  */
 public record DecisionRecord(int cycle, Action action, double[] h, String focalDrive, double chosenQ) {
 

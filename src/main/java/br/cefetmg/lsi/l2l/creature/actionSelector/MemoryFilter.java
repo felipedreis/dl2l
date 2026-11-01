@@ -32,7 +32,7 @@ import java.util.Set;
  * condicionamento operante é acionado para selecionar a ação".
  *
  * <p>Before issue #88's follow-up this filter scored {@code (action, object)} pairs and returned a
- * <em>single</em> action, which ended the filter chain ({@link ActionSelection#selectOne} stops as
+ * <em>single</em> action, which ended the filter chain ({@link FilterBasedActionSelector#selectOne} stops as
  * soon as one candidate remains). Because engrams are laid for every action taken, memory almost
  * always held APPROACH traces and rarely EAT ones, so it recommended approaching and terminated
  * before the filters that would have chosen EAT ever ran: creatures with memory enabled ate
@@ -292,7 +292,7 @@ public class MemoryFilter implements ActionFilter {
     /**
      * Returns the last consultation's record and clears it, so a caller polling once per cognitive
      * cycle cannot persist the same decision twice on a cycle where this filter was never reached
-     * ({@code ActionSelection.selectOne} stops early once a filter narrows to one candidate).
+     * ({@code FilterBasedActionSelector.selectOne} stops early once a filter narrows to one candidate).
      */
     public Optional<Decision> takeLastDecision() {
         Decision d = lastDecision;

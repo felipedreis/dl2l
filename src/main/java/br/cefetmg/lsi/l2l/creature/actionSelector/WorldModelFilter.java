@@ -134,7 +134,7 @@ public class WorldModelFilter implements ActionFilter {
         if (scored.isEmpty())
             return actions;
 
-        // Return only the best-predicted action so ActionSelection records WORLD_MODEL
+        // Return only the best-predicted action so FilterBasedActionSelector records WORLD_MODEL
         // as the deciding filter and RandomFilter is bypassed for this cycle.
         scored.sort(Comparator.comparingDouble(s -> s.cost));
         return List.of(scored.get(0).action);
