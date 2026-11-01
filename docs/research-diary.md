@@ -202,6 +202,32 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
   GHCR-image trial (job 26) exited rc 1 after 4m26s; its SLURM log could not be read because ssh to the controller
   hung. Cause unknown.
 
+### 11-01 — #104: the arbiter on real runs (PR #126)
+
+- **What:** `ArbiterActionSelector` replaces the filter chain with decisiveness (θ = 0.8), a 3% random floor and a
+  Thompson draw (τ = 1) over the operant table; its chosen Q now feeds the pre-emption bootstrap of the episode buffer.
+  Plan: `docs/plans/issue-104-arbitration-filter.md`. These runs are smoke checks (one trial each, seed 104, 5 creatures,
+  UI on, local Docker), not hypothesis tests. Data: HF `p104_a2_check/` and `p104_a2_stress/`.
+- **Check 1** (`p104_a2_check`, A0 world, 15 min): `selection_type = ARBITER` on all 133,205 decisions, 0 deaths, and no drive
+  ever reached 2.0 (max hunger 1.28, against 2.83 in the #110 run of the same length). So no episode opened (`focal_drive` is
+  NULL on every decision, `episode_return` has 0 rows) and the operant table was never trained: this run measured the
+  action-tendency prior plus near-uniform draws, not a learned habit. Actions: WANDER 54.5%, APPROACH 27.2%, SLEEP 14.6%,
+  EAT 3.8% (the #110 run: 28.9 / 64.1 / 6.1 / 0.9%). Decisions per 15 min were equal (133,205 vs 133,399).
+- **Stress runs** (`p104_a2_stress`, 30 min, scarce food: 10 + 10 nutritive apples respawning after 60 s, and 20 + 20 with
+  no respawn): every creature died (5 of 5 in both; mean lifetime 255 s and 205 s), hunger at or above 2.0 in 76% and 59% of
+  samples. Episodes opened and closed: `DEATH`, `PREEMPTED` and `TIMED_OUT` rows, no NaN values.
+- **Now verified on real data:** the death close-out (all 5 creatures in each condition have `DEATH` rows, one episode each;
+  mean value -0.47 and -1.19), and a non-zero pre-emption bootstrap, so the arbiter's chosen Q reaches the buffer: 149 of 161
+  pre-empted sleep steps (30 of 30 in finite food) and 56 of 315 pre-empted hunger steps (0 of 197 in finite food). Cycle rate
+  is unchanged with a trained table (about 29.7 decisions per creature per second, against 29.6).
+- **Not established:** the zero hunger bootstraps (plausibly because most hunger-episode actions earn about 0 value in these
+  worlds, not checked); behaviour of a creature that stays alive while learning (these worlds kill everyone within 3-5.5
+  min); anything about regulation or survival against A1 (that is #109). Most steps in the scarce world are `TIMED_OUT`
+  hunger steps (26,532 in the 5 creatures), i.e. creatures wander without finding food.
+- **Process findings:** a code review (Opus) found no correctness bug in the core; open items are configuration
+  (issue #125) and an uncaught timeout on the blocking operant estimate call. `Self` had no `equals`, so every
+  self-perception made a new operant cell that never learned; fixed by keying object types by name.
+
 ---
 
 ## Which results still stand

@@ -1,0 +1,23 @@
+# Issue #104 stress check (not an A-arm experiment): the first A2 check (p104_a2_check) never opened an episode because no
+# drive reached 2.0. These two worlds push drives past 2.0 so the episode close-out, the operant table, the arbiter's
+# chosenQ bootstrap and (finite food) the death close-out are exercised on a real run. See the PR #126 comment.
+name: p104_a2_stress
+trials: 1
+seeds: [104]
+conditions:
+- key: scarce_regrow
+  simulation: simulations/p104_a2_scarce_regrow.conf
+  label: A2 arbiter, scarce food with slow respawn
+  color: '#d8733b'
+- key: finite_food
+  simulation: simulations/p104_a2_finite_food.conf
+  label: A2 arbiter, finite food (no respawn)
+  color: '#7a3bd8'
+data_dir: ml/data_p104_a2_stress
+extract:
+  format: parquet
+  backup: true
+  tables: all
+upload:
+  enabled: true
+  prefix: p104_a2_stress
