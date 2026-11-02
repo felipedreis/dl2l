@@ -476,4 +476,23 @@ class EpisodeBufferTest {
 
         assertEquals(1, c.all().size());
     }
+
+    // Found by the p105 check run (finite_food, creature 343): kill() reads the death cycle from the memory system, and
+    // FullAppraisal can record one more decision before it is stopped, so the last step can be later than the death
+    // cycle. The open episode must still be written, not lost.
+    @Test
+    void deathAtAnEarlierCycleThanTheLastStepStillWritesTheOpenEpisode() {
+        EpisodeBuffer b = new EpisodeBuffer(zeroSetPoint(), GAMMA, 1);
+        Collector c = new Collector();
+        b.addSink(c);
+
+        b.onFocus(new FocusEvent.Opened(3, HUNGER));
+        decide(b, 3, ActionType.WANDER, HUNGRY, HUNGER, Double.NaN);
+        decide(b, 4, ActionType.WANDER, HUNGRY, HUNGER, Double.NaN);
+        decide(b, 5, ActionType.WANDER, HUNGRY, HUNGER, Double.NaN);
+        b.onDeath(4, new double[] {7, 0, 0, 0});
+
+        assertEquals(3, c.all().size());
+        c.all().forEach(step -> assertEquals(CloseType.DEATH, step.closeType()));
+    }
 }
