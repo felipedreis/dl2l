@@ -1,0 +1,23 @@
+# Issue #105 check run (not a hypothesis test): the arbitration decision table on the p104 stress worlds, whose
+# creatures open and close episodes and all die, so every episode step is joined. Purpose: verify the DoD (the table
+# extracts to Parquet from a short run) and size it for #109/#115. Results are measured on the Parquet, not claimed here.
+name: p105_decision_check
+trials: 1
+seeds: [104]
+conditions:
+- key: scarce_regrow
+  simulation: simulations/p104_a2_scarce_regrow.conf
+  label: A2 arbiter, scarce food with slow respawn (decision check)
+  color: '#d8733b'
+- key: finite_food
+  simulation: simulations/p104_a2_finite_food.conf
+  label: A2 arbiter, finite food, no respawn (decision check)
+  color: '#7a3bd8'
+data_dir: ml/data_p105_decision_check
+extract:
+  format: parquet
+  backup: true
+  tables: all
+upload:
+  enabled: true
+  prefix: p105_decision_check

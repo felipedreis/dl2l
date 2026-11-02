@@ -333,6 +333,67 @@ TABLES = {
     ),
 }
 
+# Issue #105: one row per arbiter decision (actionSelector = ARBITER), with the closed-episode step it became, if
+# any. The join is on (creature_key, cycle = step_cycle). episode_return is first de-duplicated to one row per key,
+# so the join never multiplies a decision. The join is an extraction-time view: the raw row carries no episode id
+# (arrow tables are append-only, and the episode closes after the decision).
+_ARBITRATION_JOINED = ["episode_id", "episode_drive", "close_type", "steps_to_close", "bootstrap", "realised_value"]
+
+
+def _arbitration_post_process(df):
+    """Warn and null, never abort: an exception here would skip every later table. Where the joined step's action
+    differs from the decision's executed action, the cycle clocks diverged, so the joined columns are nulled on those
+    rows (calibration then never reads a mismatched value). The decision columns are left intact."""
+    import sys
+
+    # Duplicate (creature_key, step_cycle) rows in episode_return mean an EpisodeBuffer invariant broke: the join keeps
+    # the first of them, and says so.
+    dup = df["episode_dup_n"].fillna(1) > 1
+    n_dup = int(dup.sum())
+    if n_dup:
+        creatures = sorted(int(c) for c in df.loc[dup, "creature_key"].unique())
+        print(f"  WARNING: arbitration_decisions: {n_dup} decision(s) matched several episode_return rows "
+              f"(creatures {creatures}); the first row of each was kept", file=sys.stderr)
+
+    mismatch = df["episode_action"].notna() & (df["episode_action"] != df["executed_action"])
+    n = int(mismatch.sum())
+    if n:
+        creatures = sorted(int(c) for c in df.loc[mismatch, "creature_key"].unique())
+        print(f"  WARNING: arbitration_decisions: {n} joined row(s) disagree with the episode's action "
+              f"(creatures {creatures}); their episode columns are set to NULL", file=sys.stderr)
+        # Integer columns go to the nullable Int64 first: assigning None into an int64 column would turn it into float64.
+        for col in ("episode_id", "steps_to_close"):
+            df[col] = df[col].astype("Int64")
+        for col in _ARBITRATION_JOINED:
+            df.loc[mismatch, col] = None
+    return df.drop(columns=["episode_action", "episode_dup_n"])
+
+
+TABLES["arbitration_decisions"] = (
+    """
+    SELECT d.creature_key, d.seq, d.time_ms, d.cycle, d.focal_drive, d.efficiency, d.affordable_controller,
+           d.candidate_count, d.deciding_controller, d.n_consulted, d.source, d.n_tied_at_max,
+           d.chosen_action, d.chosen_object_type, d.chosen_q, d.chosen_se, d.chosen_sigma,
+           d.best_q, d.best_se, d.best_sigma, d.runnerup_q, d.runnerup_se, d.runnerup_sigma,
+           d.executed_action, d.executed_object_type, d.executed_source, d.executed_q, d.executed_se, d.executed_sigma,
+           d.operant_conf, d.operant_q, d.operant_se, d.operant_sigma,
+           d.episodic_conf, d.episodic_q, d.episodic_se, d.episodic_sigma,
+           d.planner_conf, d.planner_q, d.planner_se, d.planner_sigma,
+           er.episode_id, er.drive AS episode_drive, er.close_type, er.steps_to_close,
+           er.bootstrap, er.value AS realised_value,
+           er.action AS episode_action, er.dup_n AS episode_dup_n
+    FROM data.arbitration_decision_state d
+    LEFT JOIN (
+        SELECT DISTINCT ON (creature_key, step_cycle) *,
+               COUNT(*) OVER (PARTITION BY creature_key, step_cycle) AS dup_n
+        FROM data.episode_return
+        ORDER BY creature_key, step_cycle, seq
+    ) er ON er.creature_key = d.creature_key AND er.step_cycle = d.cycle
+    ORDER BY d.creature_key, d.seq
+    """,
+    _arbitration_post_process,
+)
+
 # Run setup (issue #95): one row per holder JVM with the root seed. Absent from raw dumps
 # written before that change, so extract.py skips it when the view does not exist.
 TABLES["run_info"] = (
@@ -351,7 +412,7 @@ TABLE_ORDER = [
     "perceptions", "smell_perceptions", "mouth_interactions", "sleep_episodes", "neuromodulators",
     "endocrine", "expectancy", "engrams", "consolidation_episodes",
     "consolidation_batches", "memory_traces", "conditioning", "memory_decisions",
-    "episode_returns", "run_info",
+    "episode_returns", "arbitration_decisions", "run_info",
 ]
 
 assert set(TABLE_ORDER) == set(TABLES)

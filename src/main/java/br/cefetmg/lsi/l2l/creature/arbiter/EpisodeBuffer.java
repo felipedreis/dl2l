@@ -230,21 +230,27 @@ public final class EpisodeBuffer {
      * are written at their own cycles, then the open segment is written as a death. Suspended episodes were
      * already written at their cut and only lose their bookkeeping.
      *
-     * @param cycle            cycle of death
+     * @param cycle            cycle of death; if the open segment already has a later step, the death is taken to be at
+     *                         that step
      * @param lethalDeviation  the outcome that killed the creature, in {@link FocusTracker#DRIVES} order
      * @throws IllegalArgumentException if {@code lethalDeviation} has the wrong dimension or a non-finite entry
      */
     public void onDeath(int cycle, double[] lethalDeviation) {
         checkVector(lethalDeviation, "lethalDeviation");
+        // The caller reads the death cycle before the creature's components stop, and the arbiter can record one
+        // more decision in between, so the last step may be later than the cycle it was given. The death is then
+        // at that step: closing earlier would reject the segment and lose the whole open episode.
+        int deathCycle = open == null || open.steps.isEmpty() ? cycle
+                : Math.max(cycle, open.steps.get(open.steps.size() - 1).cycle);
         if (open != null || !pending.isEmpty()) {
-            addToOutcomes(cycle, lethalDeviation);
+            addToOutcomes(deathCycle, lethalDeviation);
         }
         while (!pending.isEmpty()) {
             Pending p = pending.pollFirst();
             emit(close(p.segment, p.closeCycle, p.closeType));
         }
         if (open != null) {
-            emit(close(open, cycle, ClosedStep.CloseType.DEATH));
+            emit(close(open, deathCycle, ClosedStep.CloseType.DEATH));
             open = null;
         }
         suspended.clear();

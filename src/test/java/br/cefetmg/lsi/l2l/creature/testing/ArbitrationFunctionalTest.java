@@ -5,6 +5,7 @@ import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
+import br.cefetmg.lsi.l2l.creature.bd.ArbitrationDecisionState;
 import br.cefetmg.lsi.l2l.creature.bd.ChosenActionState;
 import br.cefetmg.lsi.l2l.creature.bd.EpisodeReturnState;
 import br.cefetmg.lsi.l2l.creature.common.Action;
@@ -192,5 +193,78 @@ class ArbitrationFunctionalTest {
             assertEquals(wanderUnderPain, r.getBootstrap(), 1e-9,
                     "the cut decision was the lone WANDER under pain: its Q, not zero, is the bootstrap");
         }
+    }
+
+    // ---- 17. Issue #105: one arbitration row per cycle, next to its chosen-action row --------
+
+    private static List<ArbitrationDecisionState> arbitrationRows(TestingHarness h) {
+        return h.bdSink().ofType(ArbitrationDecisionState.class);
+    }
+
+    @Test
+    void anArbiterCycleWritesOneRowWhoseExecutedActionIsTheChosenActionOfThatCycle() {
+        TestingHarness h = harness(a2());
+        h.creature().emotions().regulate(Constants.HUNGER, 3.0);
+        int cycles = 300;
+        for (int i = 0; i < cycles; i++) {
+            h.creature().setPosition(CREATURE_AT);
+            seeApple(h);
+            h.tick();
+        }
+
+        List<ChosenActionState> chosenRows = chosen(h);
+        List<ArbitrationDecisionState> rows = arbitrationRows(h);
+        assertFalse(rows.isEmpty(), "the arbiter decided at least once");
+        assertEquals(chosenRows.size(), rows.size(), "one arbitration row per chosen-action row");
+        for (int i = 0; i < rows.size(); i++) {
+            assertEquals(i, rows.get(i).getSeq());
+            assertEquals(i + 1L, rows.get(i).getCycle(), "decision cycles are contiguous from 1");
+            assertEquals(chosenRows.get(i).getAction().name(), rows.get(i).getExecutedAction(),
+                    "the executed action is the one the same cycle's chosen-action row records");
+        }
+    }
+
+    // ---- 18. Issue #105: the join key of the episode return, and the executed action on both sides ----
+
+    @Test
+    void everyEpisodeStepHasExactlyOneArbitrationRowAtItsCycleWithTheSameExecutedAction() {
+        TestingHarness h = harness(a2());
+        h.creature().emotions().regulate(Constants.HUNGER, 3.0);
+        trainApproachOnRedApple(h, Constants.HUNGER);
+        trainApproachOnRedApple(h, Constants.PAIN);
+        for (int i = 0; i < 5; i++) {
+            seeApple(h);
+            h.tick();
+        }
+        h.creature().emotions().regulate(Constants.PAIN, 6.0);
+        for (int i = 0; i < 10; i++) {
+            seeApple(h);
+            h.tick();
+        }
+
+        List<EpisodeReturnState> steps = h.bdSink().ofType(EpisodeReturnState.class);
+        assertFalse(steps.isEmpty(), "an episode closed in the harness");
+        List<ArbitrationDecisionState> rows = arbitrationRows(h);
+        for (EpisodeReturnState step : steps) {
+            List<ArbitrationDecisionState> atCycle = rows.stream()
+                    .filter(r -> r.getCreatureKey() == step.getCreatureKey() && r.getCycle() == step.getStepCycle())
+                    .toList();
+            assertEquals(1, atCycle.size(), "one arbitration row at cycle " + step.getStepCycle());
+            assertEquals(step.getAction(), atCycle.get(0).getExecutedAction(),
+                    "the step's action is the executed action of its decision");
+        }
+    }
+
+    // ---- 19. Issue #105: flag off writes nothing ----------------------------------------------
+
+    @Test
+    void aFilterBasedRunWritesNoArbitrationRows() {
+        TestingHarness h = harness(a0());
+        h.creature().emotions().regulate(Constants.HUNGER, 3.0);
+        seeApple(h);
+        for (int i = 0; i < 20; i++) {
+            h.tick();
+        }
+        assertTrue(arbitrationRows(h).isEmpty(), "no arbiter, no decision rows");
     }
 }
