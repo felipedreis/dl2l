@@ -453,3 +453,48 @@ Commit order:
   be indistinguishable from "nothing affordable", which cannot happen (the operant table is always affordable).
 - **Q11. Gate overrides: should the row of an overridden cycle be flagged in `chosen_action_state` too (#104 Q8)?**
   Recommendation: **no**, the new row's `executed_source` is the record; `actions` stays untouched.
+
+## Deviations (implementation, 2026-11-02)
+
+Recorded against the plan above. Each one is a decision taken while implementing, not a change of scope.
+
+1. **ARBITER does not require `focalDriveEnabled`.** The plan (section 4) says settings validation guarantees the
+   tracker exists in ARBITER mode. `LearningSettings` does not check that (it checks `operantEstimatorEnabled`, the
+   filters and neuromodulation only). `FullAppraisal.sendArbiterMessages` returns early without the tracker, so the
+   executed estimate is now resolved before that check, and the row is written in ARBITER mode with the tracker off.
+   The cycle is taken from `cognitiveCycle`, which equals the memory system's decision cycle, to avoid a blocking ask
+   in that mode.
+2. **Functional test 11 (gate override) is dropped.** Holding the creature in SLEEP deterministically was not
+   established. The mapping it would cover (`executed_source` = OTHER_CANDIDATE, executed Q) is covered by
+   `ExecutedEstimateTest` (test 6) and by the round-trip test's override row.
+3. **Functional test 10** checks the join (one row per step at its cycle, same executed action). It does not check
+   `bootstrap == executed_q` for the cut step; the existing #104 test 15 covers the bootstrap.
+4. **Functional test 9** asserts one arbitration row per chosen-action row and contiguous cycles from 1, not the literal
+   300 (the harness tick count is not a fixed row count).
+5. **Test 2 (same choices as before the label fix)** is a replay of the documented draw order by hand over 1,000
+   decisions, not a comparison with pre-fix output (the pre-fix code is no longer in the tree).
+6. **No statistical or luck-dependent assertions in the new tests**, per the rule from the user: the closed-form
+   THOMPSON share (test 1, second half), the spread of picks over tied candidates, and the 4-SE bounds are not asserted.
+   Those properties are left to the p105 check-run metrics (source shares, tie counts, EPSILON share).
+7. **Seed-dependent cases use pinned seeds, not test-time searches.** Seed 5 (close pair, THOMPSON pick) and seed 7
+   (three candidates, lowest-Q draw) were found once by a scan outside the repo and pinned with assertions on the
+   outcome. An earlier version searched for a seed at test time and hung (the unbounded loop never finds a THOMPSON
+   pick with the well-trained fixture: the Q gap is ~1.9 against an SE of ~0.2). Pre-existing #104 helpers that
+   search for seeds (`seedWhoseFirstUniformIs`) are unchanged.
+8. **`ArrowIpcBackendTest` allocator limit 8 MB -> 16 MB.** The 23rd table adds to the fixed default-vector baseline,
+   so 8 MB was spent before any row was written. The breach itself (25 MB of rows) still throws.
+9. **Duplicate `(creature_key, step_cycle)` in `episode_return`** is handled in the SQL by `DISTINCT ON`, so the row
+   count cannot change. No separate warning is printed for duplicates; the mismatch warning (clock divergence) is.
+10. **Golden tests 13-15** are four tests in `ArrowExtractGoldenTest`: the join key, an old dump without the new raw
+    tables, a disagreeing step, and a duplicate step.
+11. **Commit 3 includes the test-timeout and seed-pinning changes** to `ArbiterTest` (commit 1's file), because they were
+    found and fixed while committing step 3.
+12. **Not done in this issue:** the research diary entry (left to the lead, per the instructions); the check run
+    itself (not executed by the implementer, see below).
+
+## Check run (p105_decision_check): results pending
+
+Spec: `experiments/p105_decision_check.yml` (validated with `scripts/validate_experiment.py`: OK). Not executed by the
+implementer. The lead runs it with
+`cd ansible && ansible-playbook -i inventories/local run-experiment.yml -e experiment=p105_decision_check`,
+then checks the Parquet as listed in the Verification section above. No result is claimed in this note.
