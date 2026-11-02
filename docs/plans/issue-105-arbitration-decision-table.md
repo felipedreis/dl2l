@@ -492,12 +492,30 @@ Recorded against the plan above. Each one is a decision taken while implementing
 12. **Not done in this issue:** the research diary entry (left to the lead, per the instructions); the check run
     itself (not executed by the implementer, see below).
 
-## Check run (p105_decision_check): results pending
+## Check run (p105_decision_check): results (2026-11-02)
 
-Spec: `experiments/p105_decision_check.yml` (validated with `scripts/validate_experiment.py`: OK). Not executed by the
-implementer. The lead runs it with
-`cd ansible && ansible-playbook -i inventories/local run-experiment.yml -e experiment=p105_decision_check`,
-then checks the Parquet as listed in the Verification section above. No result is claimed in this note.
+`experiments/p105_decision_check.yml`: the two p104 stress worlds (`scarce_regrow`, `finite_food`), 1 trial each, 5 creatures,
+seed 104, local Docker, UI on, data in `ml/data_p105_decision_check` and on HF under `p105_decision_check/`. A verification
+run, not a hypothesis test.
+
+- **Done-when met:** `arbitration_decisions.parquet` extracts in both conditions: 38,320 and 30,580 rows, equal to the `actions`
+  row counts, cycles contiguous from 1 for every creature, no NaN in `chosen_q` / `executed_q`.
+- **Join to `episode_return`:** every decision with a focal drive has an episode id (27,803 of 27,803 in scarce_regrow) except
+  71 of 18,838 in finite_food, all of creature 343's last cycles, which exposed the death close-out bug fixed afterwards (see
+  below); no unfocused decision got an episode id.
+- **Sources:** SINGLE 65.7% / 82.5% of decisions (after the pre-filters only one candidate is left, mostly WANDER);
+  EPSILON is 3.1% / 3.2% of the rows with at least two candidates, as designed; GREEDY 22.9% / 15.7%, THOMPSON 10.3% / 1.1%
+  of all rows. Rows whose candidates are all tied at the highest Q (uninformed): 12.3% / 15.3%. Gate overrides
+  (`executed_source != CHOSEN`): 140 and 114 rows (0.37% each), all OTHER_CANDIDATE, none VALUE_OF.
+- **Descriptive z** = (realised value - executed Q) / sqrt(SE^2 + sigma^2), by close type (mean / variance), for #115 to read,
+  no claim: TIMED_OUT -0.007 / 0.008 and -0.002 / 0.001 (about 96% of joined rows, APPROACH steps zeroed by the timeout rule);
+  PREEMPTED 0.141 / 0.143 and 0.077 / 0.018; REGULATED 0.288 / 0.014 and 0.31 / 0.022 (12 and 14 rows); DEATH -4.7 / 170 and
+  -10.6 / 389 (the lethal deviation is a large surprise to a table that never saw one).
+- **Size and rate:** `arbitration_decision_state.arrow` is 14.6 and 11.6 MB, 5.5% and 5.4% of the raw dump (plan estimate
+  ~6%); 29.7 and 29.6 decisions per creature-lifetime-second, the rate of the p104 stress run, so no slowdown.
+- **Bug found:** creature 343 of finite_food had 71 decisions with a focal drive and no `episode_return` or `DEATH` rows
+  (9 of the 10 creatures were complete). Its last hunger episode opened at cycle 6310 after a TIMED_OUT close at 6308 and the
+  creature died at 6380. Fixed and reproduced in tests (next section). The fix was not re-verified on a real run.
 
 ## Fixes after the code review and the check run (2026-11-02)
 

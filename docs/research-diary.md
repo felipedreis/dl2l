@@ -228,6 +228,27 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
   (issue #125) and an uncaught timeout on the blocking operant estimate call. `Self` had no `equals`, so every
   self-perception made a new operant cell that never learned; fixed by keying object types by name.
 
+### 11-02 — #105: the arbiter's decisions as a table, and a death close-out bug (PR to follow)
+
+- **What:** one row per arbiter decision (`arbitration_decision_state`, extracted as `arbitration_decisions`): focal drive,
+  efficiency, the chosen, best and runner-up estimates, the executed action's estimate after the hysteresis gate, the
+  exploration source, and per-controller columns (operant filled, episodic and planner declared and NULL). The episode id and
+  the realised value are joined at extraction on `(creature, cycle = step_cycle)`. Plan: `docs/plans/issue-105-arbitration-decision-table.md`.
+  The `GREEDY`/`THOMPSON` label now counts a pick as greedy when its Q equals the maximum (ties included); the row also
+  stores the number of candidates tied at the maximum.
+- **Check run** (`p105_decision_check`, the two p104 stress worlds, 1 trial each, seed 104, data on HF `p105_decision_check/`):
+  38,320 and 30,580 decision rows, one per decision, joined to the episode steps. In these worlds 66% and 83% of decisions
+  have a single candidate after the pre-filters; the epsilon floor is 3.1% and 3.2% of multi-candidate rows; 12-15% of
+  decisions are all-tied (uninformed); 0.37% were overridden by the gate. The descriptive z of realised values against the
+  executed Q is about 0 with variance 0.001-0.008 on the TIMED_OUT steps (about 96% of joined rows), and -4.7 / -10.6 on death
+  steps. This is material for #115 (calibration), not a result.
+- **Bug found in #110 and fixed:** a creature's last hunger episode (71 decisions) had no `DEATH` rows. `kill()` reads the death
+  cycle, the arbiter can record one more decision before the components stop, and `EpisodeBuffer.close` rejected a step later
+  than the close; the exception was swallowed. Now the death closes at the later cycle. Reproduced in two tests first. The real
+  race is the hypothesis; the logs were gone. Not re-run on a simulation.
+- **Rule:** tests must be deterministic; anything that cannot be tested that way is measured in the experiment metrics instead.
+  The older #104 `ArbiterTest` seed-search and statistical-bound cases still break it (to clean up separately).
+
 ---
 
 ## Which results still stand
