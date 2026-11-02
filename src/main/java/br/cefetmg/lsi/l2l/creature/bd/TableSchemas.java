@@ -1,11 +1,13 @@
 package br.cefetmg.lsi.l2l.creature.bd;
 
 import br.cefetmg.lsi.l2l.common.SequentialId;
+import br.cefetmg.lsi.l2l.creature.arbiter.Arbiter;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
@@ -376,7 +378,61 @@ public final class TableSchemas {
                 col("trial_id", ColType.STRING, RunInfoState::getTrialId),
                 col("started_at", ColType.INT64, RunInfoState::getStartedAt))));
 
-return List.copyOf(all);
+        // Issue #105: one row per arbiter decision. The per-controller block is generated from the enum
+        // (operant_*, episodic_*, planner_*), so a new controller adds columns here and nowhere else.
+        all.add(table("arbitration_decision_state", ArbitrationDecisionState.class, ArbitrationDecisionState::getId,
+                concat(
+                        List.<Column<ArbitrationDecisionState>>of(
+                                col("creature_key", ColType.INT64, ArbitrationDecisionState::getCreatureKey),
+                                col("seq", ColType.INT64, ArbitrationDecisionState::getSeq),
+                                col("time_ms", ColType.INT64, ArbitrationDecisionState::getTimeMs),
+                                col("cycle", ColType.INT64, ArbitrationDecisionState::getCycle),
+                                col("focal_drive", ColType.STRING, ArbitrationDecisionState::getFocalDrive),
+                                col("efficiency", ColType.DOUBLE, ArbitrationDecisionState::getEfficiency),
+                                col("affordable_controller", ColType.STRING, ArbitrationDecisionState::getAffordableController),
+                                col("candidate_count", ColType.INT32, ArbitrationDecisionState::getCandidateCount),
+                                col("deciding_controller", ColType.STRING, ArbitrationDecisionState::getDecidingController),
+                                col("n_consulted", ColType.INT32, ArbitrationDecisionState::getNConsulted),
+                                col("source", ColType.STRING, ArbitrationDecisionState::getSource),
+                                col("n_tied_at_max", ColType.INT32, ArbitrationDecisionState::getNTiedAtMax),
+                                col("chosen_action", ColType.STRING, ArbitrationDecisionState::getChosenAction),
+                                col("chosen_object_type", ColType.STRING, ArbitrationDecisionState::getChosenObjectType),
+                                col("chosen_q", ColType.DOUBLE, ArbitrationDecisionState::getChosenQ),
+                                col("chosen_se", ColType.DOUBLE, ArbitrationDecisionState::getChosenSe),
+                                col("chosen_sigma", ColType.DOUBLE, ArbitrationDecisionState::getChosenSigma),
+                                col("best_q", ColType.DOUBLE, ArbitrationDecisionState::getBestQ),
+                                col("best_se", ColType.DOUBLE, ArbitrationDecisionState::getBestSe),
+                                col("best_sigma", ColType.DOUBLE, ArbitrationDecisionState::getBestSigma),
+                                col("runnerup_q", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getRunnerUpQ())),
+                                col("runnerup_se", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getRunnerUpSe())),
+                                col("runnerup_sigma", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getRunnerUpSigma())),
+                                col("executed_action", ColType.STRING, ArbitrationDecisionState::getExecutedAction),
+                                col("executed_object_type", ColType.STRING, ArbitrationDecisionState::getExecutedObjectType),
+                                col("executed_source", ColType.STRING, ArbitrationDecisionState::getExecutedSource),
+                                col("executed_q", ColType.DOUBLE, ArbitrationDecisionState::getExecutedQ),
+                                col("executed_se", ColType.DOUBLE, ArbitrationDecisionState::getExecutedSe),
+                                col("executed_sigma", ColType.DOUBLE, ArbitrationDecisionState::getExecutedSigma)),
+                        controllerColumns())));
+
+        return List.copyOf(all);
+    }
+
+    /** Issue #105: per consulted-or-not controller, {@code <name>_conf}, {@code _q}, {@code _se}, {@code _sigma}; null when absent. */
+    private static List<Column<ArbitrationDecisionState>> controllerColumns() {
+        List<Column<ArbitrationDecisionState>> cols = new ArrayList<>();
+        for (Arbiter.ControllerType c : Arbiter.ControllerType.values()) {
+            String name = c.name().toLowerCase(Locale.ROOT);
+            cols.add(col(name + "_conf", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getConf(c))));
+            cols.add(col(name + "_q", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getControllerQ(c))));
+            cols.add(col(name + "_se", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getControllerSe(c))));
+            cols.add(col(name + "_sigma", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getControllerSigma(c))));
+        }
+        return cols;
+    }
+
+    /** {@code NaN} is the in-memory "absent" of a double; the table stores it as a null (Arrow validity bit). */
+    private static Object nanToNull(double v) {
+        return Double.isNaN(v) ? null : v;
     }
 
     @SafeVarargs

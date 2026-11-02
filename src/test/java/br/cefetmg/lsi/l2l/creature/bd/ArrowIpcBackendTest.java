@@ -160,7 +160,9 @@ class ArrowIpcBackendTest {
         // measured empirically. 8MB comfortably covers that baseline; a large batchRows (so
         // nothing auto-flushes/releases memory mid-write) means enough rows of a long string
         // column must eventually exceed the remaining headroom.
-        ArrowIpcBackend backend = new ArrowIpcBackend(tmp, null, 8, 1_000_000, CompressionUtil.CodecType.NO_COMPRESSION);
+        // 16 MB, not 8: the 23rd table (issue #105) adds its default-capacity vectors to the fixed ~5 MB baseline, so
+        // 8 MB was already spent before any row was written. The breach itself (50,000 x 500 chars = 25 MB) still throws.
+        ArrowIpcBackend backend = new ArrowIpcBackend(tmp, null, 16, 1_000_000, CompressionUtil.CodecType.NO_COMPRESSION);
         try {
             String longValue = "x".repeat(500);
             List<PersistenceState> states = new ArrayList<>();

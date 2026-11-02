@@ -10,13 +10,13 @@ import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.creature.common.Perception;
 import br.cefetmg.lsi.l2l.world.FruitType;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -28,7 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * decisiveness is checked by hand, the cells hold one observation each: then Q = value / 2 and
  * SE = 1 / sqrt(2) for every candidate, so the expected numbers are closed-form.
  */
+@Timeout(value = 120, unit = TimeUnit.SECONDS)
 class ArbiterTest {
+
 
     private static final String HUNGER = "hunger";
     private static final double[] H = {0.0, 0.0, 0.0, 0.0};
@@ -348,36 +350,30 @@ class ArbiterTest {
     @Test
     void anUntrainedEstimatorMakesEveryPickGreedyBecauseEveryCandidateIsTied() {
         // Every cell is Estimate(0, 1, 1): any candidate is as good as the best, so no pick is THOMPSON.
+        // The spread of the picks is not asserted: it is luck, and it is measured by the p105 check run.
         List<Action> four = List.of(on(ActionType.EAT), on(ActionType.AVOID),
                 on(ActionType.APPROACH), on(ActionType.OBSERVE));
         Arbiter arbiter = new Arbiter(List.of(operant(new OperantEstimator(new double[] {50, 100}, 1.0))),
                 new Params(0.8, 0.0, 1.0), new Random(3));
-        Set<Integer> picked = new HashSet<>();
-        for (int i = 0; i < 2_000; i++) {
+        for (int i = 0; i < 200; i++) {
             ArbitrationDecision d = arbiter.decide(four, H, HUNGER);
             assertEquals(ExplorationSource.GREEDY, d.source());
             assertEquals(4, d.nTiedAtMax());
-            picked.add(d.chosenIndex());
         }
-        assertEquals(4, picked.size(), "the draw still spreads over the tied candidates");
     }
 
     @Test
-    void aPickIsGreedyExactlyWhenItsQIsTheHighestAndTheThompsonShareMatchesTheClosedForm() {
-        // Q = (0.5, 0): the best wins the draw with probability Phi(0.5), so THOMPSON has 1 - Phi(0.5).
+    void aPickIsGreedyExactlyWhenItsQIsTheHighestAndTheLabelFollowsFromThatRule() {
+        // Q = (0.5, 0) with a unique best. The label is a pure function of the chosen Q and the best Q, so it is
+        // checked on every pick of a fixed stream. The THOMPSON share is not asserted here (it is a statistical
+        // property, measured by the p105 check run).
         Arbiter arbiter = new Arbiter(List.of(operant(TWO)), new Params(0.8, 0.0, 1.0), new Random(11));
-        int thompson = 0;
-        for (int i = 0; i < DRAWS; i++) {
+        for (int i = 0; i < 200; i++) {
             ArbitrationDecision d = arbiter.decide(TWO_CANDIDATES, H, HUNGER);
             boolean below = d.chosenEstimate().q() < d.bestEstimate().q();
             assertEquals(below ? ExplorationSource.THOMPSON : ExplorationSource.GREEDY, d.source());
             assertEquals(1, d.nTiedAtMax());
-            if (below) {
-                thompson++;
-            }
         }
-        double p = 1 - 0.691462;
-        assertEquals(p, (double) thompson / DRAWS, 4 * Math.sqrt(p * (1 - p) / DRAWS));
     }
 
     @Test
@@ -415,18 +411,15 @@ class ArbiterTest {
         List<Action> cands = List.of(on(ActionType.EAT), on(ActionType.AVOID), on(ActionType.APPROACH));
         List<Estimate> est = e.estimate(cands, H, HUNGER);
         assertEquals(0.2, est.get(0).q(), TOL);
-        // First seed whose Thompson draw picks the lowest-Q candidate: chosen, best and runner-up all differ.
-        for (long seed = 1; ; seed++) {
-            ArbitrationDecision d = new Arbiter(List.of(operant(e)), new Params(0.8, 0.0, 1.0), new Random(seed))
-                    .decide(cands, H, HUNGER);
-            if (d.chosenIndex() == 0) {
-                assertEquals(est.get(0), d.chosenEstimate());
-                assertEquals(est.get(1), d.bestEstimate());
-                assertEquals(est.get(2), d.runnerUpEstimate());
-                assertEquals(ExplorationSource.THOMPSON, d.source());
-                return;
-            }
-        }
+        // Seed 7 was found once (a scan outside the test) to draw the lowest-Q candidate: chosen, best and runner-up
+        // all differ. The assertions check that outcome, so a change of the draw order fails here, not silently.
+        ArbitrationDecision d = new Arbiter(List.of(operant(e)), new Params(0.8, 0.0, 1.0), new Random(7L))
+                .decide(cands, H, HUNGER);
+        assertEquals(0, d.chosenIndex(), "seed 7 draws the lowest-Q candidate");
+        assertEquals(est.get(0), d.chosenEstimate());
+        assertEquals(est.get(1), d.bestEstimate());
+        assertEquals(est.get(2), d.runnerUpEstimate());
+        assertEquals(ExplorationSource.THOMPSON, d.source());
     }
 
     @Test

@@ -42,7 +42,7 @@ class TableSchemasTest {
      */
     private static final List<String> ADDED_SINCE_PORT = List.of(
             "action_probability_state", "memory_decision_state", "drive_outcome_state", "episode_return",
-            "run_info");
+            "run_info", "arbitration_decision_state");
 
     private static final List<String> EXPECTED_TABLE_ORDER =
             Stream.concat(PORTED_TABLE_ORDER.stream(), ADDED_SINCE_PORT.stream()).toList();
@@ -106,6 +106,15 @@ class TableSchemasTest {
         t.put("episode_return", List.of("creature_key", "seq", "time_ms", "episode_id", "drive", "close_type",
                 "step_cycle", "steps_to_close", "action", "object_type", "distance", "h_hunger", "h_sleep",
                 "h_pain", "h_tedium", "g_hunger", "g_sleep", "g_pain", "g_tedium", "bootstrap", "value"));
+        // Issue #105: one row per arbiter decision; the controller block is generated from the enum.
+        t.put("arbitration_decision_state", List.of("creature_key", "seq", "time_ms", "cycle", "focal_drive",
+                "efficiency", "affordable_controller", "candidate_count", "deciding_controller", "n_consulted",
+                "source", "n_tied_at_max", "chosen_action", "chosen_object_type", "chosen_q", "chosen_se",
+                "chosen_sigma", "best_q", "best_se", "best_sigma", "runnerup_q", "runnerup_se", "runnerup_sigma",
+                "executed_action", "executed_object_type", "executed_source", "executed_q", "executed_se",
+                "executed_sigma", "operant_conf", "operant_q", "operant_se", "operant_sigma", "episodic_conf",
+                "episodic_q", "episodic_se", "episodic_sigma", "planner_conf", "planner_q", "planner_se",
+                "planner_sigma"));
         return t;
     }
 
@@ -136,7 +145,8 @@ class TableSchemasTest {
             Map.entry("memory_decision_state", MemoryDecisionState.class),
             Map.entry("run_info", RunInfoState.class),
             Map.entry("drive_outcome_state", DriveOutcomeState.class),
-            Map.entry("episode_return", EpisodeReturnState.class));
+            Map.entry("episode_return", EpisodeReturnState.class),
+            Map.entry("arbitration_decision_state", ArbitrationDecisionState.class));
 
     @Test
     void tablesAreThePorted22FollowedByAnyLaterAdditions() {
@@ -188,6 +198,24 @@ class TableSchemasTest {
         assertEquals("consolidation_batch_stat", TableSchemas.forState(new ConsolidationBatchStat()).table());
         assertEquals("neuromodulator_state_log", TableSchemas.forState(new NeuromodulatorStateLog()).table());
         assertEquals("endocrine_state_log", TableSchemas.forState(new EndocrineStateLog()).table());
+    }
+
+    @Test
+    void forStateResolvesTheArbitrationDecisionState() {
+        assertEquals("arbitration_decision_state", TableSchemas.forState(new ArbitrationDecisionState()).table());
+    }
+
+    @Test
+    void everyArbitrationGetterIsTotalOnADefaultConstructedRow() {
+        // NaN-backed doubles and the enum-keyed arrays must read as null in the table, never throw.
+        TableSchemas.TableDef<ArbitrationDecisionState> def = (TableSchemas.TableDef<ArbitrationDecisionState>)
+                TableSchemas.forState(new ArbitrationDecisionState());
+        ArbitrationDecisionState blank = new ArbitrationDecisionState();
+        for (TableSchemas.Column<ArbitrationDecisionState> c : def.columns()) {
+            c.getter().apply(blank);
+        }
+        assertNull(getterValue("arbitration_decision_state", "runnerup_q", blank));
+        assertNull(getterValue("arbitration_decision_state", "operant_conf", blank));
     }
 
     @Test
