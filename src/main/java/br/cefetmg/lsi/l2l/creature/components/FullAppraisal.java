@@ -25,6 +25,7 @@ import br.cefetmg.lsi.l2l.creature.ml.MLServiceExtension;
 import br.cefetmg.lsi.l2l.creature.ml.ModelContract;
 import br.cefetmg.lsi.l2l.creature.ml.WorldModelEngine;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
+import br.cefetmg.lsi.l2l.creature.bd.ArbitrationDecisionState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
 import br.cefetmg.lsi.l2l.creature.bd.ChosenActionState;
@@ -77,6 +78,10 @@ public class FullAppraisal extends CreatureComponent {
     private ArbitrationDecision cycleDecision;
     /** Issue #105: the executed action's estimates this cycle, after the gate; null outside the arbiter mode. */
     private ExecutedEstimate cycleExecuted;
+    /** Issue #105: the decision cycle of this cycle's row (equals {@code DecisionRecord.cycle}, the join key). */
+    private long cycleDecisionCycle;
+    /** Issue #105: orders {@link ArbitrationDecisionState} rows within a creature. */
+    private long arbitrationDecisionSeq = 0;
     private MemorySystem memorySystem;
     private WorldModelEngine worldModelEngine;
     private WorldModelFilter worldModelFilter;
@@ -341,6 +346,14 @@ public class FullAppraisal extends CreatureComponent {
      * so with the flag off nothing is sent.
      */
     private void sendArbiterMessages(Action action) {
+        // Issue #105: the executed action's estimates, resolved once and shared by the decision record and the
+        // persisted arbitration decision. Resolved before the tracker check: ARBITER does not require
+        // focalDriveEnabled, and the row must exist in that mode too. Null outside the arbiter mode.
+        cycleExecuted = cycleDecision == null ? null
+                : ExecutedEstimate.of(cycleDecision, action, a -> arbiterSelection.valueOf(a, cycleContext));
+        // The cognitive cycle is the decision cycle: FullAppraisal ticks the memory system once per cycle, right
+        // after cognitiveCycle++. Using the field avoids a blocking ask in the no-tracker mode.
+        cycleDecisionCycle = cognitiveCycle;
         if (focusTracker == null) {
             return;
         }
@@ -348,10 +361,6 @@ public class FullAppraisal extends CreatureComponent {
         if (!cycleFocusEvents.isEmpty()) {
             memorySystem.recordFocusEvents(List.copyOf(cycleFocusEvents));
         }
-        // Issue #105: the executed action's estimates, resolved once and shared by the decision record and
-        // (in #105's row) the persisted arbitration decision. Null outside the arbiter mode.
-        cycleExecuted = cycleDecision == null ? null
-                : ExecutedEstimate.of(cycleDecision, action, a -> arbiterSelection.valueOf(a, cycleContext));
         memorySystem.recordDecision(new DecisionRecord(cycle, action, cycleLevels, focalDrive,
                 cycleExecuted != null ? cycleExecuted.deciding().q() : Double.NaN));
     }
@@ -448,7 +457,16 @@ public class FullAppraisal extends CreatureComponent {
         ChosenActionState chosenActionState = new ChosenActionState(change,
                 actionSelection.lastSelectionType(), action.type, action.perception.id,
                 inferenceMs, focalDrive);
-        persist(change, chosenActionState);
+        if (cycleDecision != null && cycleExecuted != null) {
+            // Issue #105: the arbitration row goes in the same batch as the cycle's chosen-action row (#84 atomicity).
+            persist(change, chosenActionState, ArbitrationDecisionState.of(id.key, arbitrationDecisionSeq++,
+                    System.currentTimeMillis(), cycleDecisionCycle, focalDrive, cycleContext.efficiency(),
+                    cycleDecision, cycleExecuted));
+        } else {
+            persist(change, chosenActionState);
+        }
+        cycleDecision = null;
+        cycleExecuted = null;
         persistMemoryDecision();
     }
 
