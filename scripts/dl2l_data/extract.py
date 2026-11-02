@@ -50,6 +50,14 @@ except ImportError:  # running as a standalone script, not `-m dl2l_data.extract
     from dl2l_data.manifest import update_manifest
     from dl2l_data.tables import TABLE_ORDER, TABLES
 
+# Tables whose raw .arrow file is absent from a dump written before the change that added it. Each maps the table
+# name to its raw view name. A missing view skips the table with a note; the zero-row rule (no Parquet) is unchanged.
+OPTIONAL_RAW = {
+    "run_info": "run_info",                                    # issue #95
+    "episode_returns": "episode_return",                       # issue #110
+    "arbitration_decisions": "arbitration_decision_state",     # issue #105
+}
+
 
 def _open_raw_views(raw_dir: Path):
     """Opens an embedded DuckDB and registers each raw Arrow IPC stream file (one per
@@ -213,9 +221,9 @@ def main():
     for table in TABLE_ORDER:
         if table == "creatures":
             continue
-        if table == "run_info" and not _has_view(conn, table):
-            print("  (no run_info in this raw dump: written before seeding, issue #95)",
-                  file=sys.stderr)
+        if table in OPTIONAL_RAW and not _has_view(conn, OPTIONAL_RAW[table]):
+            print(f"  (no {OPTIONAL_RAW[table]} in this raw dump: written before the change that added it; "
+                  f"{table} skipped)", file=sys.stderr)
             continue
         sql, post_process = TABLES[table]
         df = conn.execute(sql).df()
