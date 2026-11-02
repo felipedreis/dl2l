@@ -346,18 +346,18 @@ public class FullAppraisal extends CreatureComponent {
      * so with the flag off nothing is sent.
      */
     private void sendArbiterMessages(Action action) {
-        // Issue #105: the executed action's estimates, resolved once and shared by the decision record and the
-        // persisted arbitration decision. Resolved before the tracker check: ARBITER does not require
-        // focalDriveEnabled, and the row must exist in that mode too. Null outside the arbiter mode.
-        cycleExecuted = cycleDecision == null ? null
-                : ExecutedEstimate.of(cycleDecision, action, a -> arbiterSelection.valueOf(a, cycleContext));
-        // The cognitive cycle is the decision cycle: FullAppraisal ticks the memory system once per cycle, right
-        // after cognitiveCycle++. Using the field avoids a blocking ask in the no-tracker mode.
-        cycleDecisionCycle = cognitiveCycle;
         if (focusTracker == null) {
             return;
         }
+        // Issue #105: the executed action's estimates, resolved once and shared by the decision record and the
+        // persisted arbitration decision. Null outside the arbiter mode, which requires the focus tracker
+        // (LearningSettings: ARBITER requires the operant estimator, which requires focalDriveEnabled).
+        cycleExecuted = cycleDecision == null ? null
+                : ExecutedEstimate.of(cycleDecision, action, a -> arbiterSelection.valueOf(a, cycleContext));
+        // The decision cycle is read from the memory system, the value DecisionRecord and episode_return.step_cycle
+        // carry, so the row's cycle is the join key by construction and not by two counters staying equal.
         int cycle = (int) memorySystem.currentDecisionCycle();
+        cycleDecisionCycle = cycle;
         if (!cycleFocusEvents.isEmpty()) {
             memorySystem.recordFocusEvents(List.copyOf(cycleFocusEvents));
         }

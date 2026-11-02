@@ -368,12 +368,21 @@ class ArbiterTest {
         // checked on every pick of a fixed stream. The THOMPSON share is not asserted here (it is a statistical
         // property, measured by the p105 check run).
         Arbiter arbiter = new Arbiter(List.of(operant(TWO)), new Params(0.8, 0.0, 1.0), new Random(11));
+        int thompson = 0;
+        int greedy = 0;
         for (int i = 0; i < 200; i++) {
             ArbitrationDecision d = arbiter.decide(TWO_CANDIDATES, H, HUNGER);
             boolean below = d.chosenEstimate().q() < d.bestEstimate().q();
             assertEquals(below ? ExplorationSource.THOMPSON : ExplorationSource.GREEDY, d.source());
             assertEquals(1, d.nTiedAtMax());
+            if (below) {
+                thompson++;
+            } else {
+                greedy++;
+            }
         }
+        // The fixed stream (seed 11) contains both kinds of pick, so the rule above was exercised on both branches.
+        assertTrue(thompson > 0 && greedy > 0, "seed 11 must give both a THOMPSON and a GREEDY pick");
     }
 
     @Test

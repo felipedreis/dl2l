@@ -130,6 +130,11 @@ class ArbitrationDecisionRoundTripTest {
         assertEquals(greedy.estimates().get(1).q(), (Double) cols.get("executed_q").get(2), 0.0);
 
         assertTrue(cols.get("operant_conf").stream().allMatch(v -> v != null), "the one controller was consulted");
+        // The operant block of the first row is the controller's estimate of the executed (= chosen) action.
+        assertEquals(thompson.consultations().get(0).conf(), (Double) cols.get("operant_conf").get(0), 0.0);
+        assertEquals(thompson.chosenEstimate().q(), (Double) cols.get("operant_q").get(0), 0.0);
+        assertEquals(thompson.chosenEstimate().se(), (Double) cols.get("operant_se").get(0), 0.0);
+        assertEquals(thompson.chosenEstimate().sigma(), (Double) cols.get("operant_sigma").get(0), 0.0);
         assertNull(cols.get("episodic_conf").get(0), "not consulted");
         assertNull(cols.get("planner_q").get(0), "not consulted");
         assertNull(cols.get("episodic_q").get(2));

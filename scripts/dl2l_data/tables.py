@@ -346,15 +346,27 @@ def _arbitration_post_process(df):
     rows (calibration then never reads a mismatched value). The decision columns are left intact."""
     import sys
 
+    # Duplicate (creature_key, step_cycle) rows in episode_return mean an EpisodeBuffer invariant broke: the join keeps
+    # the first of them, and says so.
+    dup = df["episode_dup_n"].fillna(1) > 1
+    n_dup = int(dup.sum())
+    if n_dup:
+        creatures = sorted(int(c) for c in df.loc[dup, "creature_key"].unique())
+        print(f"  WARNING: arbitration_decisions: {n_dup} decision(s) matched several episode_return rows "
+              f"(creatures {creatures}); the first row of each was kept", file=sys.stderr)
+
     mismatch = df["episode_action"].notna() & (df["episode_action"] != df["executed_action"])
     n = int(mismatch.sum())
     if n:
         creatures = sorted(int(c) for c in df.loc[mismatch, "creature_key"].unique())
         print(f"  WARNING: arbitration_decisions: {n} joined row(s) disagree with the episode's action "
               f"(creatures {creatures}); their episode columns are set to NULL", file=sys.stderr)
+        # Integer columns go to the nullable Int64 first: assigning None into an int64 column would turn it into float64.
+        for col in ("episode_id", "steps_to_close"):
+            df[col] = df[col].astype("Int64")
         for col in _ARBITRATION_JOINED:
             df.loc[mismatch, col] = None
-    return df.drop(columns=["episode_action"])
+    return df.drop(columns=["episode_action", "episode_dup_n"])
 
 
 TABLES["arbitration_decisions"] = (
@@ -369,10 +381,11 @@ TABLES["arbitration_decisions"] = (
            d.planner_conf, d.planner_q, d.planner_se, d.planner_sigma,
            er.episode_id, er.drive AS episode_drive, er.close_type, er.steps_to_close,
            er.bootstrap, er.value AS realised_value,
-           er.action AS episode_action
+           er.action AS episode_action, er.dup_n AS episode_dup_n
     FROM data.arbitration_decision_state d
     LEFT JOIN (
-        SELECT DISTINCT ON (creature_key, step_cycle) *
+        SELECT DISTINCT ON (creature_key, step_cycle) *,
+               COUNT(*) OVER (PARTITION BY creature_key, step_cycle) AS dup_n
         FROM data.episode_return
         ORDER BY creature_key, step_cycle, seq
     ) er ON er.creature_key = d.creature_key AND er.step_cycle = d.cycle

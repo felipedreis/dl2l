@@ -214,6 +214,7 @@ class ArbitrationFunctionalTest {
 
         List<ChosenActionState> chosenRows = chosen(h);
         List<ArbitrationDecisionState> rows = arbitrationRows(h);
+        assertFalse(rows.isEmpty(), "the arbiter decided at least once");
         assertEquals(chosenRows.size(), rows.size(), "one arbitration row per chosen-action row");
         for (int i = 0; i < rows.size(); i++) {
             assertEquals(i, rows.get(i).getSeq());

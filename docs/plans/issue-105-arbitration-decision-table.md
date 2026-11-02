@@ -458,12 +458,12 @@ Commit order:
 
 Recorded against the plan above. Each one is a decision taken while implementing, not a change of scope.
 
-1. **ARBITER does not require `focalDriveEnabled`.** The plan (section 4) says settings validation guarantees the
-   tracker exists in ARBITER mode. `LearningSettings` does not check that (it checks `operantEstimatorEnabled`, the
-   filters and neuromodulation only). `FullAppraisal.sendArbiterMessages` returns early without the tracker, so the
-   executed estimate is now resolved before that check, and the row is written in ARBITER mode with the tracker off.
-   The cycle is taken from `cognitiveCycle`, which equals the memory system's decision cycle, to avoid a blocking ask
-   in that mode.
+1. ~~**ARBITER does not require `focalDriveEnabled`.**~~ **Withdrawn after the code review.** The implementer's claim was
+   wrong: `LearningSettings` requires `operantEstimatorEnabled` for ARBITER and `focalDriveEnabled` for the operant
+   estimator, so the focus tracker always exists in ARBITER mode. The reordering done on that premise (executed estimate
+   before the tracker check; the row's cycle from `cognitiveCycle`) was reverted: `sendArbiterMessages` checks the tracker
+   first again, and the row's cycle is the one read from the memory system, the value `DecisionRecord` and
+   `episode_return.step_cycle` carry, so the join key is a single value by construction.
 2. **Functional test 11 (gate override) is dropped.** Holding the creature in SLEEP deterministically was not
    established. The mapping it would cover (`executed_source` = OTHER_CANDIDATE, executed Q) is covered by
    `ExecutedEstimateTest` (test 6) and by the round-trip test's override row.
@@ -498,3 +498,23 @@ Spec: `experiments/p105_decision_check.yml` (validated with `scripts/validate_ex
 implementer. The lead runs it with
 `cd ansible && ansible-playbook -i inventories/local run-experiment.yml -e experiment=p105_decision_check`,
 then checks the Parquet as listed in the Verification section above. No result is claimed in this note.
+
+## Fixes after the code review and the check run (2026-11-02)
+
+- **Death close-out dropped the open episode (found by the check run, finite_food creature 343: 71 decisions with a focal
+  drive and no `episode_return` rows, no `DEATH` rows).** `CreatureActor.kill()` reads the death cycle from the memory
+  system, and the last recorded step can be later than it; `EpisodeBuffer.close` then threw `IllegalStateException`, which
+  `MemorySystemActor.closeOnDeath` swallowed (logged), returning no steps. `EpisodeBuffer.onDeath` now closes at the later
+  of the given cycle and the last step's cycle. Reproduced first in `EpisodeBufferTest` and `MemorySystemEpisodeDeathTest`
+  (both failed before the fix). That the real race (one more decision recorded after `kill()` read the cycle) is what
+  happened to creature 343 is a hypothesis; the data cannot show it (simulation logs are gone after teardown).
+- Deviation 1 withdrawn and the cycle source restored (above).
+- Extraction: `episode_id` and `steps_to_close` are cast to nullable `Int64` before nulling mismatched rows (assigning
+  `None` into an int64 column made them float64); a duplicate `(creature_key, step_cycle)` in `episode_return` warns again
+  (a window count rides along the de-duplicating join). Golden tests check the integer dtype and the warning.
+- `ArrowIpcBackendTest`: the comment explaining the 8 -> 16 MB limit now carries the measured numbers (28 tables, ~9.2 MB
+  baseline in total, the new table ~1.4 MiB).
+- Tests: non-empty assertion in the one-row-per-cycle functional test; the greedy-label test asserts that its pinned stream
+  (seed 11) contains both a THOMPSON and a GREEDY pick; the round-trip test asserts the `operant_*` block.
+- Not done (decided with the user): the older #104 `ArbiterTest` cases with a seed-search helper and statistical bounds
+  stay for a separate cleanup; the draw-order test still replays the algorithm by hand.

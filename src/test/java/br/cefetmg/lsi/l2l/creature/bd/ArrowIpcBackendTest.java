@@ -155,13 +155,12 @@ class ArrowIpcBackendTest {
 
     @Test
     void allocatorLimitBreachThrowsRatherThanSilentlyGrowingPastTheCap(@TempDir Path tmp) throws Exception {
-        // Constructing all 22 tables' default-capacity vectors costs ~5MB regardless of
-        // batchRows (Arrow's own fixed default per-vector initial capacity, not ours) -
-        // measured empirically. 8MB comfortably covers that baseline; a large batchRows (so
-        // nothing auto-flushes/releases memory mid-write) means enough rows of a long string
-        // column must eventually exceed the remaining headroom.
-        // 16 MB, not 8: the 23rd table (issue #105) adds its default-capacity vectors to the fixed ~5 MB baseline, so
-        // 8 MB was already spent before any row was written. The breach itself (50,000 x 500 chars = 25 MB) still throws.
+        // Constructing every table's default-capacity vectors costs a fixed amount regardless of batchRows (Arrow's own
+        // default per-vector initial capacity, not ours). Measured with TableSchemas.ALL at 28 tables: ~9.2 MB in total
+        // (the issue #105 table is the widest, ~1.4 MiB; without it the baseline was ~7.4 MiB, just under the old 8 MB
+        // limit). 16 MB covers it with ~7 MiB to spare. A large batchRows (so nothing auto-flushes/releases memory
+        // mid-write) means enough rows of a long string column must eventually exceed the remaining headroom: the
+        // breach itself (50,000 x 500 chars = 25 MB) still throws.
         ArrowIpcBackend backend = new ArrowIpcBackend(tmp, null, 16, 1_000_000, CompressionUtil.CodecType.NO_COMPRESSION);
         try {
             String longValue = "x".repeat(500);

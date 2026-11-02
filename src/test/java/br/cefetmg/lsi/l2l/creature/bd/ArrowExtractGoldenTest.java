@@ -286,6 +286,8 @@ class ArrowExtractGoldenTest {
                 "assert len(df) == 8, len(df)",
                 "bad = df[(df.creature_key == 1) & (df.cycle == 2)].iloc[0]",
                 "assert pd.isna(bad['episode_id']) and pd.isna(bad['realised_value'])",
+                "assert pd.api.types.is_integer_dtype(df['episode_id']), df['episode_id'].dtype",
+                "assert pd.api.types.is_integer_dtype(df['steps_to_close']), df['steps_to_close'].dtype",
                 "assert bad['executed_action'] == 'EAT'",
                 "good = df[(df.creature_key == 1) & (df.cycle == 3)].iloc[0]",
                 "assert good['episode_id'] == 10",
@@ -294,7 +296,7 @@ class ArrowExtractGoldenTest {
     }
 
     @Test
-    void aDuplicateEpisodeStepDoesNotMultiplyTheDecisionRows(@TempDir Path tmp) throws Exception {
+    void aDuplicateEpisodeStepWarnsAndDoesNotMultiplyTheDecisionRows(@TempDir Path tmp) throws Exception {
         assumeEnvironmentReady();
         Path rawDir = tmp.resolve("raw");
         Files.createDirectories(rawDir);
@@ -303,8 +305,10 @@ class ArrowExtractGoldenTest {
         // Two steps at the same (creature, cycle): the first by seq is joined, the join stays one row per decision.
         writeArbitrationDump(rawDir, List.of(step(1L, 0L, 10L, 2L, "EAT"), step(1L, 1L, 99L, 2L, "EAT")));
 
-        extractOrFail(rawDir, outDir);
+        String output = extractOrFail(rawDir, outDir);
 
+        assertTrue(output.contains("WARNING: arbitration_decisions: 1 decision(s) matched several episode_return rows"),
+                output);
         verifyWithPython(String.join("\n",
                 "import pandas as pd, sys",
                 "df = pd.read_parquet(sys.argv[1])",
