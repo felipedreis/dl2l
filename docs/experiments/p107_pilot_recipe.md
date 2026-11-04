@@ -17,16 +17,14 @@ One trial per condition, seed 10700 (disjoint from all earlier and campaign seed
 (`arbiter_a1.conf`), `a2` (`arbiter_a2.conf`), `a2_finite_food` (`p104_a2_finite_food.conf`), 5 creatures, cap 120 min
 (30 min for `a2_finite_food`).
 
-**Deviation from the plan:** the plan ran the gate on the local Mac; the user asked for the Pi cluster. The gate is a
-qualitative check, so the environment does not change its criteria, but cycle rate on the Pis is unmeasured and may be
-lower, which can reduce episodes per creature-hour and make G1 pessimistic. A FAIL/MARGINAL on G1 is therefore
-reported with the observed cycles per creature-second, and is not by itself grounds for option 1–3 without that
-context. Wall-clock per trial and raw size are recorded under G5. Stage 2 is not started by this recipe.
+**Environment:** local (Mac, UI on), as in the plan. The gate was first attempted on the Pi cluster at the user's
+request; the Pi run was abandoned (the NFS share served from the Mac wedged, and the Pi job's data never reached disk),
+so it is not part of this experiment's data. G5 records the environment.
 
 ## 3. Procedure
 
 1. `python3 scripts/validate_experiment.py experiments/p107_pilot_gate.yml`.
-2. `cd ansible && ansible-playbook -i inventories/pi run-experiment.yml -e experiment=p107_pilot_gate`.
+2. `cd ansible && ansible-playbook -i inventories/local run-experiment.yml -e experiment=p107_pilot_gate`.
 3. Evaluate G1–G5 with the plan's queries over `ml/data_p107_pilot_gate/<cond>/trial_1/*.parquet`.
 4. Results into the plan and `docs/research-diary.md`; verify the HF upload by file count.
 5. Stop on FAIL or MARGINAL and bring the numbers.

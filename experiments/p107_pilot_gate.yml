@@ -1,5 +1,5 @@
 # Arbiter-ladder pilot, stage 1 (gate): docs/plans/arbiter-ladder-pilot.md. Descriptive, not a hypothesis test.
-# Run on the Pi cluster at the user's request (the plan's default was local); G5 records the environment.
+# Run locally (the plan's default); a first attempt on the Pi cluster was abandoned. G5 records the environment.
 name: p107_pilot_gate
 trials: 1
 seeds: [10700]
