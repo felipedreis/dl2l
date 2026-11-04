@@ -1,0 +1,23 @@
+# Arbiter-ladder pilot, stage 1 (gate): docs/plans/arbiter-ladder-pilot.md. Descriptive, not a hypothesis test.
+# Run on the Pi cluster at the user's request (the plan's default was local); G5 records the environment.
+name: p107_pilot_gate
+trials: 1
+seeds: [10700]
+conditions:
+- key: a1
+  simulation: simulations/arbiter_a1.conf
+  label: A1 focus tracker (gate)
+  color: '#3b7dd8'
+- key: a2
+  simulation: simulations/arbiter_a2.conf
+  label: A2 arbiter over the operant table (gate)
+  color: '#d8733b'
+- key: a2_finite_food
+  simulation: simulations/p104_a2_finite_food.conf
+  label: A2, finite food (death close-out re-check)
+  color: '#7a3bd8'
+image:
+  source: build
+data_dir: ml/data_p107_pilot_gate
+extract: {format: parquet, backup: true, tables: all}
+upload: {enabled: true, prefix: p107_pilot_gate}
