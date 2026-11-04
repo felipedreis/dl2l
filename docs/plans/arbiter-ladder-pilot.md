@@ -1,6 +1,6 @@
 # Plan: arbiter-ladder pilot (A0 / A1 / A2), feeding #106 and #107
 
-Status: **draft v2, awaiting approval**. Date: 2026-11-02. Base: `main` at `bd19886` (#102–#105, #110 and the #127
+Status: **approved 2026-11-04; stage 1 (gate) run, G1 FAILED, stage 2 not started (see "Stage 1 results")**. Date: 2026-11-02. Base: `main` at `bd19886` (#102–#105, #110 and the #127
 death close-out fix merged). Issues served: #107 (sample size from a pilot), #106 (analysis "runs end to end on a pilot's
 data"); precedes #108 (A1 campaign) and #109 (A2 campaign). Story map: `docs/plans/2026-q4-research-plan.md`.
 
@@ -130,6 +130,30 @@ here; the options, each changing an arm definition and therefore needing its own
 4. Run A2 untrained. Not viable for #109: its done-when needs operant calibration, which needs closed episodes.
 
 Because options 1–2 change A1/A0, stage 2 does not start after a FAIL, even for A0/A1.
+
+### Stage 1 results (run 2026-11-04, local Mac, seed 10700, data on HF `p107_pilot_gate/`)
+
+Recipe: `docs/experiments/p107_pilot_recipe.md`. All three conditions ran and extracted with no failures (the first
+attempt on the Pi cluster was abandoned: the NFS share served from the Mac wedged and that job's data never reached disk;
+none of it is used). Creature observed time 7,187–7,188 s in `a1` and `a2` (all 10 alive at the cap), 196–217 s in
+`a2_finite_food` (all 5 died).
+
+| Gate | Result |
+|---|---|
+| **G1** A2 opens and closes episodes | **FAIL.** 5 of 5 creatures: 0 closed episodes, focused share 0.0, over 217,509-217,655 decisions each; `a2/episode_returns.parquet` absent |
+| **G2** table informs focused choices | not evaluable (no focused decisions) |
+| **G3** A1 telemetry | **PASS.** 5 creatures, focused share 0.175-0.221 per creature, 1,997 episodes in `episode_returns` (PREEMPTED 199,211 steps, REGULATED 13,061, TIMED_OUT 5,427) |
+| **G4** death close-out | **PASS.** For all 5 dead creatures focused decisions = episode steps (3,245 / 3,225 / 3,225 / 3,225 / 3,564), each with >= 1 DEATH row (29 / 9 / 9 / 9 / 123); no mismatch warning in extraction |
+| **G5** operational | `run_info.seed` = 10700 in all three. Raw dump 5.8 GB (`a1`), 6.9 GB (`a2`), 0.2 GB (`a2_finite_food`) with `backup: true`; about 30 decisions per creature-second |
+
+Drives (`drives.parquet`, all rows): A1 max hunger 3.79, sleep 3.74, pain 0.18, tedium 4.03, mean hunger 1.34. A2 max hunger
+1.59, sleep 1.34, pain 0.18, tedium 0.47, mean hunger 0.30. Predictions: P2 held on survival and focus share (17.5-22.1%,
+predicted 10-20%) but A1's max hunger (3.79) exceeded the predicted ~3; P3 (A2 opens "a handful" of episodes) was too optimistic:
+it opened none. As in p104, with an untrained table the arbiter feeds the creature well enough that no drive reaches
+theta_on, so nothing closes and nothing trains.
+
+**Per the plan, stage 2 does not start.** The options in "On a FAIL or MARGINAL G1" each change an arm definition and need
+their own plan and a #107 revision; which one is the user's decision.
 
 ## Stage 2: pilot (3 arms × 3 trials), only after a PASS
 
