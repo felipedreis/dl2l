@@ -98,7 +98,7 @@ class TableSchemasTest {
         t.put("memory_decision_state", List.of("candidates", "creature_key", "cycle",
                 "decided", "engram_window", "object_type", "objects", "returned",
                 "runnerup_score", "scored", "seq", "time_ms", "winning_score", "key", "sequential"));
-        t.put("run_info", List.of("seed", "seed_generated", "trial_id", "started_at"));
+        t.put("run_info", List.of("seed", "seed_generated", "trial_id", "started_at", "focus_theta_on", "focus_theta_off"));
         // Issue #100.
         t.put("drive_outcome_state", List.of("action", "creature_key", "d_hunger", "d_pain", "d_sleep",
                 "d_tedium", "object_type", "seq", "time_ms", "key", "sequential", "changestimulusstate_id"));

@@ -1,5 +1,6 @@
 package br.cefetmg.lsi.l2l.cluster.settings;
 
+import br.cefetmg.lsi.l2l.creature.arbiter.FocusTracker;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
@@ -85,6 +86,11 @@ public class LearningSettings implements Serializable {
 
     // --- Operant estimator behind the episode close-out (issue #110) — default-off; needs focalDriveEnabled ---
     private final boolean operantEstimatorEnabled;
+
+    // --- Focus tracker thresholds (follow-up to the p107 gate; docs/plans/focus-tracker-theta-config.md) ---
+    // Defaults are FocusTracker.Params.defaults(), so every existing configuration is unchanged.
+    private final double focusThetaOn;
+    private final double focusThetaOff;
 
     /**
      * Which mechanism chooses the action (issue #104). {@code FILTER_BASED} is the legacy filter chain;
@@ -207,6 +213,39 @@ public class LearningSettings implements Serializable {
                             boolean focalDriveEnabled,
                             boolean operantEstimatorEnabled,
                             ActionSelectorMode actionSelector) {
+        this(circadianEnabled, consolidationEnabled, enabledFilters, expectancyEnabled, expectancyMode,
+                neuromodulationEnabled, actionTendencyEnabled, orexinEnabled, endocrineEnabled, tickGatedCognition,
+                focalDriveEnabled, operantEstimatorEnabled, actionSelector,
+                FocusTracker.Params.defaults().thetaOn(), FocusTracker.Params.defaults().thetaOff());
+    }
+
+    /**
+     * @param focusThetaOn  urgency at which a drive opens an episode ({@code FocusTracker.Params.thetaOn})
+     * @param focusThetaOff urgency at or below which the focal episode closes as regulated
+     * @throws IllegalArgumentException additionally if {@code 0 <= focusThetaOff < focusThetaOn} does not hold
+     *                                  (hysteresis: an episode must not close the cycle it opens)
+     */
+    public LearningSettings(boolean circadianEnabled,
+                            boolean consolidationEnabled,
+                            List<ActionSelectionType> enabledFilters,
+                            boolean expectancyEnabled,
+                            ExpectancyMode expectancyMode,
+                            boolean neuromodulationEnabled,
+                            boolean actionTendencyEnabled,
+                            boolean orexinEnabled,
+                            boolean endocrineEnabled,
+                            boolean tickGatedCognition,
+                            boolean focalDriveEnabled,
+                            boolean operantEstimatorEnabled,
+                            ActionSelectorMode actionSelector,
+                            double focusThetaOn,
+                            double focusThetaOff) {
+        if (!(focusThetaOff >= 0 && focusThetaOff < focusThetaOn)) {
+            throw new IllegalArgumentException("focus thresholds need 0 <= thetaOff < thetaOn, got thetaOn="
+                    + focusThetaOn + ", thetaOff=" + focusThetaOff);
+        }
+        this.focusThetaOn  = focusThetaOn;
+        this.focusThetaOff = focusThetaOff;
         if (operantEstimatorEnabled && !focalDriveEnabled) {
             throw new IllegalArgumentException("operantEstimatorEnabled requires focalDriveEnabled");
         }
@@ -238,6 +277,16 @@ public class LearningSettings implements Serializable {
         this.tickGatedCognition     = tickGatedCognition;
         this.focalDriveEnabled      = focalDriveEnabled;
         this.operantEstimatorEnabled = operantEstimatorEnabled;
+    }
+
+    /** Urgency at which a drive opens an episode (default 2.0). Only read when {@link #isFocalDriveEnabled()}. */
+    public double getFocusThetaOn() {
+        return focusThetaOn;
+    }
+
+    /** Urgency at or below which the focal episode closes as regulated (default 0.5). */
+    public double getFocusThetaOff() {
+        return focusThetaOff;
     }
 
     /**

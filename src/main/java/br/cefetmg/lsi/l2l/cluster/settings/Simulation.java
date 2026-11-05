@@ -1,5 +1,6 @@
 package br.cefetmg.lsi.l2l.cluster.settings;
 
+import br.cefetmg.lsi.l2l.creature.arbiter.FocusTracker;
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.common.Seeds;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
@@ -142,10 +143,16 @@ public class Simulation {
             actionSelector = LearningSettings.ActionSelectorMode.valueOf(ls.getString("actionSelector").toUpperCase(java.util.Locale.ROOT));
         }
 
+        // Focus tracker thresholds (docs/plans/focus-tracker-theta-config.md); absent = FocusTracker defaults.
+        double focusThetaOn  = ls.hasPath("focusThetaOn")  ? ls.getDouble("focusThetaOn")
+                : FocusTracker.Params.defaults().thetaOn();
+        double focusThetaOff = ls.hasPath("focusThetaOff") ? ls.getDouble("focusThetaOff")
+                : FocusTracker.Params.defaults().thetaOff();
+
         return new LearningSettings(circadianEnabled, consolidationEnabled, enabledFilters,
                 expectancyEnabled, expectancyMode, neuromodulationEnabled, actionTendencyEnabled,
                 orexinEnabled, endocrineEnabled, tickGatedCognition, focalDriveEnabled,
-                operantEstimatorEnabled, actionSelector);
+                operantEstimatorEnabled, actionSelector, focusThetaOn, focusThetaOff);
     }
 
     public Long getNumHolders() {

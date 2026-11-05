@@ -376,7 +376,9 @@ public final class TableSchemas {
                 col("seed", ColType.INT64, RunInfoState::getSeed),
                 col("seed_generated", ColType.BOOLEAN, RunInfoState::isSeedGenerated),
                 col("trial_id", ColType.STRING, RunInfoState::getTrialId),
-                col("started_at", ColType.INT64, RunInfoState::getStartedAt))));
+                col("started_at", ColType.INT64, RunInfoState::getStartedAt),
+                col("focus_theta_on", ColType.DOUBLE, RunInfoState::getFocusThetaOn),
+                col("focus_theta_off", ColType.DOUBLE, RunInfoState::getFocusThetaOff))));
 
         // Issue #105: one row per arbiter decision. The per-controller block is generated from the enum
         // (operant_*, episodic_*, planner_*), so a new controller adds columns here and nowhere else.

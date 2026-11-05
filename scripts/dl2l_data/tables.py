@@ -396,9 +396,11 @@ TABLES["arbitration_decisions"] = (
 
 # Run setup (issue #95): one row per holder JVM with the root seed. Absent from raw dumps
 # written before that change, so extract.py skips it when the view does not exist.
+# SELECT * on purpose: dumps from before the focus-tracker thresholds were configurable lack
+# focus_theta_on / focus_theta_off, and extract.py must still read them.
 TABLES["run_info"] = (
     """
-    SELECT seed, seed_generated, trial_id, started_at
+    SELECT *
     FROM data.run_info
     ORDER BY started_at
     """,

@@ -1,5 +1,6 @@
 package br.cefetmg.lsi.l2l.cluster.settings;
 
+import br.cefetmg.lsi.l2l.creature.arbiter.FocusTracker;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
 import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyMode;
 import org.junit.jupiter.api.Test;
@@ -188,6 +189,25 @@ public class LearningSettingsTest {
 
         assertThrows(IllegalArgumentException.class, () -> new Simulation(com.typesafe.config.ConfigFactory
                 .parseString(simulationWith("operantEstimatorEnabled = true"))).getLearningSettings());
+    }
+
+    @Test
+    void focus_thresholds_default_to_the_tracker_defaults_and_parse_from_config() {
+        FocusTracker.Params d = FocusTracker.Params.defaults();
+        assertEquals(d.thetaOn(), new LearningSettings().getFocusThetaOn());
+        assertEquals(d.thetaOff(), new LearningSettings().getFocusThetaOff());
+        assertEquals(d.thetaOn(), parse("circadianEnabled = false").getFocusThetaOn());
+
+        LearningSettings ls = parse("focalDriveEnabled = true\nfocusThetaOn = 0.5\nfocusThetaOff = 0.2");
+        assertEquals(0.5, ls.getFocusThetaOn());
+        assertEquals(0.2, ls.getFocusThetaOff());
+    }
+
+    @Test
+    void focus_thresholds_must_keep_the_hysteresis() {
+        assertThrows(IllegalArgumentException.class, () -> parse("focusThetaOn = 0.2\nfocusThetaOff = 0.2"));
+        assertThrows(IllegalArgumentException.class, () -> parse("focusThetaOn = 0.2\nfocusThetaOff = 0.5"));
+        assertThrows(IllegalArgumentException.class, () -> parse("focusThetaOn = 1.0\nfocusThetaOff = -0.1"));
     }
 
     private static LearningSettings parse(String body) {

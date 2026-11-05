@@ -15,12 +15,17 @@ public class RunInfoState implements PersistenceState {
     private final boolean seedGenerated;
     private final String trialId;
     private final long startedAt;
+    private final double focusThetaOn;
+    private final double focusThetaOff;
 
-    public RunInfoState(long seed, boolean seedGenerated, String trialId, long startedAt) {
+    public RunInfoState(long seed, boolean seedGenerated, String trialId, long startedAt,
+                        double focusThetaOn, double focusThetaOff) {
         this.seed = seed;
         this.seedGenerated = seedGenerated;
         this.trialId = trialId;
         this.startedAt = startedAt;
+        this.focusThetaOn = focusThetaOn;
+        this.focusThetaOff = focusThetaOff;
     }
 
     public UUID getId() { return id; }
@@ -28,4 +33,7 @@ public class RunInfoState implements PersistenceState {
     public boolean isSeedGenerated() { return seedGenerated; }
     public String getTrialId() { return trialId; }
     public long getStartedAt() { return startedAt; }
+    /** Focus tracker thresholds the run used (recorded whether or not the focal drive is enabled). */
+    public double getFocusThetaOn() { return focusThetaOn; }
+    public double getFocusThetaOff() { return focusThetaOff; }
 }
