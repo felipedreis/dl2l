@@ -1,0 +1,15 @@
+# Focus-tracker threshold tuning for A2: docs/experiments/p107_theta_tune_recipe.md. Descriptive tuning, not a hypothesis test.
+# Tuning seed 10710 (disjoint from the pilot seeds 10700-10703 and from every campaign seed).
+name: p107_theta_tune
+trials: 1
+seeds: [10710]
+conditions:
+- {key: t080, simulation: simulations/p107_tune_a2_t080.conf, label: 'A2 thetaOn 0.8 / thetaOff 0.3', color: '#8c8c8c'}
+- {key: t060, simulation: simulations/p107_tune_a2_t060.conf, label: 'A2 thetaOn 0.6 / thetaOff 0.2', color: '#3b7dd8'}
+- {key: t050, simulation: simulations/p107_tune_a2_t050.conf, label: 'A2 thetaOn 0.5 / thetaOff 0.2', color: '#d8733b'}
+- {key: t040, simulation: simulations/p107_tune_a2_t040.conf, label: 'A2 thetaOn 0.4 / thetaOff 0.15', color: '#7a3bd8'}
+image:
+  source: build
+data_dir: ml/data_p107_theta_tune
+extract: {format: parquet, backup: false, tables: all}
+upload: {enabled: true, prefix: p107_theta_tune}
