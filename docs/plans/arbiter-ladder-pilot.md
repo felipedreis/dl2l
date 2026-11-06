@@ -1,6 +1,6 @@
 # Plan: arbiter-ladder pilot (A0 / A1 / A2), feeding #106 and #107
 
-Status: **approved 2026-11-04; stage 1 (gate) run, G1 FAILED, stage 2 not started (see "Stage 1 results")**. Date: 2026-11-02. Base: `main` at `bd19886` (#102–#105, #110 and the #127
+Status: **approved 2026-11-04; gate 1 FAILED G1; thresholds tuned (0.4 / 0.15); gate 2 PASSED all of G1-G5 (2026-11-06); stage 2 not started (see "Stage 1 results", "Stage 1b" and "Gate 2 results")**. Date: 2026-11-02. Base: `main` at `bd19886` (#102–#105, #110 and the #127
 death close-out fix merged). Issues served: #107 (sample size from a pilot), #106 (analysis "runs end to end on a pilot's
 data"); precedes #108 (A1 campaign) and #109 (A2 campaign). Story map: `docs/plans/2026-q4-research-plan.md`.
 
@@ -154,6 +154,51 @@ theta_on, so nothing closes and nothing trains.
 
 **Per the plan, stage 2 does not start.** The options in "On a FAIL or MARGINAL G1" each change an arm definition and need
 their own plan and a #107 revision; which one is the user's decision.
+
+### Stage 1b: focus-threshold tuning (run 2026-11-05; recipe `docs/experiments/p107_theta_tune_recipe.md`, HF `p107_theta_tune/`)
+
+Option 1 of "On a FAIL": `focusThetaOn` / `focusThetaOff` became config keys (branch `feature/focus-theta-config`, not merged; see
+`docs/plans/focus-tracker-theta-config.md`). A2, tuning seed 10710, 1 trial x 5 creatures, 30 minutes, four settings. Closed
+episodes per creature / focused share per creature:
+
+| thetaOn / thetaOff | closed episodes | focused share | creatures meeting both (>= 3 and >= 0.02) |
+|---|---|---|---|
+| 0.8 / 0.3 | 6, 3, 6, 0, 5 | .012 .004 .009 .000 .006 | 0 of 5 |
+| 0.6 / 0.2 | 20, 9, 8, 9, 14 | .035 .012 .019 .013 .027 | 2 of 5 |
+| 0.5 / 0.2 | 8, 9, 13, 12, 12 | .013 .008 .025 .018 .010 | 1 of 5 |
+| 0.4 / 0.15 | 30, 19, 34, 31, 41 | .039 .017 .027 .035 .039 | **4 of 5** |
+
+The recipe's rule was ambiguous (per creature vs. a setting average of the focused share). Read per creature, as the plan's G1 is,
+only 0.4 / 0.15 qualifies; read as a setting average, 0.6 / 0.2 (mean about 0.021, three creatures below 0.02) would also. The user
+chose **0.4 / 0.15** (2026-11-06). The prediction (0.5 or 0.6) was wrong; "0.8 fails" held. One seed: a tuning pick, not an estimate.
+A failed first attempt (the tuning confs included `arbiter_a2.conf`, absent from the Java branch; HOCON ignores a missing include, so
+no world and no creatures were created) was discarded and its data deleted.
+
+### Gate 2 results (run 2026-11-06, thresholds 0.4 / 0.15 in A1 and A2, seed 10700; recipe `docs/experiments/p107_gate2_recipe.md`, HF `p107_pilot_gate2/`)
+
+All three conditions ran and extracted with no failures; the criteria are those of the first gate, unchanged.
+
+| Gate | Result |
+|---|---|
+| **G1** A2 opens and closes episodes | **PASS.** 5 of 5 creatures: closed episodes 149 / 160 / 148 / 137 / 165, focused share 0.048 / 0.047 / 0.042 / 0.043 / 0.051, late-half informed share 1.0 in all five (bars: >= 10, >= 0.02, >= 0.5) |
+| **G2** table informs focused choices | **PASS** (the informed share above). "Informed" means not fully tied at the maximum, not that the choice is correct |
+| **G3** A1 telemetry | **PASS.** 5 creatures, focused share 0.659-0.686, `episode_returns` present: 9,638 closed episodes by distinct id plus 1 DEATH (gate 1: 1,997) |
+| **G4** death close-out | **PASS.** 5 of 5 dead creatures: focused decisions = episode steps (5,405 / 5,295 / 6,445 / 5,450 / 5,124), DEATH rows 179 / 17 / 121 / 111 / 89 |
+| **G5** operational | `run_info`: seed 10700 and focus_theta_on/off 0.4 / 0.15 in all three. Raw 5.4 GB (`a1`), 6.9 GB (`a2`), 0.2 GB (`a2_finite_food`) |
+
+A2: all 5 alive at the cap (7,188 s), hunger max 1.55 / mean 0.30, sleep max 1.66, tedium max 0.47 (gate 1: 1.59 / 0.30, so
+regulation is unchanged while the table now trains). A2 episodes by close type (distinct ids): REGULATED 164, TIMED_OUT 81,
+PREEMPTED 52.
+
+A1 at the new thresholds: focused share about 0.68 (gate 1: 0.175-0.221), mean hunger 0.98 (gate 1: 1.34), and **one of five
+creatures died** at 4,946 s (max hunger and tedium 7.0; gate 1: all 5 alive, max hunger 3.79). One trial cannot separate the
+threshold effect from run-to-run variation, but A1's definition has changed and #108 should treat the pre- and post-change A1 as
+different arms. Episode outcomes of A1 (distinct ids): PREEMPTED 6,651, REGULATED 2,958, TIMED_OUT 29, DEATH 1; so the prediction
+"most TIMED_OUT or PREEMPTED" held only for PREEMPTED.
+
+**The gate passes, so stage 2 may start**, subject to the plan's open decisions (environment, creatures per trial, `regulated_emotion`
+column, backups) and to merging `feature/focus-theta-config`, so that the image used for stage 2 carries the keys and the stage-2
+confs set 0.4 / 0.15 explicitly. A random-selection control (A2 with an untrained table) is still undecided.
 
 ## Stage 2: pilot (3 arms × 3 trials), only after a PASS
 

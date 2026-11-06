@@ -269,6 +269,28 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
   Mac, not yet done. Separately, the local playbook skips the HF upload (`experiment_finished` is set on a different host than
   the one that checks it in `collect_upload`); the upload was run by hand with `dl2l_data.upload`. Not fixed.
 
+### 11-06 — #107 pilot: focus thresholds tuned to 0.4 / 0.15, gate 2 passes
+
+- **What:** made the focus tracker's `thetaOn` / `thetaOff` config keys (`feature/focus-theta-config`, not merged; also written
+  to `run_info`), tuned them on A2 (seed 10710, 30 min, four settings; recipe `docs/experiments/p107_theta_tune_recipe.md`), and
+  re-ran the three gate conditions with the chosen 0.4 / 0.15 (recipe `docs/experiments/p107_gate2_recipe.md`, data on HF
+  `p107_theta_tune/` and `p107_pilot_gate2/`). Plan: `docs/plans/focus-tracker-theta-config.md`.
+- **Tuning:** 0.4 / 0.15 was the only setting where >= 4 of 5 creatures had >= 3 closed episodes and focused share >= 0.02 (19-41
+  episodes per creature in 30 min); 0.8 / 0.3 had almost none. The recipe's rule was ambiguous; read at setting level it would have
+  chosen 0.6 / 0.2, and the user chose 0.4 / 0.15. My prediction (0.5 or 0.6) was wrong.
+- **Gate 2 passes G1-G5.** A2 closed 137-165 episodes per creature in 120 min, focused 4.2-5.1% of decisions, informed share 1.0;
+  its regulation is unchanged from gate 1 (mean hunger 0.30, max 1.55), so training the table did not cost regulation. The death
+  close-out holds again (5 of 5, DEATH rows in all).
+- **A1 changed with the thresholds** (they are global): focused about 68% of decisions (was 17-22%), mean hunger 0.98 (was 1.34),
+  and one creature died at 4,946 s (gate 1: none). One trial, so no attribution, but the pre- and post-change A1 are different
+  arms for #108.
+- **Mistakes found on the way:** (1) the Java branch was cut from `main` and lacked `arbiter_a1/a2.conf`; HOCON ignores a missing
+  include, so the first tuning run silently had no world and no creatures (30 min lost, data deleted). The new confs' includes are
+  now checked before running. (2) Two shell slips of mine (`timeout` and `setsid` do not exist on macOS) had me misread Docker as
+  down earlier in the Pi attempt.
+- **Next:** stage 2 is allowed by the plan, after merging the Java branch and settling the open decisions (environment, 5 vs 3
+  creatures, `regulated_emotion`, backups, and whether to add the random-selection control).
+
 ---
 
 ## Which results still stand
