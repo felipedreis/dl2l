@@ -1,0 +1,14 @@
+# Arbiter-ladder pilot, stage 1 re-run (gate 2) with tuned focus thresholds 0.4 / 0.15:
+# docs/experiments/p107_gate2_recipe.md. Descriptive, not a hypothesis test. Same seed as the first gate (10700).
+name: p107_pilot_gate2
+trials: 1
+seeds: [10700]
+conditions:
+- {key: a1, simulation: simulations/p107_gate2_a1.conf, label: 'A1 focus tracker (gate 2)', color: '#3b7dd8'}
+- {key: a2, simulation: simulations/p107_gate2_a2.conf, label: 'A2 arbiter over the operant table (gate 2)', color: '#d8733b'}
+- {key: a2_finite_food, simulation: simulations/p107_gate2_a2_finite_food.conf, label: 'A2, finite food (death close-out re-check, gate 2)', color: '#7a3bd8'}
+image:
+  source: build
+data_dir: ml/data_p107_pilot_gate2
+extract: {format: parquet, backup: true, tables: all}
+upload: {enabled: true, prefix: p107_pilot_gate2}
