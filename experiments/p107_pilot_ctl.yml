@@ -1,0 +1,13 @@
+# p107 pilot, untrained-table control for A2: docs/experiments/p107_ctl_recipe.md. Descriptive.
+# Same seeds as the pilot (10701-10703), so it pairs with the pilot's A0 / A1 / A2 by seed.
+name: p107_pilot_ctl
+trials: 3
+seeds: [10701, 10702, 10703]
+conditions:
+- {key: a2u, simulation: simulations/p107_ctl_a2_untrained.conf, label: 'A2 untrained table (control)', color: '#9467bd'}
+image:
+  source: registry
+data_dir: ml/data_p107_pilot_ctl
+extract: {format: parquet, backup: false, tables: all}
+upload: {enabled: true, prefix: p107_pilot_ctl}
+analysis: {module: arbiter_ladder_ctl}
