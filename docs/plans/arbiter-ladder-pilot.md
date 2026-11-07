@@ -142,7 +142,7 @@ none of it is used). Creature observed time 7,187–7,188 s in `a1` and `a2` (al
 |---|---|
 | **G1** A2 opens and closes episodes | **FAIL.** 5 of 5 creatures: 0 closed episodes, focused share 0.0, over 217,509-217,655 decisions each; `a2/episode_returns.parquet` absent |
 | **G2** table informs focused choices | not evaluable (no focused decisions) |
-| **G3** A1 telemetry | **PASS.** 5 creatures, focused share 0.175-0.221 per creature, 1,997 episodes in `episode_returns` (PREEMPTED 199,211 steps, REGULATED 13,061, TIMED_OUT 5,427) |
+| **G3** A1 telemetry | **PASS.** 5 creatures, focused share 0.175-0.221 per creature, 9,162 episodes in `episode_returns` (PREEMPTED 8,527, REGULATED 620, TIMED_OUT 27; counted as distinct `(creature_key, episode_id)`, because `episode_id` restarts for every creature. An earlier count of 1,997 was distinct `episode_id` across creatures and undercounts) |
 | **G4** death close-out | **PASS.** For all 5 dead creatures focused decisions = episode steps (3,245 / 3,225 / 3,225 / 3,225 / 3,564), each with >= 1 DEATH row (29 / 9 / 9 / 9 / 123); no mismatch warning in extraction |
 | **G5** operational | `run_info.seed` = 10700 in all three. Raw dump 5.8 GB (`a1`), 6.9 GB (`a2`), 0.2 GB (`a2_finite_food`) with `backup: true`; about 30 decisions per creature-second |
 
@@ -182,19 +182,19 @@ All three conditions ran and extracted with no failures; the criteria are those 
 |---|---|
 | **G1** A2 opens and closes episodes | **PASS.** 5 of 5 creatures: closed episodes 149 / 160 / 148 / 137 / 165, focused share 0.048 / 0.047 / 0.042 / 0.043 / 0.051, late-half informed share 1.0 in all five (bars: >= 10, >= 0.02, >= 0.5) |
 | **G2** table informs focused choices | **PASS** (the informed share above). "Informed" means not fully tied at the maximum, not that the choice is correct |
-| **G3** A1 telemetry | **PASS.** 5 creatures, focused share 0.659-0.686, `episode_returns` present: 9,638 closed episodes by distinct id plus 1 DEATH (gate 1: 1,997) |
+| **G3** A1 telemetry | **PASS.** 5 creatures, focused share 0.659-0.686, `episode_returns` present: 30,707 episodes (gate 1: 9,162), counted as `(creature_key, episode_id)` pairs |
 | **G4** death close-out | **PASS.** 5 of 5 dead creatures: focused decisions = episode steps (5,405 / 5,295 / 6,445 / 5,450 / 5,124), DEATH rows 179 / 17 / 121 / 111 / 89 |
 | **G5** operational | `run_info`: seed 10700 and focus_theta_on/off 0.4 / 0.15 in all three. Raw 5.4 GB (`a1`), 6.9 GB (`a2`), 0.2 GB (`a2_finite_food`) |
 
 A2: all 5 alive at the cap (7,188 s), hunger max 1.55 / mean 0.30, sleep max 1.66, tedium max 0.47 (gate 1: 1.59 / 0.30, so
-regulation is unchanged while the table now trains). A2 episodes by close type (distinct ids): REGULATED 164, TIMED_OUT 81,
-PREEMPTED 52.
+regulation is unchanged while the table now trains). A2 episodes by close type (creature, id pairs; 759 in all): REGULATED 585,
+TIMED_OUT 108, PREEMPTED 66.
 
 A1 at the new thresholds: focused share about 0.68 (gate 1: 0.175-0.221), mean hunger 0.98 (gate 1: 1.34), and **one of five
 creatures died** at 4,946 s (max hunger and tedium 7.0; gate 1: all 5 alive, max hunger 3.79). One trial cannot separate the
 threshold effect from run-to-run variation, but A1's definition has changed and #108 should treat the pre- and post-change A1 as
-different arms. Episode outcomes of A1 (distinct ids): PREEMPTED 6,651, REGULATED 2,958, TIMED_OUT 29, DEATH 1; so the prediction
-"most TIMED_OUT or PREEMPTED" held only for PREEMPTED.
+different arms. Episode outcomes of A1 ((creature, id) pairs): PREEMPTED 27,146, REGULATED 3,610, TIMED_OUT 29, DEATH 1; so the prediction
+"most TIMED_OUT or PREEMPTED" held only for PREEMPTED (88%).
 
 **The gate passes, so stage 2 may start**, subject to the plan's open decisions (environment, creatures per trial, `regulated_emotion`
 column, backups) and to merging `feature/focus-theta-config`, so that the image used for stage 2 carries the keys and the stage-2

@@ -257,7 +257,7 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
 - **G1 fails.** A2 closed 0 episodes in all 5 creatures over about 217,600 decisions each (focused share 0.0); there is no
   `episode_returns` file. Max hunger 1.59, mean 0.30: no drive reaches the open threshold, so the operant table is never trained.
   This is the fixed point predicted from p104, now at full length.
-- **A1 telemetry is fine** (G3): 17.5-22.1% of decisions focused, 1,997 episodes, 91% of them PREEMPTED by another drive. A1 is
+- **A1 telemetry is fine** (G3): 17.5-22.1% of decisions focused, 9,162 episodes (counted per creature and id: `episode_id` restarts for each creature), 93% of them PREEMPTED by another drive. A1 is
   less well regulated than predicted (max hunger 3.79, max tedium 4.03, mean hunger 1.34 vs 0.30 in A2).
 - **Death close-out holds on a real run** (G4): all 5 dead creatures in the finite-food world have focused decisions equal to
   episode steps and at least one DEATH row (the p105 miss was 1 creature of 10).
