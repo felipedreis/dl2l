@@ -1,6 +1,6 @@
 # Sample size for the A1 / A2 campaigns (#107), from `p107_pilot`
 
-> **WITHDRAWN IN PART — affordance zero-weight bug.** The A0 / A1 numbers here come from a filter that returned the first candidate when every weight was 0. See [`docs/known-issues/affordance-zero-weight.md`](../known-issues/affordance-zero-weight.md) before citing.
+> **Note — affordance zero-weight bug (fixed 2026-11-08).** This result predates the fix of a filter that returned the first candidate when every weight was 0. Measured on the arbiter-ladder arms (`p107_pilot_fix`) the fix did **not** change A0 / A1 behaviour materially (A0 still starves, the APPROACH share is unchanged; A1 d(H) +0.39), so the result is not considered invalid, but it has not been re-run. See [`docs/known-issues/affordance-zero-weight.md`](../known-issues/affordance-zero-weight.md).
 
 Paired t-test on trial-level differences (unit = seed), alpha 0.05, power 0.8, non-central t. `n` = paired trials per arm. SD has 2 degrees of freedom, so each row is sized on the point SD and on the one-sided 80% upper bound (2.12 x SD). A1 pilot mean d(H) over life = 1.241.
 

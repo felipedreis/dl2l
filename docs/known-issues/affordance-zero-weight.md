@@ -1,62 +1,35 @@
-# Known issue: the affordance filter returned the first candidate when every weight was 0
+# Known issue: the affordance filter returned the first candidate when every weight was 0 — fixed, measured, not material
 
-**Status:** fixed on `fix/affordance-zero-weight` (2026-11-08), no flag. Results produced before the fix with the filter in the chain are
-**potentially affected**; the ones named below as *withdrawn* are not to be cited. Plan: [`../plans/affordance-zero-weight-fix.md`](../plans/affordance-zero-weight-fix.md).
+**Status:** fixed on `fix/affordance-zero-weight` (2026-11-08), no flag. **The fix was tested and did not change the behaviour of A0 / A1 materially**, so
+the results that depend on those arms are *not* invalidated. (An earlier version of this page withdrew them; that was premature and is reversed here.)
+Plan: [`../plans/affordance-zero-weight-fix.md`](../plans/affordance-zero-weight-fix.md); recipe: [`../experiments/p107_fix_recipe.md`](../experiments/p107_fix_recipe.md);
+data: HF `p107_pilot_fix/`.
 
-## What happened
+## The defect
 
-`ActionProbabilityFilter` (`AFFORDANCE`, the legacy learned action-probability table) samples one action per target object type from learned weights.
-Only EAT is ever reinforced, so for a red or green apple seen at a distance (candidates APPROACH, AVOID, SLEEP, OBSERVE, WANDER, no EAT) every weight is 0,
-the normalisation gave NaN and the filter returned the first candidate, APPROACH, every time. Regression test: `ActionProbabilityZeroWeightTest`.
-Whether this is what made the A0 baseline starve is **not established**; the fixed-vs-old comparison is `docs/experiments/p107_fix_recipe.md`.
+`ActionProbabilityFilter` (`AFFORDANCE`, the legacy learned action-probability table) samples one action per target from learned weights. Only EAT is ever
+reinforced, so for a red or green apple seen at a distance (candidates APPROACH, AVOID, SLEEP, OBSERVE, WANDER; no EAT) every weight is 0. The normalisation then
+gave NaN and the filter returned the first candidate, APPROACH, deterministically. Confirmed by `ActionProbabilityZeroWeightTest` (APPROACH 2000/2000 when listed first,
+0/2000 when second). It now chooses uniformly in that case.
 
-## Withdrawn (do not cite)
+## What the fix changed (3 seeds x 5 creatures, seeds 10701-10703, same confs; pilot arms vs fixed)
 
-- The pilot's reading of the ladder (`docs/reports/p107_pilot_report_skeleton.md`, the plan's and diary's pilot entries): that A1 -> A2 is explained by
-  removing the filter chain, that the tracker alone rescues A0, and the A0-vs-A1 survival and regulation contrasts. The numbers describe the buggy A0 / A1,
-  not the arbiter ladder as designed. A2, the A2 control and the threshold tuning do not use the filter and stand.
-- The sample-size rows that involve A0 or A1 (`docs/reports/p107_pilot_sample_size.md`).
-- The p97 conclusion that the feeding collapse is "a property of the world with unrewarding gray apples" and not of the code (`docs/reports/20261018_p97_feeding_fix_report.md`): the filter's fixed-APPROACH fallback is a candidate cause.
+| | A0 | A0 fixed | A1 | A1 fixed |
+|---|---|---|---|---|
+| creatures dead | 15 of 15 | 15 of 15 | 1 of 15 | 4 of 15 |
+| d(H) over life | 3.66 | 4.27 (+0.43 to +0.78 per seed) | 1.24 | 1.63 (+0.33 to +0.47 per seed) |
+| APPROACH share of cycles | 65-66% | 64-67% | 63% | 65-66% |
+| EATs per minute | 14.0 | 13.4 | 13.0 | 10.4 |
 
-## Potentially affected (size of the effect unknown, not re-validated)
+Pre-registered readings (all negative): the fix does **not** lower A0's d(H) by 0.5 (it raises it), A0 still dies (15 of 15, not at most 5), and A1 fixed is further from A2 (d(H) 1.63 against 0.16),
+not within 0.06. So the bug **does not explain why A0 starves**, and it does not explain the gap between A1 and A2.
 
-Every other result from an arm whose `enabledFilters` contain `AFFORDANCE` (the default chain does). Memory and world-model arms are affected too, because
-they choose among the candidates the affordance filter leaves. Comparisons *between* arms that share the filter are less exposed than absolute levels, but not immune.
+## What this leaves open
 
-| Experiment spec | Arms using the filter | Arms not using it |
-|---|---|---|
-| `20260709_memory_vs_wm_v1` | 1_baseline, 2_memory_only, 3_memory_consolidation, 4_jepa_rpe_only, 5_jepa_rpe_consolidation | - |
-| `20260714_memory_vs_wm_dense_reposition` | 1_baseline, 2_memory_only, 3_memory_consolidation, 4_jepa_rpe_only, 5_jepa_rpe_consolidation | - |
-| `20260714_memory_vs_wm_dense_reposition_backfill_baseline` | 1_baseline | - |
-| `20260714_memory_vs_wm_dense_reposition_backfill_jepaconsol` | 5_jepa_rpe_consolidation | - |
-| `20260717_memory_vs_wm_dense_no_reposition` | 1_baseline, 2_memory_only, 3_memory_consolidation, 4_jepa_rpe_only, 5_jepa_rpe_consolidation | - |
-| `20260728_tick_rate_diagnostic` | 1_baseline | - |
-| `_validation_dense_reposition` | 1_baseline | - |
-| `arrow_ipc_write_path_ccad_validation` | 1_baseline | - |
-| `ci_regression_benchmark` | ci_bench | - |
-| `p100_k_check` | a0 | - |
-| `p104_a2_check` | - | a2_arbiter |
-| `p104_a2_stress` | - | scarce_regrow, finite_food |
-| `p105_decision_check` | - | scarce_regrow, finite_food |
-| `p107_pilot` | a0, a1 | a2 |
-| `p107_pilot_ctl` | - | a2u |
-| `p107_pilot_fix` | a0f, a1f | - |
-| `p107_pilot_gate2` | a1 | a2, a2_finite_food |
-| `p107_theta_tune` | - | t080, t060, t050, t040 |
-| `p110_a0_check` | a0_operant | - |
-| `p79_ccad_baseline_validation` | 1_baseline | - |
-| `p79_metabolic_rescale` | 1_rescaled | - |
-| `p79_tick_rate_measurement` | 1_baseline | - |
-| `p84_behaviour_parity` | legacy_nomem, legacy_mem, current_nomem, current_mem, legacy_nomem_simple, legacy_mem_simple | - |
-| `p84_pilot` | legacy_nomem, legacy_mem | - |
-| `p84_rerun_current_mem` | current_mem | - |
-| `p84_rerun_current_nomem` | current_nomem | - |
-| `p84_rerun_legacy_mem_simple` | legacy_mem_simple | - |
-| `p84_rerun_legacy_nomem_simple` | legacy_nomem_simple | - |
-| `p97_feeding_fix` | legacy_nomem | - |
-| `p97_feeding_fix_v2` | legacy_nomem | - |
-| `p97_seed_replay` | run_a, run_b | - |
-| `rotten_fruit_v1` | 1_baseline, 2_memory_only, 3_memory_consolidation, 4_jepa_rpe_only, 5_jepa_rpe_consolidation | - |
-| `smoke` | smoke | - |
+- The mechanism I proposed (the zero-weight path produces the APPROACH dominance) is **not supported**: the APPROACH share is unchanged by the fix. Why A0 / A1 spend about 65% of cycles on APPROACH and eat only 0.9% of the time is unexplained; the candidate lists would have to be logged to find out.
+- The fix makes A0 and A1 somewhat *worse* (it removes a deterministic fallback that happened to help), so the "classic" baseline now differs from the pre-fix one; campaigns run on the fixed code. For #108, A1 on the fixed code (4 of 15 died) is a different arm from the pilot's.
+- The tracker-hysteresis explanation of A0 -> A1 and the "A1 -> A2 comes from the selector, not learning" reading both stand as they were.
 
-Specs not listed use the arbiter selector. Reports that carry a notice: see the first line of each.
+## Other results
+
+The other 27 experiment specs with an arm using the filter predate the fix and were not re-run; given the measured effect on A0 / A1 they are not considered invalid, but absolute levels may shift by about the amounts above.

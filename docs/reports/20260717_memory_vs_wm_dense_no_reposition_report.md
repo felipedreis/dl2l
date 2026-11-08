@@ -1,6 +1,6 @@
 # Experiment Report: Memory vs. JEPA World Model — Dense World, No Reposition
 
-> **POTENTIALLY AFFECTED — affordance zero-weight bug.** This result was produced with the legacy affordance filter before its fix; the size of the effect on it is unknown and it has not been re-validated. See [`docs/known-issues/affordance-zero-weight.md`](../known-issues/affordance-zero-weight.md).
+> **Note — affordance zero-weight bug (fixed 2026-11-08).** This result predates the fix of a filter that returned the first candidate when every weight was 0. Measured on the arbiter-ladder arms (`p107_pilot_fix`) the fix did **not** change A0 / A1 behaviour materially (A0 still starves, the APPROACH share is unchanged; A1 d(H) +0.39), so the result is not considered invalid, but it has not been re-run. See [`docs/known-issues/affordance-zero-weight.md`](../known-issues/affordance-zero-weight.md).
 
 **Experiment ID:** `20260717_memory_vs_wm_dense_no_reposition`
 **Date:** 2026-07-29

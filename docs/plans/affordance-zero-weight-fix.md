@@ -1,6 +1,6 @@
 # Plan: the affordance filter's all-zero-weight fallback (bug), its fix, and what it invalidates
 
-Status: **fix implemented 2026-11-08, comparison running** (recipe: `docs/experiments/p107_fix_recipe.md`).
+Status: **fix implemented 2026-11-08; comparison done: not material** (recipe: `docs/experiments/p107_fix_recipe.md`; results: `docs/known-issues/affordance-zero-weight.md`).
 
 ## The bug
 
@@ -23,15 +23,9 @@ When the weights sum to 0 (or are not finite) the filter chooses uniformly among
 own seeded stream. The positive-weight path is unchanged. Runs are not comparable with earlier ones draw-by-draw: the fallback draws one
 `nextInt` where it used to draw one `nextDouble` and then fall through.
 
-## What it invalidates (until re-run or re-assessed)
+## What it invalidates
 
-Any result from a configuration with `AFFORDANCE` in the enabled filters and with learned weights of 0 for the offered actions: that is every
-`FILTER_BASED` run in this repository that kept the default filter chain, i.e. A0 and A1 of the arbiter ladder, the p84 `legacy_*` and
-`current_*` arms, p97 and the memory-vs-world-model experiments. Arms with `actionSelector = ARBITER` (A2 and its control) do not use the
-filter and are not affected. Inventory and status per document: `docs/known-issues/affordance-zero-weight.md`.
-
-The p97 conclusion that the feeding collapse "is a property of the world with unrewarding gray apples" and not of the code must be treated as
-unproven: the filter's fixed-APPROACH fallback is a candidate cause.
+Nothing, as it turned out. The first version of this plan treated every A0 / A1 result as invalid until re-run; the comparison (`p107_pilot_fix`) showed the fix does not change A0 / A1 behaviour materially (A0 still starves, APPROACH share unchanged, A1 slightly worse), so the notices were softened and the results stand. See the known-issues page for the numbers.
 
 ## Check
 
