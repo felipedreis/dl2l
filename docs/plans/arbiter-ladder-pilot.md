@@ -200,7 +200,9 @@ different arms. Episode outcomes of A1 ((creature, id) pairs): PREEMPTED 27,146,
 column, backups) and to merging `feature/focus-theta-config`, so that the image used for stage 2 carries the keys and the stage-2
 confs set 0.4 / 0.15 explicitly. A random-selection control (A2 with an untrained table) is still undecided.
 
-## Stage 2: pilot (3 arms × 3 trials), only after a PASS
+## Stage 2: pilot
+
+> **Run 2026-11-06/07 on CCAD; results and sample sizes: `docs/research-diary.md` (11-07/08), `docs/reports/p107_pilot_sample_size.md` and `docs/reports/p107_pilot_report_skeleton.md` on branch `feature/focus-theta-config`. The untrained-table control and the affordance-filter bug follow-up are in the same diary entry.** (3 arms × 3 trials), only after a PASS
 
 Spec `experiments/p107_pilot.yml`, seeds `[10701, 10702, 10703]`, the same three in every arm (paired by initial
 world). World, creature count and cap unchanged from A0: 5 creatures, 100/100/300 mixed world, 120 min. #107 says

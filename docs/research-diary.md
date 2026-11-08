@@ -291,6 +291,32 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
 - **Next:** stage 2 is allowed by the plan, after merging the Java branch and settling the open decisions (environment, 5 vs 3
   creatures, `regulated_emotion`, backups, and whether to add the random-selection control).
 
+### 11-07/08 — #107 pilot stage 2, the #106 analysis, the untrained-table control and a bug that turned out not to matter
+
+- **Stage 2 (CCAD, `p107_pilot`, 3 arms x 3 trials x 5 creatures, seeds 10701-10703, data on HF `p107_pilot/`).** The first attempt failed for A1 and A2: the CCAD
+  job script waited at most about 90 minutes for a simulation that runs 120; ceiling raised to about 150 (`run_trial.sh.j2`), failed attempt kept aside on the cluster,
+  all nine trials re-run. Results: d(H) over life A0 3.66, A1 1.24, A2 0.16; deaths 15/15, 1/15, 0/15; creatures alive at the cap are observed to about 7,195 s.
+  Plan and recipe: `docs/experiments/p107_pilot_stage2_recipe.md`.
+- **#106 analysis module** (`analysis/experiments/arbiter_ladder.py`, plan `docs/plans/issue-106-arbiter-ladder-analysis.md`, 8 unit tests): runs end to end on the pilot
+  and writes the report skeleton. Episode ids restart for every creature, so episodes are counted as `(creature_key, episode_id)`; some earlier episode totals in the
+  gate entries were undercounted that way and are corrected. Data caveat found: in creatures that survive to the cap, `mouth_interactions` holds a whole number of
+  128-row blocks (and `body_states` exactly 217,728 rows), so EAT counts of A1/A2 survivors are lower bounds (short by up to 127 each).
+- **Sample size for #107** (`docs/reports/p107_pilot_sample_size.md`): paired trials per arm are small because the effects dwarf the between-seed SD (A2 - A1 on d(H) over life
+  needs 2-3). Non-inferiority of A2 against A1 with equal true means needs 7 trials at a 0.06 margin (22 on the upper-bound SD), 3 (7) at 10% of the A1 mean, 3 (4) at 20%. The
+  margin is #107's decision. A0's focus-switch statistic cannot be sized (approximation), and survival is better a guard than a powered outcome.
+- **Control: A2 with a table that never trains** (`focusThetaOn = 99`, `p107_pilot_ctl`, same seeds): d(H) over life 0.160 against 0.163 for the trained A2, per-seed
+  differences +0.002, +0.006, +0.002, inside the pre-registered +-0.06; feeding identical (red+green 25.4 against 25.3 per minute), all 15 alive. So training the table adds nothing
+  measurable in this world, and A2's advantage over A1 comes from replacing the filter chain with the arbiter, which with an untrained table chooses uniformly among the candidates.
+- **A suspected bug that did not matter.** Reading the arbiter and the filters showed that `ActionProbabilityFilter` (the `AFFORDANCE` filter of A0 / A1) returned its first
+  candidate (APPROACH) whenever every learned weight was 0 (0/0 = NaN). Fixed without a flag (`fix/affordance-zero-weight`, issue #130) and tested on the pilot's seeds
+  (`p107_pilot_fix`): A0 still dies 15/15, the APPROACH share is unchanged (about 65%), d(H) rises (A0 3.66 -> 4.27, A1 1.24 -> 1.63, A1 deaths 1 -> 4 of 15). I had first
+  written that the bug probably explained A0 starving and put withdrawal notices on 15 reports; the measurement refuted that and the notices were softened
+  (`docs/known-issues/affordance-zero-weight.md`). Lesson: measure the effect before invalidating. Why A0 / A1 spend about 65% of cycles on APPROACH and eat 0.9% of the time is unexplained.
+- **Process slips on the way:** Homebrew upgraded `python3` to 3.15 without the analysis packages, which made the ansible spec validation fail on three submissions and
+  cost a night (libraries now installed); the CEFET VPN dropped once and a submission waited for it.
+- **Open for #107:** the margin, the pre-registration document itself (`docs/experiments/arbiter_ladder_recipe.md`), equal tuning budget (the focus thresholds were tuned on A2 only),
+  config keys for the arbiter's theta / epsilon / tau, and a random-selection control is now answered by the untrained-table control.
+
 ---
 
 ## Which results still stand
