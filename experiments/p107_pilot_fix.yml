@@ -1,0 +1,13 @@
+# A0 and A1 with the affordance zero-weight fix: docs/experiments/p107_fix_recipe.md. Descriptive. Same seeds as the pilot.
+name: p107_pilot_fix
+trials: 3
+seeds: [10701, 10702, 10703]
+conditions:
+- {key: a0f, simulation: simulations/arbiter_a0.conf,    label: 'A0 with the fix', color: '#7f7f7f'}
+- {key: a1f, simulation: simulations/p107_gate2_a1.conf, label: 'A1 with the fix', color: '#17becf'}
+image:
+  source: registry
+data_dir: ml/data_p107_pilot_fix
+extract: {format: parquet, backup: false, tables: all}
+upload: {enabled: true, prefix: p107_pilot_fix}
+analysis: {module: arbiter_ladder_fix}
