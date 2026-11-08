@@ -1,5 +1,7 @@
 # Experiment Report: Memory vs. JEPA World Model — Full Subsystem Stack
 
+> **POTENTIALLY AFFECTED — affordance zero-weight bug.** This result was produced with the legacy affordance filter before its fix; the size of the effect on it is unknown and it has not been re-validated. See [`docs/known-issues/affordance-zero-weight.md`](../known-issues/affordance-zero-weight.md).
+
 **Experiment ID:** `20260709_memory_vs_wm_v1`  
 **Date:** 2026-07-09 / 2026-07-12 / 2026-07-13  
 **Trials:** 5 trials × 5 conditions × 5 creatures = **125 creatures total**  

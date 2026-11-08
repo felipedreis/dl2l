@@ -1,5 +1,7 @@
 # EXP-P6-1: Mode-2 Deliberative Action Selection (Phase 6)
 
+> **POTENTIALLY AFFECTED — affordance zero-weight bug.** This result was produced with the legacy affordance filter before its fix; the size of the effect on it is unknown and it has not been re-validated. See [`docs/known-issues/affordance-zero-weight.md`](../known-issues/affordance-zero-weight.md).
+
 ## Purpose
 
 Verify that the `WorldModelFilter` (Mode-2 deliberative action selection) integrates correctly

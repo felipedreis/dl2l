@@ -1,5 +1,7 @@
 # Report: feeding at speed (#96) and seeded runs (#95) — issue #97
 
+> **WITHDRAWN IN PART — affordance zero-weight bug.** The numbers here (the legacy `legacy_nomem` arm, i.e. A0) come from a filter that returned the first candidate when every weight was 0. See [`docs/known-issues/affordance-zero-weight.md`](../known-issues/affordance-zero-weight.md) before citing.
+
 Protocol: [`docs/experiments/p97_feeding_fix_recipe.md`](../experiments/p97_feeding_fix_recipe.md)
 (pre-registered; Revision 1 was added after v1 failed). Specs: `experiments/p97_feeding_fix.yml`,
 `p97_feeding_fix_v2.yml`, `p97_seed_replay.yml`. Data on HF: `p97/`, `p97_v2/`, `p97_replay/`.

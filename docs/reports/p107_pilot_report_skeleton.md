@@ -1,5 +1,7 @@
 # Report: arbiter-ladder pilot (A0 / A1 / A2), analysis skeleton
 
+> **WITHDRAWN IN PART — affordance zero-weight bug.** The A0 / A1 numbers here come from a filter that returned the first candidate when every weight was 0. See [`docs/known-issues/affordance-zero-weight.md`](../known-issues/affordance-zero-weight.md) before citing.
+
 ## Purpose
 
 Descriptive pilot of the arbiter ladder: spread of the outcomes #107 will pre-register, and a first run of the #106 analysis module end to end. Plan: `docs/plans/arbiter-ladder-pilot.md`, `docs/plans/issue-106-arbiter-ladder-analysis.md`; recipe: `docs/experiments/p107_pilot_stage2_recipe.md`. No pilot number enters a campaign result.

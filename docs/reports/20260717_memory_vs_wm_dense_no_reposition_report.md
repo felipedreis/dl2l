@@ -1,5 +1,7 @@
 # Experiment Report: Memory vs. JEPA World Model — Dense World, No Reposition
 
+> **POTENTIALLY AFFECTED — affordance zero-weight bug.** This result was produced with the legacy affordance filter before its fix; the size of the effect on it is unknown and it has not been re-validated. See [`docs/known-issues/affordance-zero-weight.md`](../known-issues/affordance-zero-weight.md).
+
 **Experiment ID:** `20260717_memory_vs_wm_dense_no_reposition`
 **Date:** 2026-07-29
 **Trials:** 5 trials × 5 conditions × 10 creatures = **250 creatures analyzed**

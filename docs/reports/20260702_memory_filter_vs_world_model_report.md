@@ -1,5 +1,7 @@
 # EXP-P7: Memory Filter vs. World Model
 
+> **POTENTIALLY AFFECTED — affordance zero-weight bug.** This result was produced with the legacy affordance filter before its fix; the size of the effect on it is unknown and it has not been re-validated. See [`docs/known-issues/affordance-zero-weight.md`](../known-issues/affordance-zero-weight.md).
+
 ## Purpose
 
 Determine whether the JEPA neural world model adds measurable value over a

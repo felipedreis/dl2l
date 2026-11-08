@@ -1,5 +1,7 @@
 # Issue #57 — Neuromodulatory Expectancy Loop + Emotion→Action Coupling
 
+> **POTENTIALLY AFFECTED — affordance zero-weight bug.** This result was produced with the legacy affordance filter before its fix; the size of the effect on it is unknown and it has not been re-validated. See [`docs/known-issues/affordance-zero-weight.md`](../known-issues/affordance-zero-weight.md).
+
 **Status:** implemented + validated. **Branch:** `feat/issue-57-emotion-conditioned-action-selection`.
 **Data:** `felipedreis/dl2l-experiments` prefix `p57/`.
 
