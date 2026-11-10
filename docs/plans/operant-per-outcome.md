@@ -14,7 +14,7 @@ the arbiter with `Estimate(Q, SE, sigma)`.
 - **Feeding (D2):** `Valuation.recordOperant`, called once per `EvaluationStimulus` after `evaluateLegacy` / `evaluateWithExpectancy`, so one
   place serves both paths and the legacy `varyProbability` calls are untouched. Same filter as `OperantConditioningActor`: the target is a
   `FruitType` or `PlantType`. Outcomes on the creature itself (`Self`: cholinergic/SLEEP, tedium WANDER/OBSERVE, deprivation RPE) are left out.
-- **Sample (D3):** the magnitude `-arousalVariation` (positive = the drive went down), on both paths.
+- **Sample (D3, revised 2026-11-10):** the valence, +1 if `arousalVariation < 0` (the drive went down) and -1 otherwise, including no change, on both paths, as the legacy table and Mapa (2009). The first implementation used the magnitude `-arousalVariation`; see the review's D3 for why it was dropped.
 - **Statistics (D4):** unchanged `WelfordTable` form and constants (`Q0 = 0`, `kappa = 1`, prior sigma 1 until n >= 3 via the blend, decay 0.995).
 - **Legacy (D5):** `OperantConditioning` and `ActionProbabilityFilter` unchanged (A0/A1 parity).
 - **Episodes:** `FocusTracker`, `EpisodeBuffer`, `ReturnSink` and `episode_returns` persistence stay (for episodic memory, #111/#113). The operant
@@ -37,7 +37,7 @@ One row per recorded outcome, persisted from `Valuation` with its other states.
 
 - `OperantEstimatorTest`: Welford/decay tests kept; the key has no drive and no distance (same cell across distances and focal drives); record by
   `(target, action)`; distance-edge tests removed.
-- `ValuationOperantTest` (new): a nutritive EAT outcome on a fruit records `-arousalVariation` into the `(fruit, EAT)` cell on the legacy and the
+- `ValuationOperantTest` (new): a nutritive EAT outcome on a fruit records the valence (+1) into the `(fruit, EAT)` cell on the legacy and the
   expectancy path, and writes an `operant_update_state` row; an outcome whose target is `Self` is ignored; a plant target is kept.
 - `ValuationEpisodeTest`: closed episodes still write `episode_return` rows but no longer move the operant table.
 - `LearningSettingsTest`: `operantEstimatorEnabled` is accepted without `focalDriveEnabled`.
