@@ -416,6 +416,20 @@ public final class TableSchemas {
                                 col("executed_sigma", ColType.DOUBLE, ArbitrationDecisionState::getExecutedSigma)),
                         controllerColumns())));
 
+        // Operant table (A2): one row per update of a (object type, action) cell.
+        all.add(table("operant_update_state", OperantUpdateState.class, OperantUpdateState::getId, List.of(
+                col("creature_key", ColType.INT64, OperantUpdateState::getCreatureKey),
+                col("seq", ColType.INT64, OperantUpdateState::getSeq),
+                col("time_ms", ColType.INT64, OperantUpdateState::getTimeMs),
+                col("cycle", ColType.INT64, OperantUpdateState::getCycle),
+                col("object_type", ColType.STRING, OperantUpdateState::getObjectType),
+                col("action", ColType.STRING, OperantUpdateState::getAction),
+                col("sample", ColType.DOUBLE, OperantUpdateState::getSample),
+                col("n", ColType.DOUBLE, OperantUpdateState::getN),
+                col("q", ColType.DOUBLE, OperantUpdateState::getQ),
+                col("se", ColType.DOUBLE, OperantUpdateState::getSe),
+                col("sigma", ColType.DOUBLE, OperantUpdateState::getSigma))));
+
         return List.copyOf(all);
     }
 

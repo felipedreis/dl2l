@@ -407,6 +407,18 @@ TABLES["run_info"] = (
     None,
 )
 
+# One row per update of the A2 operant table: the sample recorded into the (object_type, action) cell and the
+# cell's n, Q, SE and sigma right after it (docs/plans/operant-per-outcome.md). Empty/absent unless
+# operantEstimatorEnabled.
+TABLES["operant_updates"] = (
+    """
+    SELECT creature_key, seq, time_ms, "cycle", object_type, action, sample, n, q, se, sigma
+    FROM data.operant_update_state
+    ORDER BY creature_key, seq
+    """,
+    None,
+)
+
 # Tables written before pg_dump/manifest bookkeeping, in the order exp_extract.py
 # originally wrote them (a couple of analyses key off this ordering in logs).
 TABLE_ORDER = [
@@ -414,7 +426,7 @@ TABLE_ORDER = [
     "perceptions", "smell_perceptions", "mouth_interactions", "sleep_episodes", "neuromodulators",
     "endocrine", "expectancy", "engrams", "consolidation_episodes",
     "consolidation_batches", "memory_traces", "conditioning", "memory_decisions",
-    "episode_returns", "arbitration_decisions", "run_info",
+    "episode_returns", "arbitration_decisions", "run_info", "operant_updates",
 ]
 
 assert set(TABLE_ORDER) == set(TABLES)

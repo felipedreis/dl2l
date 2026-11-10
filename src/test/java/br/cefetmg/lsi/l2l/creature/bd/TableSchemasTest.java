@@ -42,7 +42,7 @@ class TableSchemasTest {
      */
     private static final List<String> ADDED_SINCE_PORT = List.of(
             "action_probability_state", "memory_decision_state", "drive_outcome_state", "episode_return",
-            "run_info", "arbitration_decision_state");
+            "run_info", "arbitration_decision_state", "operant_update_state");
 
     private static final List<String> EXPECTED_TABLE_ORDER =
             Stream.concat(PORTED_TABLE_ORDER.stream(), ADDED_SINCE_PORT.stream()).toList();
@@ -115,6 +115,9 @@ class TableSchemasTest {
                 "executed_sigma", "operant_conf", "operant_q", "operant_se", "operant_sigma", "episodic_conf",
                 "episodic_q", "episodic_se", "episodic_sigma", "planner_conf", "planner_q", "planner_se",
                 "planner_sigma"));
+        // Operant table (A2), per outcome.
+        t.put("operant_update_state", List.of("creature_key", "seq", "time_ms", "cycle", "object_type", "action",
+                "sample", "n", "q", "se", "sigma"));
         return t;
     }
 
@@ -146,7 +149,8 @@ class TableSchemasTest {
             Map.entry("run_info", RunInfoState.class),
             Map.entry("drive_outcome_state", DriveOutcomeState.class),
             Map.entry("episode_return", EpisodeReturnState.class),
-            Map.entry("arbitration_decision_state", ArbitrationDecisionState.class));
+            Map.entry("arbitration_decision_state", ArbitrationDecisionState.class),
+            Map.entry("operant_update_state", OperantUpdateState.class));
 
     @Test
     void tablesAreThePorted22FollowedByAnyLaterAdditions() {
