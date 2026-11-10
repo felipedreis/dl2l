@@ -92,6 +92,10 @@ public class LearningSettings implements Serializable {
     private final double focusThetaOn;
     private final double focusThetaOff;
 
+    // --- Operant learning switch (p107 untrained-table control) — default ON. Off: the operant table answers the
+    // arbiter but is never updated, so it stays at its prior (docs/experiments/p107_operant_recipe.md).
+    private final boolean operantLearningEnabled;
+
     /**
      * Which mechanism chooses the action (issue #104). {@code FILTER_BASED} is the legacy filter chain;
      * {@code ARBITER} is the uncertainty arbiter over the operant estimator.
@@ -239,6 +243,32 @@ public class LearningSettings implements Serializable {
                             ActionSelectorMode actionSelector,
                             double focusThetaOn,
                             double focusThetaOff) {
+        this(circadianEnabled, consolidationEnabled, enabledFilters, expectancyEnabled, expectancyMode,
+                neuromodulationEnabled, actionTendencyEnabled, orexinEnabled, endocrineEnabled, tickGatedCognition,
+                focalDriveEnabled, operantEstimatorEnabled, actionSelector, focusThetaOn, focusThetaOff, true);
+    }
+
+    /**
+     * @param operantLearningEnabled false freezes the operant table at its prior (an experimental control); it is only
+     *                               meaningful with {@code operantEstimatorEnabled}
+     */
+    public LearningSettings(boolean circadianEnabled,
+                            boolean consolidationEnabled,
+                            List<ActionSelectionType> enabledFilters,
+                            boolean expectancyEnabled,
+                            ExpectancyMode expectancyMode,
+                            boolean neuromodulationEnabled,
+                            boolean actionTendencyEnabled,
+                            boolean orexinEnabled,
+                            boolean endocrineEnabled,
+                            boolean tickGatedCognition,
+                            boolean focalDriveEnabled,
+                            boolean operantEstimatorEnabled,
+                            ActionSelectorMode actionSelector,
+                            double focusThetaOn,
+                            double focusThetaOff,
+                            boolean operantLearningEnabled) {
+        this.operantLearningEnabled = operantLearningEnabled;
         if (!(focusThetaOff >= 0 && focusThetaOff < focusThetaOn)) {
             throw new IllegalArgumentException("focus thresholds need 0 <= thetaOff < thetaOn, got thetaOn="
                     + focusThetaOn + ", thetaOff=" + focusThetaOff);
@@ -334,6 +364,11 @@ public class LearningSettings implements Serializable {
      * Issue #110: whether the operant estimator is created behind a TypedActor facade and fed the
      * values of closed episodes. Always false unless {@link #isFocalDriveEnabled()}.
      */
+    /** False only in the untrained-table control: the operant table is read but never updated. Default true. */
+    public boolean isOperantLearningEnabled() {
+        return operantLearningEnabled;
+    }
+
     public boolean isOperantEstimatorEnabled() {
         return operantEstimatorEnabled;
     }

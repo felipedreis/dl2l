@@ -152,7 +152,8 @@ public class Simulation {
         return new LearningSettings(circadianEnabled, consolidationEnabled, enabledFilters,
                 expectancyEnabled, expectancyMode, neuromodulationEnabled, actionTendencyEnabled,
                 orexinEnabled, endocrineEnabled, tickGatedCognition, focalDriveEnabled,
-                operantEstimatorEnabled, actionSelector, focusThetaOn, focusThetaOff);
+                operantEstimatorEnabled, actionSelector, focusThetaOn, focusThetaOff,
+                !ls.hasPath("operantLearningEnabled") || ls.getBoolean("operantLearningEnabled"));
     }
 
     public Long getNumHolders() {

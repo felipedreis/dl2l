@@ -82,6 +82,18 @@ class ValuationOperantTest {
     }
 
     @Test
+    void withLearningSwitchedOffTheTableStaysAtThePrior() {
+        LearningSettings frozen = new LearningSettings(false, false, List.of(), false, ExpectancyMode.DISCRETE,
+                false, false, false, false, true, false, true, LearningSettings.ActionSelectorMode.FILTER_BASED,
+                2.0, 0.5, false);
+        TestingHarness h = TestingHarness.builder().learningSettings(frozen).build();
+        deliver(h, outcome(FruitType.RED_APPLE, ActionType.EAT, -1.5));
+
+        assertEquals(PRIOR, cell(h, FruitType.RED_APPLE, ActionType.EAT));
+        assertTrue(h.bdSink().ofType(OperantUpdateState.class).isEmpty());
+    }
+
+    @Test
     void aHarmfulOutcomeRecordsANegativeSample() {
         TestingHarness h = harness(false);
         deliver(h, outcome(FruitType.RED_APPLE, ActionType.EAT, 2.0));

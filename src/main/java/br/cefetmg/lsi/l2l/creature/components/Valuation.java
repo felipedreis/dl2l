@@ -153,7 +153,8 @@ public class Valuation extends CreatureComponent {
      * the reward valuation down.
      */
     private void recordOperant(EvaluationStimulus evaluation) {
-        if (operantStore == null || !reinforcesOperantTable(evaluation.type)) {
+        if (operantStore == null || !learningSettings.isOperantLearningEnabled()
+                || !reinforcesOperantTable(evaluation.type)) {
             return;
         }
         double sample = -evaluation.arousalVariation;

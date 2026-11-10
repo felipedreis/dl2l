@@ -207,6 +207,13 @@ public class LearningSettingsTest {
     }
 
     @Test
+    void operant_learning_defaults_on_and_parses_off() {
+        assertTrue(new LearningSettings().isOperantLearningEnabled());
+        assertTrue(parse("circadianEnabled = false").isOperantLearningEnabled());
+        assertFalse(parse("operantEstimatorEnabled = true\noperantLearningEnabled = false").isOperantLearningEnabled());
+    }
+
+    @Test
     void focus_thresholds_must_keep_the_hysteresis() {
         assertThrows(IllegalArgumentException.class, () -> parse("focusThetaOn = 0.2\nfocusThetaOff = 0.2"));
         assertThrows(IllegalArgumentException.class, () -> parse("focusThetaOn = 0.2\nfocusThetaOff = 0.5"));
