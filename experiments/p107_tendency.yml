@@ -1,0 +1,20 @@
+# p107 tendency experiment: A2 with Mapa's tendency lists (m) and with no tendency filter (x), learning (n) vs frozen (f), in the pilot
+# world and the scarce world (s). docs/experiments/p107_tendency_recipe.md. The CAMPOS arms are p107_operant (same seeds). Descriptive.
+name: p107_tendency
+trials: 3
+seeds: [10701, 10702, 10703]
+conditions:
+- {key: mn,  simulation: simulations/p107_tend_mapa_a2.conf,                label: 'A2 Mapa tendencies, learning',         color: '#1f77b4'}
+- {key: mf,  simulation: simulations/p107_tend_mapa_a2_frozen.conf,         label: 'A2 Mapa tendencies, frozen',           color: '#aec7e8'}
+- {key: xn,  simulation: simulations/p107_tend_none_a2.conf,                label: 'A2 no tendency filter, learning',      color: '#d62728'}
+- {key: xf,  simulation: simulations/p107_tend_none_a2_frozen.conf,         label: 'A2 no tendency filter, frozen',        color: '#ff9896'}
+- {key: smn, simulation: simulations/p107_tend_mapa_scarce_a2.conf,         label: 'scarce, Mapa tendencies, learning',    color: '#17becf'}
+- {key: smf, simulation: simulations/p107_tend_mapa_scarce_a2_frozen.conf,  label: 'scarce, Mapa tendencies, frozen',      color: '#9edae5'}
+- {key: sxn, simulation: simulations/p107_tend_none_scarce_a2.conf,         label: 'scarce, no tendency filter, learning', color: '#e377c2'}
+- {key: sxf, simulation: simulations/p107_tend_none_scarce_a2_frozen.conf,  label: 'scarce, no tendency filter, frozen',   color: '#f7b6d2'}
+image:
+  source: registry
+data_dir: ml/data_p107_tendency
+extract: {format: parquet, backup: false, tables: all}
+upload: {enabled: true, prefix: p107_tendency}
+analysis: {module: arbiter_ladder_tendency}
