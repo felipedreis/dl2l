@@ -1,7 +1,5 @@
 # Issue #57 — Neuromodulatory Expectancy Loop + Emotion→Action Coupling
 
-> **Note — affordance zero-weight bug (fixed 2026-11-08).** This result predates the fix of a filter that returned the first candidate when every weight was 0. Measured on the arbiter-ladder arms (`p107_pilot_fix`) the fix did **not** change A0 / A1 behaviour materially (A0 still starves, the APPROACH share is unchanged; A1 d(H) +0.39), so the result is not considered invalid, but it has not been re-run. See [`docs/known-issues/affordance-zero-weight.md`](../known-issues/affordance-zero-weight.md).
-
 **Status:** implemented + validated. **Branch:** `feat/issue-57-emotion-conditioned-action-selection`.
 **Data:** `felipedreis/dl2l-experiments` prefix `p57/`.
 

@@ -1,7 +1,5 @@
 # Report: feeding at speed (#96) and seeded runs (#95) — issue #97
 
-> **Note — affordance zero-weight bug (fixed 2026-11-08).** This result predates the fix of a filter that returned the first candidate when every weight was 0. Measured on the arbiter-ladder arms (`p107_pilot_fix`) the fix did **not** change A0 / A1 behaviour materially (A0 still starves, the APPROACH share is unchanged; A1 d(H) +0.39), so the result is not considered invalid, but it has not been re-run. See [`docs/known-issues/affordance-zero-weight.md`](../known-issues/affordance-zero-weight.md).
-
 Protocol: [`docs/experiments/p97_feeding_fix_recipe.md`](../experiments/p97_feeding_fix_recipe.md)
 (pre-registered; Revision 1 was added after v1 failed). Specs: `experiments/p97_feeding_fix.yml`,
 `p97_feeding_fix_v2.yml`, `p97_seed_replay.yml`. Data on HF: `p97/`, `p97_v2/`, `p97_replay/`.

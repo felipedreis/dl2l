@@ -310,7 +310,7 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
 - **A suspected bug that did not matter.** Reading the arbiter and the filters showed that `ActionProbabilityFilter` (the `AFFORDANCE` filter of A0 / A1) returned its first
   candidate (APPROACH) whenever every learned weight was 0 (0/0 = NaN). Fixed without a flag (`fix/affordance-zero-weight`, issue #130) and tested on the pilot's seeds
   (`p107_pilot_fix`): A0 still dies 15/15, the APPROACH share is unchanged (about 65%), d(H) rises (A0 3.66 -> 4.27, A1 1.24 -> 1.63, A1 deaths 1 -> 4 of 15). I had first
-  written that the bug probably explained A0 starving and put withdrawal notices on 15 reports; the measurement refuted that and the notices were softened
+  written that the bug probably explained A0 starving and put withdrawal notices on 15 reports; the measurement refuted that and the notices on the older reports were removed
   (`docs/known-issues/affordance-zero-weight.md`). Lesson: measure the effect before invalidating. Why A0 / A1 spend about 65% of cycles on APPROACH and eat 0.9% of the time is unexplained.
 - **Process slips on the way:** Homebrew upgraded `python3` to 3.15 without the analysis packages, which made the ansible spec validation fail on three submissions and
   cost a night (libraries now installed); the CEFET VPN dropped once and a submission waited for it.

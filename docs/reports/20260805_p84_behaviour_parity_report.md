@@ -1,7 +1,5 @@
 # Experiment Report: Behaviour Parity with Mapa (2009) and Campos (2015)
 
-> **Note — affordance zero-weight bug (fixed 2026-11-08).** This result predates the fix of a filter that returned the first candidate when every weight was 0. Measured on the arbiter-ladder arms (`p107_pilot_fix`) the fix did **not** change A0 / A1 behaviour materially (A0 still starves, the APPROACH share is unchanged; A1 d(H) +0.39), so the result is not considered invalid, but it has not been re-run. See [`docs/known-issues/affordance-zero-weight.md`](../known-issues/affordance-zero-weight.md).
-
 **Issue:** [#84](https://github.com/felipedreis/dl2l/issues/84)
 **Recipe:** [`docs/experiments/p84_behaviour_parity_recipe.md`](../experiments/p84_behaviour_parity_recipe.md) — every step below traces to a numbered section there
 **Date:** 2026-08-05

@@ -25,7 +25,7 @@ own seeded stream. The positive-weight path is unchanged. Runs are not comparabl
 
 ## What it invalidates
 
-Nothing, as it turned out. The first version of this plan treated every A0 / A1 result as invalid until re-run; the comparison (`p107_pilot_fix`) showed the fix does not change A0 / A1 behaviour materially (A0 still starves, APPROACH share unchanged, A1 slightly worse), so the notices were softened and the results stand. See the known-issues page for the numbers.
+Nothing, as it turned out. The first version of this plan treated every A0 / A1 result as invalid until re-run; the comparison (`p107_pilot_fix`) showed the fix does not change A0 / A1 behaviour materially (A0 still starves, APPROACH share unchanged, A1 slightly worse), so the withdrawal notices that had been put on older reports were removed again and the results stand. See the known-issues page for the numbers.
 
 ## Check
 

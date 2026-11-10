@@ -1,7 +1,5 @@
 # Experiment Report: Memory vs. JEPA World Model — Full Subsystem Stack
 
-> **Note — affordance zero-weight bug (fixed 2026-11-08).** This result predates the fix of a filter that returned the first candidate when every weight was 0. Measured on the arbiter-ladder arms (`p107_pilot_fix`) the fix did **not** change A0 / A1 behaviour materially (A0 still starves, the APPROACH share is unchanged; A1 d(H) +0.39), so the result is not considered invalid, but it has not been re-run. See [`docs/known-issues/affordance-zero-weight.md`](../known-issues/affordance-zero-weight.md).
-
 **Experiment ID:** `20260709_memory_vs_wm_v1`  
 **Date:** 2026-07-09 / 2026-07-12 / 2026-07-13  
 **Trials:** 5 trials × 5 conditions × 5 creatures = **125 creatures total**  
