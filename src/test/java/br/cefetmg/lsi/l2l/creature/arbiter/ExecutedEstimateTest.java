@@ -39,10 +39,10 @@ class ExecutedEstimateTest {
 
     /** EAT has Q = 1, AVOID has Q = 0 (one cell each, two observations per cell). */
     private static OperantEstimator operant() {
-        OperantEstimator e = new OperantEstimator(new double[] {50, 100}, 1.0);
+        OperantEstimator e = new OperantEstimator(1.0);
         for (int i = 0; i < 20; i++) {
-            e.record(HUNGER, on(ActionType.EAT), 2.0);
-            e.record(HUNGER, on(ActionType.AVOID), 0.0);
+            e.record(on(ActionType.EAT), 2.0);
+            e.record(on(ActionType.AVOID), 0.0);
         }
         return e;
     }
@@ -91,7 +91,7 @@ class ExecutedEstimateTest {
     @Test
     void aNonCandidateIsAskedOnceUnderTheCheapestControllerOnly() {
         OperantEstimator e = operant();
-        OperantEstimator other = new OperantEstimator(new double[] {50, 100}, 1.0);
+        OperantEstimator other = new OperantEstimator(1.0);
         // The operant controller is decisive, so the episodic one (second, dearer) is never consulted.
         ArbiterActionSelector selector = new ArbiterActionSelector(List.of(), new Arbiter(
                 List.of(new Controller(ControllerType.OPERANT, e), new Controller(ControllerType.EPISODIC, other)),

@@ -49,10 +49,10 @@ class ArbiterTest {
 
     /** An estimator whose cells hold the given values; the decay is 1, so nothing is forgotten. */
     private static OperantEstimator trained(Map<ActionType, double[]> values) {
-        OperantEstimator e = new OperantEstimator(new double[] {50, 100}, 1.0);
+        OperantEstimator e = new OperantEstimator(1.0);
         values.forEach((type, vs) -> {
             for (double v : vs) {
-                e.record(HUNGER, on(type), v);
+                e.record(on(type), v);
             }
         });
         return e;
@@ -109,7 +109,7 @@ class ArbiterTest {
     @Test
     void aClearWinnerStopsTheConsultationAtTheFirstController() {
         OperantEstimator a = trained(Map.of(ActionType.EAT, repeat(2.0, 20), ActionType.AVOID, repeat(0.0, 20)));
-        OperantEstimator b = new OperantEstimator(new double[] {50, 100}, 1.0);
+        OperantEstimator b = new OperantEstimator(1.0);
         List<Action> cands = List.of(on(ActionType.EAT), on(ActionType.AVOID));
 
         ArbitrationDecision d = new Arbiter(List.of(operant(a), new Controller(ControllerType.EPISODIC, b)),
@@ -122,7 +122,7 @@ class ArbiterTest {
 
     @Test
     void anUntrainedFirstControllerDoesNotStopTheConsultation() {
-        OperantEstimator a = new OperantEstimator(new double[] {50, 100}, 1.0);
+        OperantEstimator a = new OperantEstimator(1.0);
         OperantEstimator b = trained(Map.of(ActionType.EAT, repeat(2.0, 20), ActionType.AVOID, repeat(0.0, 20)));
         List<Action> cands = List.of(on(ActionType.EAT), on(ActionType.AVOID));
 
@@ -135,8 +135,8 @@ class ArbiterTest {
 
     @Test
     void twoUntrainedControllersTieAndTheCheaperOneDecides() {
-        OperantEstimator a = new OperantEstimator(new double[] {50, 100}, 1.0);
-        OperantEstimator b = new OperantEstimator(new double[] {50, 100}, 1.0);
+        OperantEstimator a = new OperantEstimator(1.0);
+        OperantEstimator b = new OperantEstimator(1.0);
         List<Action> cands = List.of(on(ActionType.EAT), on(ActionType.AVOID));
 
         ArbitrationDecision d = new Arbiter(List.of(new Controller(ControllerType.EPISODIC, a), operant(b)),
@@ -300,7 +300,7 @@ class ArbiterTest {
     void epsilonOneChoosesEachOfFourCandidatesAboutAQuarterOfTheTime() {
         List<Action> four = List.of(on(ActionType.EAT), on(ActionType.AVOID),
                 on(ActionType.APPROACH), on(ActionType.OBSERVE));
-        Arbiter arbiter = new Arbiter(List.of(operant(new OperantEstimator(new double[] {50, 100}, 1.0))),
+        Arbiter arbiter = new Arbiter(List.of(operant(new OperantEstimator(1.0))),
                 new Params(0.8, 1.0, 1.0), new Random(7));
         int[] counts = new int[4];
         for (int i = 0; i < DRAWS; i++) {
@@ -353,7 +353,7 @@ class ArbiterTest {
         // The spread of the picks is not asserted: it is luck, and it is measured by the p105 check run.
         List<Action> four = List.of(on(ActionType.EAT), on(ActionType.AVOID),
                 on(ActionType.APPROACH), on(ActionType.OBSERVE));
-        Arbiter arbiter = new Arbiter(List.of(operant(new OperantEstimator(new double[] {50, 100}, 1.0))),
+        Arbiter arbiter = new Arbiter(List.of(operant(new OperantEstimator(1.0))),
                 new Params(0.8, 0.0, 1.0), new Random(3));
         for (int i = 0; i < 200; i++) {
             ArbitrationDecision d = arbiter.decide(four, H, HUNGER);
@@ -443,7 +443,7 @@ class ArbiterTest {
     @Test
     void eachConsultationCarriesTheEstimatesOfItsOwnController() {
         OperantEstimator decisive = trained(Map.of(ActionType.EAT, repeat(2.0, 20), ActionType.AVOID, repeat(0.0, 20)));
-        OperantEstimator untrained = new OperantEstimator(new double[] {50, 100}, 1.0);
+        OperantEstimator untrained = new OperantEstimator(1.0);
         List<Action> cands = List.of(on(ActionType.EAT), on(ActionType.AVOID));
 
         ArbitrationDecision d = new Arbiter(
@@ -459,7 +459,7 @@ class ArbiterTest {
     @Test
     void mostExpensiveAffordableIsTheLastWiredControllerEvenWhenItIsNeverConsulted() {
         OperantEstimator decisive = trained(Map.of(ActionType.EAT, repeat(2.0, 20), ActionType.AVOID, repeat(0.0, 20)));
-        OperantEstimator other = new OperantEstimator(new double[] {50, 100}, 1.0);
+        OperantEstimator other = new OperantEstimator(1.0);
         List<Action> cands = List.of(on(ActionType.EAT), on(ActionType.AVOID));
 
         ArbitrationDecision d = new Arbiter(List.of(operant(decisive), new Controller(ControllerType.EPISODIC, other)),

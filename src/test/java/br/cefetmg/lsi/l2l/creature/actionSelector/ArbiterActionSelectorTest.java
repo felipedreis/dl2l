@@ -42,9 +42,9 @@ class ArbiterActionSelectorTest {
 
     /** Real estimator with one observation per (drive, action): each value is recorded under its drive. */
     private static OperantEstimator estimatorWith(String drive, Action action, double... values) {
-        OperantEstimator e = new OperantEstimator(new double[] {50, 100}, 1.0);
+        OperantEstimator e = new OperantEstimator(1.0);
         for (double v : values) {
-            e.record(drive, action, v);
+            e.record(action, v);
         }
         return e;
     }
@@ -67,7 +67,7 @@ class ArbiterActionSelectorTest {
         Action near = on(ActionType.EAT, FruitType.RED_APPLE, 10, 1);
         Action far = on(ActionType.EAT, FruitType.RED_APPLE, 30, 2);
         ArbiterActionSelector s = selector(List.of(new TargetDistanceFilter()),
-                new OperantEstimator(new double[] {50, 100}, 1.0), 1);
+                new OperantEstimator(1.0), 1);
 
         Action chosen = s.selectOne(List.of(far, near), ctx(null));
 
@@ -83,7 +83,7 @@ class ArbiterActionSelectorTest {
         Action eat = noObject(ActionType.EAT, 1);
         List<ActionFilter> pre = List.of(new ActionTendencyFilter(
                 br.cefetmg.lsi.l2l.cluster.settings.LearningSettings.DEFAULT_ACTION_TENDENCIES));
-        ArbiterActionSelector s = selector(pre, new OperantEstimator(new double[] {50, 100}, 1.0), 1);
+        ArbiterActionSelector s = selector(pre, new OperantEstimator(1.0), 1);
 
         Action chosen = s.selectOne(List.of(noObject(ActionType.SLEEP, 2), eat, noObject(ActionType.AVOID, 3)),
                 ctx(null));
@@ -109,7 +109,7 @@ class ArbiterActionSelectorTest {
 
     @Test
     void takeLastDecisionReturnsTheDecisionOnceThenEmpty() {
-        ArbiterActionSelector s = selector(List.of(), new OperantEstimator(new double[] {50, 100}, 1.0), 1);
+        ArbiterActionSelector s = selector(List.of(), new OperantEstimator(1.0), 1);
         s.selectOne(List.of(noObject(ActionType.EAT, 1), noObject(ActionType.AVOID, 2)), ctx(null));
 
         Optional<ArbitrationDecision> first = s.takeLastDecision();
@@ -118,13 +118,13 @@ class ArbiterActionSelectorTest {
     }
 
     @Test
-    void theFocalDriveInTheContextIsTheCellUsed() {
+    void theFocalDriveInTheContextDoesNotChangeTheCellUsed() {
         Action eat = noObject(ActionType.EAT, 1);
         Action avoid = noObject(ActionType.AVOID, 2);
-        // EAT under hunger only: twenty observations of 2.0.
-        OperantEstimator e = new OperantEstimator(new double[] {50, 100}, 1.0);
+        // EAT: twenty observations of 2.0; the operant table is not keyed by the drive.
+        OperantEstimator e = new OperantEstimator(1.0);
         for (int i = 0; i < 20; i++) {
-            e.record(Constants.HUNGER, eat, 2.0);
+            e.record(eat, 2.0);
         }
         ArbiterActionSelector s = selector(List.of(), e, 1);
         List<Action> both = List.of(eat, avoid);
@@ -133,16 +133,17 @@ class ArbiterActionSelectorTest {
         ArbitrationDecision hungry = s.takeLastDecision().orElseThrow();
         assertTrue(hungry.consultations().get(0).conf() > 0.9, "under hunger EAT is decisive");
         assertEquals(eat, hungry.candidates().get(0));
-        assertTrue(hungry.estimates().get(0).q() > 1.0, "the EAT cell under hunger has its trained value");
+        assertTrue(hungry.estimates().get(0).q() > 1.0, "the EAT cell has its trained value");
 
         s.selectOne(both, ctx(Constants.SLEEP));
         ArbitrationDecision sleepy = s.takeLastDecision().orElseThrow();
-        assertEquals(0.5, sleepy.consultations().get(0).conf(), 0.0, "under sleep both cells are unseen: a tie");
+        assertEquals(hungry.estimates(), sleepy.estimates(), "under sleep the same cells are read");
+        assertEquals(hungry.consultations().get(0).conf(), sleepy.consultations().get(0).conf(), 0.0);
     }
 
     @Test
     void lastSelectionTypeIsArbiter() {
-        ArbiterActionSelector s = selector(List.of(), new OperantEstimator(new double[] {50, 100}, 1.0), 1);
+        ArbiterActionSelector s = selector(List.of(), new OperantEstimator(1.0), 1);
         assertEquals(ActionSelectionType.ARBITER, s.lastSelectionType());
     }
 
@@ -165,8 +166,8 @@ class ArbiterActionSelectorTest {
         Action avoid = noObject(ActionType.AVOID, 2);
         List<Action> both = List.of(eat, avoid);
         // Two selectors over identical estimators and seeds: one asks valueOf between its two selections.
-        ArbiterActionSelector asked = selector(List.of(), new OperantEstimator(new double[] {50, 100}, 1.0), 5);
-        ArbiterActionSelector quiet = selector(List.of(), new OperantEstimator(new double[] {50, 100}, 1.0), 5);
+        ArbiterActionSelector asked = selector(List.of(), new OperantEstimator(1.0), 5);
+        ArbiterActionSelector quiet = selector(List.of(), new OperantEstimator(1.0), 5);
 
         Action firstAsked = asked.selectOne(both, ctx(null));
         ArbitrationDecision lastAsked = asked.takeLastDecision().orElseThrow();

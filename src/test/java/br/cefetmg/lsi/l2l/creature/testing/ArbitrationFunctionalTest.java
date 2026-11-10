@@ -64,7 +64,7 @@ class ArbitrationFunctionalTest {
         for (double d : new double[] {10, 75, 120}) {
             Action approach = new Action(ActionType.APPROACH, new Perception(FruitType.RED_APPLE, new SequentialId(1), d, 0));
             for (int i = 0; i < 10; i++) {
-                h.creature().operantStore().record(drive, approach, 2.0);
+                h.creature().operantStore().record(approach.getTarget(), approach.type, 2.0);
             }
         }
     }
@@ -167,8 +167,8 @@ class ArbitrationFunctionalTest {
         TestingHarness h = harness(a2());
         h.creature().emotions().regulate(Constants.HUNGER, 3.0);
         for (int i = 0; i < 10; i++) {
-            h.creature().operantStore().record(Constants.HUNGER, selfWander(), 2.0);
-            h.creature().operantStore().record(Constants.PAIN, selfWander(), 2.0);
+            h.creature().operantStore().record(selfWander().getTarget(), selfWander().type, 2.0);
+            h.creature().operantStore().record(selfWander().getTarget(), selfWander().type, 2.0);
         }
         double wanderUnderPain = storeQ(h, selfWander(), Constants.PAIN);
         assertTrue(wanderUnderPain > 1.0, "the self cell under pain is trained");
