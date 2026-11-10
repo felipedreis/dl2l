@@ -37,8 +37,8 @@ The pilot therefore says nothing about whether a working operant controller help
 | # | Question | Decision |
 |---|---|---|
 | D1 | Key of an operant cell | **(object type, action).** No distance bin (decided), no focal drive (principle 1). Actions without an object (WANDER, SLEEP, OBSERVE on the creature itself) share one `self` object type |
-| D2 | Which outcomes reinforce it | **The same as the legacy `OperantConditioning` table** (decided). Listed below |
-| D3 | The value of one sample | *Open.* (a) the legacy valence, +1 if the drive went down and -1 otherwise, so Q is 2p - 1 with p the share of good outcomes; or (b) its magnitude, the realised drive reduction `-arousalVariation`, as the expectancy path already uses. **Recommendation: (b)**: same events and sign as the legacy table, but Q, SE and sigma then measure how much an action helps, which is what the arbiter compares |
+| D2 | Which outcomes reinforce it | **The same as the legacy `OperantConditioning` table** (decided). Listed below. **Confirmed 2026-11-10: the `self` outcomes stay out** (no `self` cell, as in the legacy table) |
+| D3 | The value of one sample | **Decided 2026-11-10: (b), the magnitude**, the realised drive reduction `-arousalVariation` (positive = the drive went down), as the expectancy path already uses; on both the legacy and the expectancy path. (The alternative was the legacy valence, +1 / -1, giving Q = 2p - 1.) Same events and sign as the legacy table, but Q, SE and sigma then measure how much an action helps, which is what the arbiter compares |
 | D4 | Prior and fading | Keep the proposal's Welford form: `Q = (n v + kappa Q0) / (n + kappa)`, `Q0 = 0`, `kappa = 1`, prior sigma 1 until n >= 3, count fading 0.995 per update |
 | D5 | Legacy table | Stays for the parity arms (A0, A1) unchanged |
 
@@ -55,7 +55,7 @@ that `HomeostaticRegulation` emits, and it keeps only those whose target is a fr
 | Deprivation RPE (expectancy only) | WANDER on the creature | **no** |
 
 Taking D2 literally, the new table learns only from outcomes on objects. In the current world that is in practice EAT (all 40,638 legacy updates in the p107 gate-1
-dump were EAT). SLEEP, WANDER and OBSERVE stay at the prior. *To confirm:* that the `self` outcomes are left out as in the legacy table, rather than added.
+dump were EAT). SLEEP, WANDER and OBSERVE stay at the prior. Confirmed: the `self` outcomes are left out.
 
 ## 4. What this means for the arbiter (to state in the proposal)
 
@@ -121,7 +121,7 @@ Adoption criteria and margins belong to the #107 recipe.
 
 ## 9. Order of work
 
-1. You confirm D3 (value of a sample) and that `self` outcomes stay out (D2).
+1. ~~You confirm D3 (value of a sample) and that `self` outcomes stay out (D2).~~ Done 2026-11-10; implementation plan in `docs/plans/operant-per-outcome.md`.
 2. Paper edits of section 5 (in the paper source; the PDF here cannot be edited).
 3. Implementation plan and code (section 7), with tests.
 4. Re-pilot A2 / A2u on CCAD (3 seeds), in this world and in one harder world.
