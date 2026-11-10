@@ -5,7 +5,7 @@ import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.CreatureDied;
 import br.cefetmg.lsi.l2l.creature.arbiter.ClosedEpisodes;
 import br.cefetmg.lsi.l2l.creature.arbiter.ClosedStep;
-import br.cefetmg.lsi.l2l.creature.arbiter.OperantReturnSink;
+import br.cefetmg.lsi.l2l.creature.arbiter.OperantUpdate;
 import br.cefetmg.lsi.l2l.creature.arbiter.OperantStore;
 import br.cefetmg.lsi.l2l.creature.bd.ActionProbabilityState;
 import br.cefetmg.lsi.l2l.creature.bd.EpisodeReturnState;
@@ -14,6 +14,7 @@ import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
 import br.cefetmg.lsi.l2l.creature.bd.EngramState;
 import br.cefetmg.lsi.l2l.creature.bd.ExpectancyState;
+import br.cefetmg.lsi.l2l.creature.bd.OperantUpdateState;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.creature.common.Perception;
 import br.cefetmg.lsi.l2l.creature.conditioning.ActionProbability;
@@ -25,6 +26,8 @@ import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.creature.memory.ShortTermMemory;
 import br.cefetmg.lsi.l2l.stimuli.DopaminergicStimulus;
 import br.cefetmg.lsi.l2l.stimuli.EvaluationStimulus;
+import br.cefetmg.lsi.l2l.world.FruitType;
+import br.cefetmg.lsi.l2l.world.PlantType;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
 import java.util.List;
@@ -55,12 +58,15 @@ public class Valuation extends CreatureComponent {
     /** Orders {@link EpisodeReturnState} rows within a creature. */
     private long episodeReturnSeq = 0;
 
+    /** Orders {@link OperantUpdateState} rows within a creature. */
+    private long operantUpdateSeq = 0;
+
     /**
-     * Issue #110: the operant table closed episodes are valued into, or null. The episodes themselves are
-     * buffered by the memory system, which sends them here as {@link ClosedEpisodes}.
+     * The A2 arm's operant table, or null unless operantEstimatorEnabled. It learns per outcome, from the same
+     * events that reinforce the legacy table (see {@link #recordOperant}); closed episodes (issue #110, buffered
+     * by the memory system and sent here as {@link ClosedEpisodes}) no longer write to it.
      */
     private OperantStore operantStore;
-    private OperantReturnSink operantSink;
 
     public Valuation(SequentialId id, LearningSettings learningSettings) {
         super(id);
@@ -73,13 +79,7 @@ public class Valuation extends CreatureComponent {
         operantConditioning = creature.operantConditioning();
         expectancy = creature.expectancy();
         memorySystem = creature.memory();
-
-        if (learningSettings.isFocalDriveEnabled()) {
-            operantStore = creature.operantStore();
-            if (operantStore != null) {
-                operantSink = new OperantReturnSink(operantStore);
-            }
-        }
+        operantStore = creature.operantStore();
     }
 
     @Override
@@ -97,6 +97,7 @@ public class Valuation extends CreatureComponent {
                 } else {
                     evaluateLegacy(evaluation);
                 }
+                recordOperant(evaluation);
 
                 ChangeStimulusState change = new ChangeStimulusStateBuilder(this, this.id)
                         .buildOneReceivedOneEmitted(evaluation, null);
@@ -111,7 +112,7 @@ public class Valuation extends CreatureComponent {
 
     /**
      * Issue #110: values the steps the memory system's episode buffer wrote when their episode closed:
-     * into the operant table, then into the {@code episode_return} table. {@link CreatureDied} is the
+     * into the {@code episode_return} table (they no longer touch the operant table). {@link CreatureDied} is the
      * death close-out; the memory system returns the steps synchronously, because this component is
      * stopped right after the message. The episode bookkeeping is an add-on to the reward valuation
      * above and must not take it down, so a failure here is logged and costs only these steps.
@@ -134,10 +135,39 @@ public class Valuation extends CreatureComponent {
         if (steps.isEmpty()) {
             return;
         }
-        if (operantSink != null) {
-            operantSink.onClosed(steps);
-        }
         persistEpisodeReturns(steps);
+    }
+
+    /**
+     * True for the targets the legacy {@code OperantConditioningActor} keeps a cell for: fruit and plant types.
+     * Outcomes on the creature itself (cholinergic, tedium, deprivation RPE) are left out, like the legacy table.
+     */
+    static boolean reinforcesOperantTable(WorldObjectType target) {
+        return target instanceof FruitType || target instanceof PlantType;
+    }
+
+    /**
+     * The one place the operant table learns, for both the legacy and the expectancy path: the sample is the
+     * realised drive reduction {@code -arousalVariation} (positive = the drive went down), credited to
+     * {@code (target, executedAction)}. A failure here costs only this sample and is logged: it must not take
+     * the reward valuation down.
+     */
+    private void recordOperant(EvaluationStimulus evaluation) {
+        if (operantStore == null || !reinforcesOperantTable(evaluation.type)) {
+            return;
+        }
+        double sample = -evaluation.arousalVariation;
+        if (!Double.isFinite(sample) || evaluation.executedAction == null) {
+            return; // record() rejects it, and a throw inside the facade would restart the actor and wipe the table
+        }
+        try {
+            OperantUpdate u = operantStore.record(evaluation.type, evaluation.executedAction, sample);
+            persist(new OperantUpdateState(id.key, operantUpdateSeq++, System.currentTimeMillis(),
+                    memorySystem.currentDecisionCycle(), evaluation.type.name(), evaluation.executedAction.name(),
+                    sample, u.n(), u.estimate().q(), u.estimate().se(), u.estimate().sigma()));
+        } catch (RuntimeException e) {
+            logger.log(Level.WARNING, "Valuation[" + id + "]: operant update failed for " + evaluation, e);
+        }
     }
 
     /** Legacy path: emotion-blind binary valence, magnitude discarded (pre-issue-57 behaviour). */
