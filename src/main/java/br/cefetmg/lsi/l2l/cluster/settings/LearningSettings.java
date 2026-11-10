@@ -104,6 +104,27 @@ public class LearningSettings implements Serializable {
 
     private final ActionSelectorMode actionSelector;
 
+    /**
+     * Which innate emotion -> action tendency sets the {@code ActionTendencyFilter} uses (p107 tendency experiment,
+     * docs/experiments/p107_tendency_recipe.md). {@code CAMPOS} is the default and dl2l's set since #57 (Campos, ALifeWorld
+     * 0.7.5.1: hunger = eat, approach, wander). {@code MAPA} is Mapa's (ALifeWorld 0.9.5, {@code aLife/emotionalSystem/*.java}): every
+     * emotion lists approach, avoid, eat, sleep, wander, touch, play ({@code HUNGER_ACTIONS = 7}; escape commented out).
+     */
+    public enum ActionTendencySet { CAMPOS, MAPA }
+
+    public static final Map<String, Set<ActionType>> MAPA_ACTION_TENDENCIES;
+    static {
+        EnumSet<ActionType> mapa = EnumSet.of(ActionType.APPROACH, ActionType.AVOID, ActionType.EAT, ActionType.SLEEP,
+                ActionType.WANDER, ActionType.TOUCH, ActionType.PLAY);
+        MAPA_ACTION_TENDENCIES = Map.of(
+                Constants.HUNGER, Collections.unmodifiableSet(EnumSet.copyOf(mapa)),
+                Constants.SLEEP,  Collections.unmodifiableSet(EnumSet.copyOf(mapa)),
+                Constants.PAIN,   Collections.unmodifiableSet(EnumSet.copyOf(mapa)),
+                Constants.TEDIUM, Collections.unmodifiableSet(EnumSet.copyOf(mapa)));
+    }
+
+    private final ActionTendencySet actionTendencySet;
+
     public LearningSettings(boolean circadianEnabled,
                             boolean consolidationEnabled,
                             List<ActionSelectionType> enabledFilters) {
@@ -268,6 +289,31 @@ public class LearningSettings implements Serializable {
                             double focusThetaOn,
                             double focusThetaOff,
                             boolean operantLearningEnabled) {
+        this(circadianEnabled, consolidationEnabled, enabledFilters, expectancyEnabled, expectancyMode,
+                neuromodulationEnabled, actionTendencyEnabled, orexinEnabled, endocrineEnabled, tickGatedCognition,
+                focalDriveEnabled, operantEstimatorEnabled, actionSelector, focusThetaOn, focusThetaOff,
+                operantLearningEnabled, ActionTendencySet.CAMPOS);
+    }
+
+    /** @param actionTendencySet the tendency sets of {@link #getActionTendencies()}; null means {@code CAMPOS} */
+    public LearningSettings(boolean circadianEnabled,
+                            boolean consolidationEnabled,
+                            List<ActionSelectionType> enabledFilters,
+                            boolean expectancyEnabled,
+                            ExpectancyMode expectancyMode,
+                            boolean neuromodulationEnabled,
+                            boolean actionTendencyEnabled,
+                            boolean orexinEnabled,
+                            boolean endocrineEnabled,
+                            boolean tickGatedCognition,
+                            boolean focalDriveEnabled,
+                            boolean operantEstimatorEnabled,
+                            ActionSelectorMode actionSelector,
+                            double focusThetaOn,
+                            double focusThetaOff,
+                            boolean operantLearningEnabled,
+                            ActionTendencySet actionTendencySet) {
+        this.actionTendencySet = actionTendencySet == null ? ActionTendencySet.CAMPOS : actionTendencySet;
         this.operantLearningEnabled = operantLearningEnabled;
         if (!(focusThetaOff >= 0 && focusThetaOff < focusThetaOn)) {
             throw new IllegalArgumentException("focus thresholds need 0 <= thetaOff < thetaOn, got thetaOn="
@@ -414,7 +460,11 @@ public class LearningSettings implements Serializable {
 
     /** The emotion→action tendency map used when {@link #isActionTendencyEnabled()}. */
     public Map<String, Set<ActionType>> getActionTendencies() {
-        return DEFAULT_ACTION_TENDENCIES;
+        return actionTendencySet == ActionTendencySet.MAPA ? MAPA_ACTION_TENDENCIES : DEFAULT_ACTION_TENDENCIES;
+    }
+
+    public ActionTendencySet getActionTendencySet() {
+        return actionTendencySet;
     }
 
     public boolean isConsolidationEnabled() {

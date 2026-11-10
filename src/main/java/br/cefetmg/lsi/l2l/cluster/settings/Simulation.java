@@ -153,7 +153,10 @@ public class Simulation {
                 expectancyEnabled, expectancyMode, neuromodulationEnabled, actionTendencyEnabled,
                 orexinEnabled, endocrineEnabled, tickGatedCognition, focalDriveEnabled,
                 operantEstimatorEnabled, actionSelector, focusThetaOn, focusThetaOff,
-                !ls.hasPath("operantLearningEnabled") || ls.getBoolean("operantLearningEnabled"));
+                !ls.hasPath("operantLearningEnabled") || ls.getBoolean("operantLearningEnabled"),
+                ls.hasPath("actionTendencySet")
+                        ? LearningSettings.ActionTendencySet.valueOf(ls.getString("actionTendencySet").toUpperCase(java.util.Locale.ROOT))
+                        : LearningSettings.ActionTendencySet.CAMPOS);
     }
 
     public Long getNumHolders() {

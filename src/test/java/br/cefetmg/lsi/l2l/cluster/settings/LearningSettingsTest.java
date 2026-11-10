@@ -207,6 +207,20 @@ public class LearningSettingsTest {
     }
 
     @Test
+    void tendency_set_defaults_to_campos_and_parses_mapa() {
+        assertEquals(LearningSettings.ActionTendencySet.CAMPOS, new LearningSettings().getActionTendencySet());
+        assertEquals(LearningSettings.DEFAULT_ACTION_TENDENCIES, parse("circadianEnabled = false").getActionTendencies());
+        LearningSettings mapa = parse("actionTendencySet = MAPA");
+        assertEquals(LearningSettings.ActionTendencySet.MAPA, mapa.getActionTendencySet());
+        java.util.Set<br.cefetmg.lsi.l2l.creature.common.ActionType> hunger = mapa.getActionTendencies().get(br.cefetmg.lsi.l2l.common.Constants.HUNGER);
+        assertTrue(hunger.contains(br.cefetmg.lsi.l2l.creature.common.ActionType.AVOID));
+        assertTrue(hunger.contains(br.cefetmg.lsi.l2l.creature.common.ActionType.SLEEP));
+        assertFalse(hunger.contains(br.cefetmg.lsi.l2l.creature.common.ActionType.OBSERVE));
+        assertFalse(hunger.contains(br.cefetmg.lsi.l2l.creature.common.ActionType.ESCAPE));
+        assertEquals(hunger, mapa.getActionTendencies().get(br.cefetmg.lsi.l2l.common.Constants.TEDIUM), "same list for every emotion, as in Mapa");
+    }
+
+    @Test
     void operant_learning_defaults_on_and_parses_off() {
         assertTrue(new LearningSettings().isOperantLearningEnabled());
         assertTrue(parse("circadianEnabled = false").isOperantLearningEnabled());
