@@ -148,8 +148,10 @@ public class Valuation extends CreatureComponent {
 
     /**
      * The one place the operant table learns, for both the legacy and the expectancy path: the sample is the
-     * realised drive reduction {@code -arousalVariation} (positive = the drive went down), credited to
-     * {@code (target, executedAction)}. A failure here costs only this sample and is logged: it must not take
+     * outcome's valence, as in the legacy table and in Mapa (2009, {@code BBCSValuation} +
+     * {@code ProbabilityMemory.varyProbability}): +1 if the drive went down, -1 otherwise, including no change
+     * (so eating a gray apple, which feeds nothing, is negative). Its size belongs to memory, not to the operant
+     * table (docs/plans/arbiter-proposal-review.md, D3). Credited to {@code (target, executedAction)}. A failure here costs only this sample and is logged: it must not take
      * the reward valuation down.
      */
     private void recordOperant(EvaluationStimulus evaluation) {
@@ -157,10 +159,10 @@ public class Valuation extends CreatureComponent {
                 || !reinforcesOperantTable(evaluation.type)) {
             return;
         }
-        double sample = -evaluation.arousalVariation;
-        if (!Double.isFinite(sample) || evaluation.executedAction == null) {
+        if (!Double.isFinite(evaluation.arousalVariation) || evaluation.executedAction == null) {
             return; // record() rejects it, and a throw inside the facade would restart the actor and wipe the table
         }
+        double sample = evaluation.arousalVariation < 0 ? 1.0 : -1.0;
         try {
             OperantUpdate u = operantStore.record(evaluation.type, evaluation.executedAction, sample);
             persist(new OperantUpdateState(id.key, operantUpdateSeq++, System.currentTimeMillis(),

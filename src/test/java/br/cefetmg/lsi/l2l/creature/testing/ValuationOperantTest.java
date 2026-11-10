@@ -64,8 +64,8 @@ class ValuationOperantTest {
         TestingHarness h = harness(false);
         deliver(h, outcome(FruitType.RED_APPLE, ActionType.EAT, -1.5));
 
-        // sample = -(-1.5) = 1.5; Q = (1 * 1.5 + 0) / (1 + 1)
-        assertEquals(0.75, cell(h, FruitType.RED_APPLE, ActionType.EAT).q(), TOL);
+        // the drive fell: sample = +1 (valence, not size); Q = (1 * 1 + 0) / (1 + 1)
+        assertEquals(0.5, cell(h, FruitType.RED_APPLE, ActionType.EAT).q(), TOL);
         assertEquals(PRIOR, cell(h, FruitType.GREEN_APPLE, ActionType.EAT), "another object type");
         assertEquals(PRIOR, cell(h, FruitType.RED_APPLE, ActionType.APPROACH), "another action");
 
@@ -74,9 +74,9 @@ class ValuationOperantTest {
         OperantUpdateState r = rows.get(0);
         assertEquals("RED_APPLE", r.getObjectType());
         assertEquals("EAT", r.getAction());
-        assertEquals(1.5, r.getSample(), TOL);
+        assertEquals(1.0, r.getSample(), TOL);
         assertEquals(1.0, r.getN(), TOL);
-        assertEquals(0.75, r.getQ(), TOL);
+        assertEquals(0.5, r.getQ(), TOL);
         assertEquals(1 / Math.sqrt(2), r.getSe(), TOL);
         assertEquals(1.0, r.getSigma(), TOL);
     }
@@ -98,15 +98,35 @@ class ValuationOperantTest {
         TestingHarness h = harness(false);
         deliver(h, outcome(FruitType.RED_APPLE, ActionType.EAT, 2.0));
 
-        assertEquals(-1.0, cell(h, FruitType.RED_APPLE, ActionType.EAT).q(), TOL);
+        assertEquals(-0.5, cell(h, FruitType.RED_APPLE, ActionType.EAT).q(), TOL);
     }
 
     @Test
-    void theExpectancyPathRecordsTheSameMagnitudeNotTheRpe() {
+    void anOutcomeThatChangesNothingIsNegative() {
+        // eating a gray apple (caloric value 0): the drive does not fall, so the valence is -1, as in Mapa and the legacy table
+        TestingHarness h = harness(false);
+        deliver(h, outcome(FruitType.GRAY_APPLE, ActionType.EAT, 0.0));
+
+        assertEquals(-0.5, cell(h, FruitType.GRAY_APPLE, ActionType.EAT).q(), TOL);
+        assertEquals(-1.0, h.bdSink().ofType(OperantUpdateState.class).get(0).getSample(), TOL);
+    }
+
+    @Test
+    void theSampleIsTheValenceNotTheSize() {
+        TestingHarness small = harness(false);
+        TestingHarness large = harness(false);
+        deliver(small, outcome(FruitType.RED_APPLE, ActionType.EAT, -0.01));
+        deliver(large, outcome(FruitType.RED_APPLE, ActionType.EAT, -5.0));
+
+        assertEquals(cell(small, FruitType.RED_APPLE, ActionType.EAT), cell(large, FruitType.RED_APPLE, ActionType.EAT));
+    }
+
+    @Test
+    void theExpectancyPathRecordsTheSameValenceNotTheRpe() {
         TestingHarness h = harness(true);
         deliver(h, outcome(FruitType.RED_APPLE, ActionType.EAT, -1.5));
 
-        assertEquals(0.75, cell(h, FruitType.RED_APPLE, ActionType.EAT).q(), TOL);
+        assertEquals(0.5, cell(h, FruitType.RED_APPLE, ActionType.EAT).q(), TOL);
         assertEquals(1, h.bdSink().ofType(OperantUpdateState.class).size());
     }
 
