@@ -180,15 +180,18 @@ public class LearningSettingsTest {
     }
 
     @Test
-    void operant_estimator_defaults_off_and_requires_the_focal_drive() {
+    void operant_estimator_defaults_off_and_does_not_need_the_focal_drive() {
         assertFalse(new LearningSettings().isOperantEstimatorEnabled());
 
         LearningSettings on = new Simulation(com.typesafe.config.ConfigFactory.parseString(
                 simulationWith("focalDriveEnabled = true\noperantEstimatorEnabled = true"))).getLearningSettings();
         assertTrue(on.isOperantEstimatorEnabled());
 
-        assertThrows(IllegalArgumentException.class, () -> new Simulation(com.typesafe.config.ConfigFactory
-                .parseString(simulationWith("operantEstimatorEnabled = true"))).getLearningSettings());
+        // The operant table learns per outcome, so it no longer needs focus episodes.
+        LearningSettings withoutFocus = new Simulation(com.typesafe.config.ConfigFactory
+                .parseString(simulationWith("operantEstimatorEnabled = true"))).getLearningSettings();
+        assertTrue(withoutFocus.isOperantEstimatorEnabled());
+        assertFalse(withoutFocus.isFocalDriveEnabled());
     }
 
     @Test

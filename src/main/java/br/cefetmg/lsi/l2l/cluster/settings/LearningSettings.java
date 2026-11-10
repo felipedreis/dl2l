@@ -84,7 +84,7 @@ public class LearningSettings implements Serializable {
     // --- Focal drive (issue #99) — default-off: filters see the per-cycle most-aroused emotion ---
     private final boolean focalDriveEnabled;
 
-    // --- Operant estimator behind the episode close-out (issue #110) — default-off; needs focalDriveEnabled ---
+    // --- Operant estimator (A2), fed per outcome by Valuation — default-off; independent of focalDriveEnabled ---
     private final boolean operantEstimatorEnabled;
 
     // --- Focus tracker thresholds (follow-up to the p107 gate; docs/plans/focus-tracker-theta-config.md) ---
@@ -192,10 +192,9 @@ public class LearningSettings implements Serializable {
     }
 
     /**
-     * @throws IllegalArgumentException if {@code operantEstimatorEnabled} is set without
-     *                                  {@code focalDriveEnabled}: the estimator is only fed by episodes,
-     *                                  and episodes exist only under the focal drive; or if {@code actionSelector}
-     *                                  is {@code ARBITER} and any of these holds: the operant estimator is off
+     * @throws IllegalArgumentException if {@code actionSelector} is {@code ARBITER} and any of these holds
+     *                                  ({@code operantEstimatorEnabled} does not need {@code focalDriveEnabled}:
+     *                                  the operant table learns per outcome, not from focus episodes): the operant estimator is off
      *                                  (the arbiter's only controller reads it); {@code enabledFilters} holds a
      *                                  filter other than {@code TARGET_DISTANCE} (the arbiter replaces the rest);
      *                                  neuromodulation is on (tau is a constant, see #104 Q7)
@@ -246,9 +245,6 @@ public class LearningSettings implements Serializable {
         }
         this.focusThetaOn  = focusThetaOn;
         this.focusThetaOff = focusThetaOff;
-        if (operantEstimatorEnabled && !focalDriveEnabled) {
-            throw new IllegalArgumentException("operantEstimatorEnabled requires focalDriveEnabled");
-        }
         ActionSelectorMode mode = actionSelector == null ? ActionSelectorMode.FILTER_BASED : actionSelector;
         if (mode == ActionSelectorMode.ARBITER) {
             if (!operantEstimatorEnabled) {
