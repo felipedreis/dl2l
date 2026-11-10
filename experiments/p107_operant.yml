@@ -1,0 +1,16 @@
+# p107 operant re-pilot: A2 with the per-outcome operant table against the same A2 with the table frozen, in the pilot world and
+# in a scarce world. docs/experiments/p107_operant_recipe.md. Descriptive. Seeds as the pilot.
+name: p107_operant
+trials: 3
+seeds: [10701, 10702, 10703]
+conditions:
+- {key: a2n, simulation: simulations/p107_gate2_a2.conf,          label: 'A2, per-outcome operant',        color: '#d8733b'}
+- {key: a2f, simulation: simulations/p107_op_a2_frozen.conf,       label: 'A2, operant frozen',             color: '#9467bd'}
+- {key: sn,  simulation: simulations/p107_op_scarce_a2.conf,       label: 'A2 scarce, per-outcome operant', color: '#2ca02c'}
+- {key: sf,  simulation: simulations/p107_op_scarce_a2_frozen.conf, label: 'A2 scarce, operant frozen',     color: '#8c564b'}
+image:
+  source: registry
+data_dir: ml/data_p107_operant
+extract: {format: parquet, backup: false, tables: all}
+upload: {enabled: true, prefix: p107_operant}
+analysis: {module: arbiter_ladder_operant}
