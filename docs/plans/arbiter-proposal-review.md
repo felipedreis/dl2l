@@ -126,3 +126,17 @@ Adoption criteria and margins belong to the #107 recipe.
 3. Implementation plan and code (section 7), with tests.
 4. Re-pilot A2 / A2u on CCAD (3 seeds), in this world and in one harder world.
 5. #107 recipe with the restated A2 hypotheses and the new sample sizes; then #108 / #109.
+
+## 10. Outcome and settled configuration (2026-11-11)
+
+Experiments `p107_operant` and `p107_tendency` (results in their recipes; diagnosis `analysis/diagnostics/p107_exposure_diagnosis.py`):
+the per-outcome operant table learns the right values (gray EAT about -0.95, food about +0.85) and at food eats at least as readily as a frozen
+table, but learners spend half as long at food and two to three times as long next to gray apples. The table has no value for APPROACH
+(approaching has no immediate outcome, D2), so the creature approaches gray apples as readily as food, refuses them, and moves on to the next
+gray apple; a frozen table eats them, which clears them away. Mapa's tendency lists or no filter did not help: SLEEP and the 10-cycle sleep lock
+made every arm worse.
+
+**Settled:** A0's classic configuration (CAMPOS tendency lists) for every arm; the operant controller as implemented (per-outcome valence,
+(object, action) key). A2 is not tuned further. Its limitation (a habit cannot learn "don't go there") is reported as a finding and is the
+contrast A3 (episodic credit to APPROACH from what follows) is expected to address. The pre-registration is `docs/experiments/arbiter_ladder_recipe.md`.
+
