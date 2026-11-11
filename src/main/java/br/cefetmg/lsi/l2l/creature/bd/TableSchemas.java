@@ -415,7 +415,9 @@ public final class TableSchemas {
                                 col("executed_q", ColType.DOUBLE, ArbitrationDecisionState::getExecutedQ),
                                 col("executed_se", ColType.DOUBLE, ArbitrationDecisionState::getExecutedSe),
                                 col("executed_sigma", ColType.DOUBLE, ArbitrationDecisionState::getExecutedSigma)),
-                        controllerColumns())));
+                        controllerColumns(),
+                        List.<Column<ArbitrationDecisionState>>of(
+                                col("novelty_bonus", ColType.DOUBLE, ArbitrationDecisionState::getNoveltyBonus)))));
 
         // Operant table (A2): one row per update of a (object type, action) cell.
         all.add(table("operant_update_state", OperantUpdateState.class, OperantUpdateState::getId, List.of(

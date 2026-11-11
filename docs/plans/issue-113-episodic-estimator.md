@@ -22,3 +22,9 @@ the median neighbour distance (equal weights when `b = 0`); `v_j = V(G_j | H_now
 Close, agreeing, many neighbours -> narrow SE; one neighbour, far neighbours, or disagreeing neighbours -> wide SE; `n_eff` of ten
 equal weights = 10, one close nine far ~ 1; values are read against `H_now` (same engram, other H, other V); bootstrap term and
 zeroed APPROACH handled; empty store -> prior; deterministic; read-only.
+
+## Finding during implementation
+With `b` the *median* neighbour distance the weights adapt to the spread: ten neighbours that are all far get `n_eff` close to 10, and
+"one close, nine far" gives `n_eff` about 9.7, not about 1 as the paper's example says. The wide error bar of distant memory comes from `beta = L * Dbar`
+alone (tested: `oneCloseAndNineFarIsWideThroughTheDistanceBiasNotThroughNEff`). Consequence for #114: the novelty bonus `0.1/sqrt(1 + n_eff)` is
+large only when the action has few engrams, not when the nearby ones are far. Reported, not changed: the paper's formulas are implemented as written.

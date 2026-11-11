@@ -15,3 +15,8 @@ Implementation: in FIXED_ORDER the arbiter evaluates the same cheapest-first lis
 
 Done when: a seeded test runs both modes on identical stub controllers and asserts that chosen estimates and stream consumption are identical
 whenever both modes pick the same controller, and that the modes differ only in `decidingController` (and what follows from it) otherwise.
+
+## As implemented
+`Arbiter.Mode { ARBITRATION, FIXED_ORDER }`, constructor argument; `Arbiter.FIXED_ORDER_MIN_N_EFF = 3`. In FIXED_ORDER every affordable controller is
+consulted (telemetry carries both), and the most expensive one with evidence decides; a controller without an `nEff` (operant) always has evidence.
+`ArbiterBudgetAndModeTest.theModesDifferOnlyInWhichControllerDecides` runs 300 seeded decisions in both modes.

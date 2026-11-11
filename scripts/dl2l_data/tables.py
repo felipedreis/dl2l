@@ -371,14 +371,8 @@ def _arbitration_post_process(df):
 
 TABLES["arbitration_decisions"] = (
     """
-    SELECT d.creature_key, d.seq, d.time_ms, d.cycle, d.focal_drive, d.efficiency, d.affordable_controller,
-           d.candidate_count, d.deciding_controller, d.n_consulted, d.source, d.n_tied_at_max,
-           d.chosen_action, d.chosen_object_type, d.chosen_q, d.chosen_se, d.chosen_sigma,
-           d.best_q, d.best_se, d.best_sigma, d.runnerup_q, d.runnerup_se, d.runnerup_sigma,
-           d.executed_action, d.executed_object_type, d.executed_source, d.executed_q, d.executed_se, d.executed_sigma,
-           d.operant_conf, d.operant_q, d.operant_se, d.operant_sigma,
-           d.episodic_conf, d.episodic_q, d.episodic_se, d.episodic_sigma,
-           d.planner_conf, d.planner_q, d.planner_se, d.planner_sigma,
+    -- d.* on purpose (like run_info): dumps from before novelty_bonus (issue #114) lack that column and must still extract.
+    SELECT d.* EXCLUDE (id),
            er.episode_id, er.drive AS episode_drive, er.close_type, er.steps_to_close,
            er.bootstrap, er.value AS realised_value,
            er.action AS episode_action, er.dup_n AS episode_dup_n

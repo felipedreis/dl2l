@@ -29,6 +29,8 @@ import java.util.List;
  *                           Q; {@code null} when there is one candidate
  * @param nTiedAtMax         how many candidates have exactly the highest Q; 1 when the best is unique (#105)
  * @param source             how the action was picked
+ * @param noveltyBonus       the bonus the Thompson draw added to the chosen candidate, {@code noveltyScale / sqrt(1 +
+ *                           n_eff)}; 0 when the deciding controller gives no neighbour count (#114)
  */
 public record ArbitrationDecision(int candidateCount,
                                   List<Action> candidates,
@@ -42,7 +44,8 @@ public record ArbitrationDecision(int candidateCount,
                                   Estimate bestEstimate,
                                   Estimate runnerUpEstimate,
                                   int nTiedAtMax,
-                                  ExplorationSource source) {
+                                  ExplorationSource source,
+                                  double noveltyBonus) {
 
     /**
      * One controller's answer to the stopping rule.

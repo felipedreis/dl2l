@@ -20,8 +20,21 @@ import java.util.Random;
  *
  * <p>Consultation is in cost order because a controller's estimate is paid for before it is known whether
  * it is needed: the stopping rule is what keeps the expensive controllers from being asked on easy
- * decisions. Only the {@link ControllerType#OPERANT} controller is wired in R1, so the stopping rule is
- * not yet exercised in production.
+ * decisions. The stopping rule is exercised in production from A3, when the episodic controller is wired.
+ *
+ * <p><b>Budget (#114).</b> Deliberation costs time, so each controller has a minimum behavioural efficiency
+ * {@code e} (operant 0, episodic 0.3, planner 0.7). The consultation stops before the first controller the
+ * creature cannot afford at the {@code e} it is given; the cheapest controller is always consulted.
+ *
+ * <p><b>Novelty (#114).</b> An estimate that carries an effective neighbour count adds
+ * {@code noveltyScale / sqrt(1 + n_eff)} to its Thompson draw (paper section 4.5; 0.1 by default). It is a
+ * deterministic term, so the stream is consumed exactly as without it.
+ *
+ * <p><b>Fixed order (#116, the A5 control).</b> In {@link Mode#FIXED_ORDER} the same controllers, budget, draw and
+ * stream are used, but the deciding controller is chosen positionally instead of by decisiveness: the most
+ * expensive affordable controller that has evidence decides, the cheaper one otherwise. A controller has evidence
+ * when its estimates carry an effective neighbour count of at least {@link #FIXED_ORDER_MIN_N_EFF} for every
+ * candidate; one that has no such count (the operant table) always does.
  *
  * <p>Random draws, in order: one {@code nextDouble()} per decision with two or more candidates; then one
  * {@code nextInt(n)} if the floor fired, else one {@code nextGaussian()} per candidate in candidate order,
@@ -32,19 +45,49 @@ import java.util.Random;
  */
 public final class Arbiter {
 
-    /** Controller families, in cost order. Only {@code OPERANT} is wired in R1 (issue #104). */
-    public enum ControllerType { OPERANT, EPISODIC, PLANNER }
+    /**
+     * Controller families, in cost order, each with the minimum behavioural efficiency {@code e = E(arousal)/10} at
+     * which the creature can afford to consult it (paper section 4.5, issue #114).
+     */
+    public enum ControllerType {
+        OPERANT(0.0), EPISODIC(0.3), PLANNER(0.7);
+
+        private final double minEfficiency;
+
+        ControllerType(double minEfficiency) {
+            this.minEfficiency = minEfficiency;
+        }
+
+        public double minEfficiency() {
+            return minEfficiency;
+        }
+    }
+
+    /** How the deciding controller is chosen. {@code ARBITRATION}: by decisiveness. {@code FIXED_ORDER}: by position (#116). */
+    public enum Mode { ARBITRATION, FIXED_ORDER }
+
+    /** Effective neighbours a controller needs for every candidate to count as having evidence in {@link Mode#FIXED_ORDER}. */
+    public static final double FIXED_ORDER_MIN_N_EFF = 3.0;
 
     /**
-     * A controller: its family and the estimator that answers for it.
+     * A controller: its family, the estimator that answers for it and the efficiency it needs.
      *
-     * @throws IllegalArgumentException if {@code type} or {@code estimator} is null
+     * @param minEfficiency the behavioural efficiency below which the controller is unaffordable; in [0, 1]
+     * @throws IllegalArgumentException if {@code type} or {@code estimator} is null, or {@code minEfficiency} is not in [0, 1]
      */
-    public record Controller(ControllerType type, ValueEstimator estimator) {
+    public record Controller(ControllerType type, ValueEstimator estimator, double minEfficiency) {
+
+        /** The family's own minimum efficiency ({@link ControllerType#minEfficiency()}). */
+        public Controller(ControllerType type, ValueEstimator estimator) {
+            this(type, estimator, type == null ? 0.0 : type.minEfficiency());
+        }
 
         public Controller {
             if (type == null || estimator == null) {
                 throw new IllegalArgumentException("type and estimator must not be null");
+            }
+            if (!(minEfficiency >= 0.0 && minEfficiency <= 1.0)) {
+                throw new IllegalArgumentException("minEfficiency must be in [0, 1]: " + minEfficiency);
             }
         }
     }
@@ -53,16 +96,25 @@ public final class Arbiter {
      * @param theta   decisiveness at which a controller stops the consultation, in [0.5, 1]
      * @param epsilon probability of the uniform floor, in [0, 1]
      * @param tau     scale of the Thompson draw; finite and non-negative. {@code 0} is pure greedy
+     * @param noveltyScale scale of the novelty bonus {@code noveltyScale / sqrt(1 + n_eff)}; finite and non-negative
      * @throws IllegalArgumentException if a value is out of range
      */
-    public record Params(double theta, double epsilon, double tau) {
+    public record Params(double theta, double epsilon, double tau, double noveltyScale) {
 
-        /** The paper's values (section 4.5): theta = 0.8, epsilon = 0.03, tau = 1. */
+        /** The paper's values (section 4.5): theta = 0.8, epsilon = 0.03, tau = 1, novelty 0.1. */
         public static Params defaults() {
-            return new Params(0.8, 0.03, 1.0);
+            return new Params(0.8, 0.03, 1.0, 0.1);
+        }
+
+        /** With the paper's novelty scale. */
+        public Params(double theta, double epsilon, double tau) {
+            this(theta, epsilon, tau, 0.1);
         }
 
         public Params {
+            if (!Double.isFinite(noveltyScale) || noveltyScale < 0.0) {
+                throw new IllegalArgumentException("noveltyScale must be finite and non-negative: " + noveltyScale);
+            }
             if (!(theta >= 0.5 && theta <= 1.0)) {
                 throw new IllegalArgumentException("theta must be in [0.5, 1]: " + theta);
             }
@@ -78,14 +130,25 @@ public final class Arbiter {
     private final List<Controller> controllers;
     private final Params params;
     private final Random random;
+    private final Mode mode;
+
+    /** {@link Mode#ARBITRATION}. */
+    public Arbiter(List<Controller> cheapestFirst, Params params, Random random) {
+        this(cheapestFirst, params, random, Mode.ARBITRATION);
+    }
 
     /**
      * @param cheapestFirst controllers in consultation order; at least one
      * @param params        stopping, floor and draw parameters
      * @param random        the stream every draw comes from; owned by the caller and not shared
+     * @param mode          how the deciding controller is chosen
      * @throws IllegalArgumentException if the list is empty or holds a null, or a parameter is null
      */
-    public Arbiter(List<Controller> cheapestFirst, Params params, Random random) {
+    public Arbiter(List<Controller> cheapestFirst, Params params, Random random, Mode mode) {
+        if (mode == null) {
+            throw new IllegalArgumentException("mode must not be null");
+        }
+        this.mode = mode;
         if (cheapestFirst == null || cheapestFirst.isEmpty()) {
             throw new IllegalArgumentException("at least one controller is required");
         }
@@ -114,6 +177,16 @@ public final class Arbiter {
      *                                  element: a bug in that controller, not a fallback case
      */
     public ArbitrationDecision decide(List<Action> candidates, double[] h, String focalDrive) {
+        return decide(candidates, h, focalDrive, 1.0);
+    }
+
+    /**
+     * {@link #decide(List, double[], String)} under a budget: a controller whose {@code minEfficiency} is above
+     * {@code efficiency} is not consulted, nor is any more expensive one (the cheapest always is).
+     *
+     * @param efficiency behavioural efficiency {@code e = E(arousal)/10} of this cycle; {@code NaN} is read as 0
+     */
+    public ArbitrationDecision decide(List<Action> candidates, double[] h, String focalDrive, double efficiency) {
         if (candidates == null || candidates.isEmpty()) {
             throw new IllegalArgumentException("candidates must not be empty");
         }
@@ -128,15 +201,31 @@ public final class Arbiter {
         List<Action> cands = List.copyOf(candidates);
         int n = cands.size();
 
+        double budget = Double.isNaN(efficiency) ? 0.0 : efficiency;
         List<ArbitrationDecision.Consultation> consultations = new ArrayList<>();
         List<Estimate> deciding = null;
         ControllerType decidingType = null;
         double bestConf = 0.0;
-        for (Controller c : controllers) {
+        for (int i = 0; i < controllers.size(); i++) {
+            Controller c = controllers.get(i);
+            if (i > 0 && budget < c.minEfficiency()) {
+                break; // cannot afford to escalate
+            }
             List<Estimate> est = c.estimator().estimate(cands, h.clone(), focalDrive);
             checkShape(c.type(), est, n);
             double conf = decisiveness(est);
             consultations.add(new ArbitrationDecision.Consultation(c.type(), conf, est));
+            if (mode == Mode.FIXED_ORDER) {
+                // Every affordable controller is consulted; the rule below picks the one that decides.
+                if (hasEvidence(est)) {
+                    deciding = est;
+                    decidingType = c.type();
+                } else if (deciding == null) {
+                    deciding = est;
+                    decidingType = c.type();
+                }
+                continue;
+            }
             if (conf > bestConf) {
                 bestConf = conf;
                 deciding = est;
@@ -147,11 +236,11 @@ public final class Arbiter {
             }
         }
 
-        ControllerType affordable = mostExpensiveAffordable();
+        ControllerType affordable = mostExpensiveAffordable(budget);
         if (n == 1) {
             return new ArbitrationDecision(1, cands, deciding, consultations, decidingType, affordable, 0,
                     cands.get(0), deciding.get(0), deciding.get(0), null, 1,
-                    ArbitrationDecision.ExplorationSource.SINGLE);
+                    ArbitrationDecision.ExplorationSource.SINGLE, novelty(deciding.get(0)));
         }
 
         double maxQ = deciding.get(argmaxQ(deciding)).q();
@@ -172,7 +261,7 @@ public final class Arbiter {
             double bestDraw = Double.NEGATIVE_INFINITY;
             for (int i = 0; i < n; i++) {
                 Estimate e = deciding.get(i);
-                double draw = e.q() + params.tau() * e.se() * random.nextGaussian();
+                double draw = e.q() + novelty(e) + params.tau() * e.se() * random.nextGaussian();
                 if (draw > bestDraw) {
                     bestDraw = draw;
                     chosenIndex = i;
@@ -187,16 +276,38 @@ public final class Arbiter {
 
         return new ArbitrationDecision(n, cands, deciding, consultations, decidingType, affordable, chosenIndex,
                 cands.get(chosenIndex), deciding.get(chosenIndex), deciding.get(argmaxQ(deciding)),
-                deciding.get(secondIndex(deciding)), nTiedAtMax, source);
+                deciding.get(secondIndex(deciding)), nTiedAtMax, source, novelty(deciding.get(chosenIndex)));
     }
 
     /**
-     * The most expensive controller the budget allows (#105, telemetry only). With no budget yet (#114 adds
-     * one) every wired controller is affordable, so this is the last one in cost order. Affordable is not
-     * consulted: the stopping rule may never ask it.
+     * The most expensive controller the budget allows at efficiency {@code e} (#105, #114): the last in cost order
+     * whose minimum is met, the cheapest always. It is not necessarily consulted: the stopping rule may never ask it.
      */
-    private ControllerType mostExpensiveAffordable() {
-        return controllers.get(controllers.size() - 1).type();
+    private ControllerType mostExpensiveAffordable(double e) {
+        ControllerType best = controllers.get(0).type();
+        for (int i = 1; i < controllers.size(); i++) {
+            if (e >= controllers.get(i).minEfficiency()) {
+                best = controllers.get(i).type();
+            } else {
+                break;
+            }
+        }
+        return best;
+    }
+
+    /** The novelty bonus of one estimate: {@code noveltyScale / sqrt(1 + n_eff)}; 0 when it has no neighbour count. */
+    private double novelty(Estimate e) {
+        return Double.isNaN(e.nEff()) ? 0.0 : params.noveltyScale() / Math.sqrt(1.0 + e.nEff());
+    }
+
+    /** Evidence in {@link Mode#FIXED_ORDER}: every candidate backed by at least {@link #FIXED_ORDER_MIN_N_EFF} neighbours. */
+    private static boolean hasEvidence(List<Estimate> estimates) {
+        for (Estimate e : estimates) {
+            if (!Double.isNaN(e.nEff()) && e.nEff() < FIXED_ORDER_MIN_N_EFF) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

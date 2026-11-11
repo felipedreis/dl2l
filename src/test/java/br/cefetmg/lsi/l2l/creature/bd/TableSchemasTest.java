@@ -114,7 +114,7 @@ class TableSchemasTest {
                 "executed_action", "executed_object_type", "executed_source", "executed_q", "executed_se",
                 "executed_sigma", "operant_conf", "operant_q", "operant_se", "operant_sigma", "episodic_conf",
                 "episodic_q", "episodic_se", "episodic_sigma", "planner_conf", "planner_q", "planner_se",
-                "planner_sigma"));
+                "planner_sigma", "novelty_bonus"));
         // Operant table (A2), per outcome.
         t.put("operant_update_state", List.of("creature_key", "seq", "time_ms", "cycle", "object_type", "action",
                 "sample", "n", "q", "se", "sigma"));
