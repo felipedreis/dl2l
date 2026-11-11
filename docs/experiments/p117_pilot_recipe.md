@@ -42,7 +42,7 @@ The A2 arm was run on another day; the machine-dependence of cycle rate (recipe 
 
 ## 5. Procedure
 
-1. `mvn test` green; push the branch and `preview/a3-episodic` (image trigger); pin the `sha-` tag; `scripts/validate_experiment.py experiments/p117_pilot.yml`.
+1. `mvn test` green; push the branch and `preview/a3-episodic` (image trigger; if the workflow run wedges in `queued`, cancel fails and a new commit on the branch re-triggers it, as happened on 2026-11-11); pin the `sha-` tag of the commit that built the image and record it in section 7 with the run's `run_info`; `scripts/validate_experiment.py experiments/p117_pilot.yml`.
 2. Submit to CCAD (VPN; submit, poll, `-e rescue=true`, patient retries); upload by hand with `dl2l_data.upload` (the playbook skips HF); check `run_info` seeds and observed times.
 3. `PYTHONPATH=analysis /opt/homebrew/bin/python3.13 -m dl2l_analysis --experiment p117_pilot`; read a2n from `ml/data_p107_operant` for R2 and R6 by hand.
 
