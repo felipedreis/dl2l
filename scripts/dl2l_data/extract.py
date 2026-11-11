@@ -57,6 +57,7 @@ OPTIONAL_RAW = {
     "episode_returns": "episode_return",                       # issue #110
     "arbitration_decisions": "arbitration_decision_state",     # issue #105
     "operant_updates": "operant_update_state",                 # operant per-outcome (A2)
+    "episodic_engrams": "episodic_engram",                     # issue #111 (A3/A5)
 }
 
 

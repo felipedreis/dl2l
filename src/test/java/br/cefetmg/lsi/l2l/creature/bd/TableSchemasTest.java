@@ -42,7 +42,7 @@ class TableSchemasTest {
      */
     private static final List<String> ADDED_SINCE_PORT = List.of(
             "action_probability_state", "memory_decision_state", "drive_outcome_state", "episode_return",
-            "run_info", "arbitration_decision_state", "operant_update_state");
+            "run_info", "arbitration_decision_state", "operant_update_state", "episodic_engram");
 
     private static final List<String> EXPECTED_TABLE_ORDER =
             Stream.concat(PORTED_TABLE_ORDER.stream(), ADDED_SINCE_PORT.stream()).toList();
@@ -118,6 +118,14 @@ class TableSchemasTest {
         // Operant table (A2), per outcome.
         t.put("operant_update_state", List.of("creature_key", "seq", "time_ms", "cycle", "object_type", "action",
                 "sample", "n", "q", "se", "sigma"));
+        // Issue #111: the episodic engram; the key is k_00..k_14.
+        List<String> engram = new java.util.ArrayList<>(List.of("creature_key", "seq", "time_ms", "episode_id", "drive",
+                "close_type", "step_cycle", "steps_to_outcome", "action", "object_type", "h_hunger", "h_sleep", "h_pain",
+                "h_tedium", "g_hunger", "g_sleep", "g_pain", "g_tedium", "bootstrap_term"));
+        for (int i = 0; i < 15; i++) {
+            engram.add(String.format("k_%02d", i));
+        }
+        t.put("episodic_engram", engram);
         return t;
     }
 
@@ -150,7 +158,8 @@ class TableSchemasTest {
             Map.entry("drive_outcome_state", DriveOutcomeState.class),
             Map.entry("episode_return", EpisodeReturnState.class),
             Map.entry("arbitration_decision_state", ArbitrationDecisionState.class),
-            Map.entry("operant_update_state", OperantUpdateState.class));
+            Map.entry("operant_update_state", OperantUpdateState.class),
+            Map.entry("episodic_engram", EpisodicEngramState.class));
 
     @Test
     void tablesAreThePorted22FollowedByAnyLaterAdditions() {
