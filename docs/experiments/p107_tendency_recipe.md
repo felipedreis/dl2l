@@ -39,3 +39,20 @@ predicted that learning helps CAMPOS, and the cluster showed the opposite.
 1. `mvn test` green; push; `preview/focus-theta-config` (image trigger); pin the `sha-` tag.
 2. Submit to CCAD; collect with `-e rescue=true`; upload by hand (`dl2l_data.upload`, python3.13); check `run_info` and observed times.
 3. `PYTHONPATH=analysis python3.13 -m dl2l_analysis --experiment p107_tendency`.
+
+## 6. Results (run 2026-11-10/11; CCAD, 24 trials; HF `p107_tendency/`, 659 files; seeds and observed times checked)
+
+| Reading | MAPA | NONE |
+|---|---|---|
+| R1 (it learns) | **Holds** (217-275 updates per learning trial, none frozen) | **Holds** (103-199) |
+| R2 (fewer gray EATs), pilot world | **Holds:** -0.20 to -0.21 in every seed | **Holds:** -0.03, -0.24, -0.09 |
+| R2, scarce world | not lower (+0.002 to +0.038) | not lower (-0.048 to +0.007) |
+| R4 (regulation not worse, pilot) | **Fails badly:** d(H) +1.13 to +1.69; **15 / 15 learners died** (frozen: 3 / 15) | **Fails badly:** d(H) +0.88 to +1.41; **15 / 15 died** (frozen: 9 / 15) |
+| H1 (scarce world) | not shown: d(H) -0.04 to +0.02; 15 / 15 died in both arms | not shown, worse: d(H) +1.1 to +2.4 |
+| V1 (beats CAMPOS learning) | **Fails** in the pilot world (d(H) +2.2 to +2.7 against `a2n`); in the scarce world d(H) lower by 1.1 in every seed against `sn`, but those creatures lived shorter (152-163 s), so this is lifespan, not regulation | **Fails** (pilot +5.9 to +6.3; scarce +0.2 to +1.6) |
+
+All deaths are starvation (hunger 7). The table learned the right values (gray EAT about -0.93, red and green about +0.85), yet learners *chose* food EATs about half as
+often per decision as the frozen arms (MAPA 0.78% against 1.35%, NONE 0.52% against 1.24%). SLEEP is not the cause: the frozen MAPA arm slept more (32% of decisions)
+and mostly survived. A structural finding common to both variants, with and without learning: the arbiter's hysteresis gate overrode about 40% of all decisions
+(6% under CAMPOS) and blocked most chosen food EATs (60% in MAPA learning). Predictions: R1 and R2 held in the pilot world as predicted; V1 failed as predicted; the
+predicted mechanism (SLEEP dilution) did not hold. Why learning lowers food choices in every tendency variant is not explained.

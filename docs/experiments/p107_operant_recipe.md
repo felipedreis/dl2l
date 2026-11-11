@@ -44,3 +44,17 @@ Scarce world (`sn` vs `sf`):
 
 R1, R2 and R3 hold (with the valence, eating a gray apple is a steady -1, below the prior of untried actions); R4 holds (equivalent). H1 is open; my prior is a small or no effect, because the table only has evidence about EATs
 (gray apples carry no food) while the scarce world mainly needs finding food, which the operant table cannot value.
+
+## 6. Results (run 2026-11-10, valence sample; CCAD, 12 trials; HF `p107_operant/`)
+
+| Reading | Result |
+|---|---|
+| R1 (it learns) | **Holds.** about 22,400 updates per `a2n` trial, none in `a2f`; in the scarce world 801-873 per `sn` trial, none in `sf` |
+| R2 (fewer gray EATs) | **Holds, small.** gray share of EATs 0.52 against 0.58, per seed -0.057 to -0.067 (pilot world); scarce world -0.010 to +0.002 (not lower in every seed) |
+| R3 (more decisive) | **Holds.** decisive in about 5.4% of multi-candidate decisions (pilot) and 13-16% (scarce), 0% frozen |
+| R4 (equal regulation, pilot) | **Fails, worse:** d(H) over life +0.14 to +0.15 in every seed (0.31 against 0.17); food EATs per decision -27% |
+| H1 (scarce world) | **Not shown:** all 30 creatures died in both arms; learners lived shorter in every seed; d(H) in the first 180 s worse |
+
+The table learned correct values (gray EAT about -0.99, red and green about +0.8). Learners spent at least 2.5% (pilot) and 9% (scarce) of their decisions next to a
+gray apple they would not eat: at contact a hungry creature can only EAT or WANDER under the CAMPOS tendency filter, and an uneaten gray apple keeps it there.
+Followed up by `p107_tendency_recipe.md`.
