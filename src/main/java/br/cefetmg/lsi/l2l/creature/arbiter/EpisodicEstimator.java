@@ -23,16 +23,22 @@ import java.util.List;
  * </ul>
  * {@code sigma} is the omega-weighted spread of the neighbours' values, with the reliability correction
  * {@code n_eff / (n_eff - 1)}, blended with the prior as in {@link OperantEstimator}:
- * {@code sigma^2 = (NU0 sigma0^2 + (n_eff - 1) s^2) / (NU0 + n_eff - 1)} with {@code sigma0 = NU0 = 1}. A deliberate departure
- * from the paper's {@code sigma = s}, for the same reason as there: one neighbour, or neighbours that agree exactly, would
- * give {@code sigma = 0} and an error bar of 0 from a single memory. The blend is 1 for one neighbour and tends to {@code s}
- * as evidence accumulates.
+ * {@code sigma^2 = (NU0 sigma0^2 + (n_eff - 1) s^2) / (NU0 + n_eff - 1)} with {@code NU0 = 1} and {@code sigma0 =}
+ * {@link #PRIOR_SIGMA}. A deliberate departure from the paper's {@code sigma = s}, for the same reason as there: one
+ * neighbour, or neighbours that agree exactly, would give {@code sigma = 0} and an error bar of 0 from a single memory.
+ * The blend is {@code sigma0} for one neighbour and tends to {@code s} as evidence accumulates.
+ *
+ * <p>{@code sigma0} is on the scale of the values, not of the operant table's valence: {@code V(G | H)} is a deficit
+ * reduction, about 0.01-0.25 per step in the pilot (EAT on food 0.11-0.24, APPROACH toward food 0.02-0.05, toward gray 0.006), so
+ * {@link #PRIOR_SIGMA} = 0.1 is about one meal's worth. A first version copied the operant's {@code sigma0 = 1}: replayed on
+ * the pilot's real episodes (analysis/diagnostics/a3_episodic_replay.py) its SE was about 0.11 against value gaps of 0.005-0.01, so the
+ * controller was decisive in 0 of 3000 queries; with 0.1 it is in 15-19% and prefers APPROACH toward food (59%) over gray (37%).
  *
  * <p>Sparse (one neighbour: {@code sigma^2 / n_eff = 1}), distant ({@code beta} grows with {@code Dbar}) or disagreeing
  * ({@code s} grows) memories give a wide {@code SE}. Note that with {@code b} the median distance, {@code n_eff} itself
  * stays high when the neighbours are all far (the weights adapt to the spread); distance is what {@code beta} is for.
  *
- * <p>An action with no engram gives {@code Estimate(0, 1, 1, nEff = 0)}, the same prior as an unseen operant cell.
+ * <p>An action with no engram gives {@code Estimate(0, sigma0, sigma0, nEff = 0)}: no value, the prior's error bar.
  *
  * <p>{@link #estimate} is read-only. Not thread-safe: it lives behind a TypedActor facade in {@code CreatureActor}.
  */
@@ -43,7 +49,9 @@ public final class EpisodicEstimator implements EpisodicStore {
     /** Weight of the distance bias {@code beta = L * Dbar} (paper section 4.4). */
     public static final double DEFAULT_BIAS = 0.5;
 
-    private static final double SIGMA0 = 1.0;
+    /** Prior spread of a value, about one meal's worth of drive deficit (see the class javadoc). */
+    public static final double PRIOR_SIGMA = 0.1;
+    private static final double SIGMA0 = PRIOR_SIGMA;
     private static final double NU0 = 1.0;
 
     private final EpisodicEngramStore store;

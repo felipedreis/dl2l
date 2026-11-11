@@ -11,9 +11,9 @@ the median neighbour distance (equal weights when `b = 0`); `v_j = V(G_j | H_now
 ## Decisions
 - **sigma** is the weighted standard deviation of the neighbours' values with the reliability correction `n_eff/(n_eff-1)`,
   **blended with the prior** as the operant estimator does (`sigma^2 = (nu0 sigma0^2 + (n_eff - 1) s^2) / (nu0 + n_eff - 1)`,
-  sigma0 = nu0 = 1). Reason, same as `OperantEstimator`: with one neighbour, or neighbours that agree exactly, the paper's `sigma = s`
+  nu0 = 1) with **sigma0 = 0.1**, on the scale of the values (see "Finding 2" below), not the operant's 1. Reason, same as `OperantEstimator`: with one neighbour, or neighbours that agree exactly, the paper's `sigma = s`
   is 0 and a single close memory would give SE ~ 0 ("sparse" would not be wide). The blend is 1 at n_eff = 1 and tends to s with evidence.
-- No neighbours: `Estimate(0, 1, 1)` (the operant's unseen-cell prior), `n_eff = 0`.
+- No neighbours: `Estimate(0, 0.1, 0.1)`, `n_eff = 0`.
 - `Estimate` gains an optional `nEff` (NaN for controllers without one); the arbiter derives the novelty bonus from it (#114) and the
   fixed-order mode its evidence test (#116). The 3-argument constructor stays.
 - Read-only; the store is the `EpisodicStore` facade.
@@ -28,3 +28,19 @@ With `b` the *median* neighbour distance the weights adapt to the spread: ten ne
 "one close, nine far" gives `n_eff` about 9.7, not about 1 as the paper's example says. The wide error bar of distant memory comes from `beta = L * Dbar`
 alone (tested: `oneCloseAndNineFarIsWideThroughTheDistanceBiasNotThroughNEff`). Consequence for #114: the novelty bonus `0.1/sqrt(1 + n_eff)` is
 large only when the action has few engrams, not when the nearby ones are far. Reported, not changed: the paper's formulas are implemented as written.
+
+## Finding 2 (offline, before any cluster time): the prior spread has to be on the value scale
+The first implementation copied the operant's `sigma0 = 1`. `analysis/diagnostics/a3_episodic_replay.py` replays the estimator on the real closed episodes of
+`p107_operant` a2n (one creature, first half fills the store, 3000 queries from the second half at a perceived apple, candidates APPROACH and WANDER):
+
+| variant | object | conf mean | decisive (conf >= 0.8) | best = APPROACH | SE of the best |
+|---|---|---|---|---|---|
+| sigma0 = 1 (first version) | food / gray | 0.538 / 0.539 | **0.000 / 0.000** | 0.586 / 0.373 | 0.110 / 0.107 |
+| sigma0 = 0.1 (as implemented) | food / gray | 0.649 / 0.654 | 0.154 / 0.192 | 0.586 / 0.373 | 0.026 / 0.022 |
+| paper (sigma = s, no prior) | food / gray | 0.663 / 0.679 | 0.183 / 0.241 | 0.586 / 0.373 | 0.024 / 0.019 |
+
+`V(G | H)` is a deficit reduction (APPROACH toward food 0.02-0.05, toward gray 0.006, EAT on food 0.11-0.24), so a prior spread of 1 is two orders above
+the signal: the controller would never have been decisive and A3 would have equalled A2 with extra noise. Mean neighbour distance is 0.02-0.03 (beta about
+0.015), so the distance bias is not the problem. Direction: the estimator prefers APPROACH toward food 59% of the time against 37% toward gray (A2: 50% / 50%).
+`a3_episodic_value_check.py` shows the underlying signal on all three trials: mean V of APPROACH toward food minus toward gray = +0.032 in each trial. 53% of the
+pilot's APPROACH steps come from timed-out episodes, which zero them (paper 4.2); that halves the signal but does not remove it.

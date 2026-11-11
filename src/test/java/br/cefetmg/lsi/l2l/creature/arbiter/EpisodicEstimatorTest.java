@@ -60,8 +60,8 @@ class EpisodicEstimatorTest {
     void noEngramsGiveTheUnseenPrior() {
         Estimate est = eat(new EpisodicEstimator(ENCODER, VALUE));
         assertEquals(0, est.q(), TOL);
-        assertEquals(1, est.se(), TOL);
-        assertEquals(1, est.sigma(), TOL);
+        assertEquals(EpisodicEstimator.PRIOR_SIGMA, est.se(), TOL);
+        assertEquals(EpisodicEstimator.PRIOR_SIGMA, est.sigma(), TOL);
         assertEquals(0, est.nEff(), TOL);
     }
 
@@ -70,8 +70,8 @@ class EpisodicEstimatorTest {
         Estimate est = eat(with(tenAt(0, 1.0)));
         assertEquals(1.0, est.q(), TOL);
         assertEquals(10.0, est.nEff(), TOL);
-        // sigma^2 = (1 + 9 * 0) / 10; D = 0 so beta = 0; SE = sqrt(0.1 / 10)
-        assertEquals(0.1, est.se(), TOL);
+        // sigma^2 = (0.1^2 + 9 * 0) / 10; D = 0 so beta = 0; SE = sqrt(sigma^2 / 10)
+        assertEquals(Math.sqrt(0.01 / 10 / 10), est.se(), TOL);
     }
 
     @Test
@@ -79,8 +79,8 @@ class EpisodicEstimatorTest {
         Estimate one = eat(with(List.of(at(0, 1.0))));
         Estimate ten = eat(with(tenAt(0, 1.0)));
         assertEquals(1.0, one.nEff(), TOL);
-        assertEquals(1.0, one.se(), TOL, "one memory: sigma = prior 1, n_eff = 1, no distance");
-        assertTrue(one.se() > 5 * ten.se());
+        assertEquals(EpisodicEstimator.PRIOR_SIGMA, one.se(), TOL, "one memory: sigma = the prior, n_eff = 1, no distance");
+        assertTrue(one.se() > 5 * ten.se(), "one " + one.se() + " ten " + ten.se());
     }
 
     @Test

@@ -169,10 +169,17 @@ public class FullAppraisal extends CreatureComponent {
             if (learningSettings.isFilterEnabled(ActionSelectionType.TARGET_DISTANCE)) {
                 filterList.add(new TargetDistanceFilter());
             }
+            // Controllers cheapest first. A3 adds the episodic one (#113); A5 is A3 with the positional rule (#116).
+            List<Arbiter.Controller> controllers = new ArrayList<>();
+            controllers.add(new Arbiter.Controller(Arbiter.ControllerType.OPERANT, creature.operantStore()));
+            if (learningSettings.isEpisodicEstimatorEnabled()) {
+                controllers.add(new Arbiter.Controller(Arbiter.ControllerType.EPISODIC, creature.episodicStore()));
+            }
             arbiterSelection = new ArbiterActionSelector(filterList, new Arbiter(
-                    List.of(new Arbiter.Controller(Arbiter.ControllerType.OPERANT, creature.operantStore())),
+                    controllers,
                     Arbiter.Params.defaults(),
-                    new Random(Seeds.derive(rootSeed, "creature", id.key, "arbiter"))));
+                    new Random(Seeds.derive(rootSeed, "creature", id.key, "arbiter")),
+                    learningSettings.isArbiterFixedOrder() ? Arbiter.Mode.FIXED_ORDER : Arbiter.Mode.ARBITRATION));
             actionSelection = arbiterSelection;
             return;
         }

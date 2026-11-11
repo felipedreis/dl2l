@@ -1,5 +1,6 @@
 package br.cefetmg.lsi.l2l.cluster.settings;
 
+import br.cefetmg.lsi.l2l.creature.arbiter.EngramKeyEncoder;
 import br.cefetmg.lsi.l2l.creature.arbiter.FocusTracker;
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.common.Seeds;
@@ -156,7 +157,11 @@ public class Simulation {
                 !ls.hasPath("operantLearningEnabled") || ls.getBoolean("operantLearningEnabled"),
                 ls.hasPath("actionTendencySet")
                         ? LearningSettings.ActionTendencySet.valueOf(ls.getString("actionTendencySet").toUpperCase(java.util.Locale.ROOT))
-                        : LearningSettings.ActionTendencySet.CAMPOS);
+                        : LearningSettings.ActionTendencySet.CAMPOS,
+                // A3 / A5 (issues #111-#116): the episodic controller, its fixed-order control, the key's lambda.
+                ls.hasPath("episodicEstimatorEnabled") && ls.getBoolean("episodicEstimatorEnabled"),
+                ls.hasPath("arbiterFixedOrder") && ls.getBoolean("arbiterFixedOrder"),
+                ls.hasPath("episodicKeyLambda") ? ls.getDouble("episodicKeyLambda") : EngramKeyEncoder.DEFAULT_LAMBDA);
     }
 
     public Long getNumHolders() {

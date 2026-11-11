@@ -1,0 +1,15 @@
+# Ladder pilot for A3 and A5 (3 trials, the pilot seeds, pairing with the existing A0 / A1 / A2 pilot data):
+# docs/experiments/p117_pilot_recipe.md. Descriptive, not a hypothesis test. Run on CCAD; pass the image on the command line,
+#   -e dl2l_image=ghcr.io/felipedreis/dl2l:sha-<commit>
+name: p117_pilot
+trials: 3
+seeds: [10701, 10702, 10703]
+conditions:
+- {key: a3, simulation: simulations/arbiter_a3.conf, label: 'A3 arbiter, operant + episodic',     color: '#2ca02c'}
+- {key: a5, simulation: simulations/arbiter_a5.conf, label: 'A5 fixed order, episodic then operant', color: '#8c564b'}
+image:
+  source: registry
+data_dir: ml/data_p117_pilot
+extract: {format: parquet, backup: false, tables: all}
+upload: {enabled: true, prefix: p117_pilot}
+analysis: {module: arbiter_ladder}
