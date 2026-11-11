@@ -696,7 +696,7 @@ public class FullAppraisal extends CreatureComponent {
      * can jump straight over once the creature is fast, so EAT stopped being a candidate
      * (issue #96). Anything inside mouth radius plus the object's own radius counts as contact.
      */
-    static double contactDistance(WorldObjectType type) {
+    public static double contactDistance(WorldObjectType type) {
         double objectRadius = 0;
         if (type instanceof FruitType fruit) {
             objectRadius = fruit.radius;
