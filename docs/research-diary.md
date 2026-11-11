@@ -317,6 +317,25 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
 - **Open for #107:** the margin, the pre-registration document itself (`docs/experiments/arbiter_ladder_recipe.md`), equal tuning budget (the focus thresholds were tuned on A2 only),
   config keys for the arbiter's theta / epsilon / tau, and a random-selection control is now answered by the untrained-table control.
 
+### 11-10/11 — The per-outcome operant table learns the right values and makes the creatures worse, under every tendency set
+
+- **What:** the review (`docs/plans/arbiter-proposal-review.md`) made the A2 operant table a basic per-outcome learner keyed by (object type, action), like the
+  legacy table and Mapa (no drives, no episodes). The sample is the outcome's valence (+1 / -1, no change counts as -1): the size of the drive reduction was tried
+  first and could not tell eating a gray apple (0) from an untried action (prior 0). A switch (`operantLearningEnabled`) freezes the table for the controls, and
+  `actionTendencySet = CAMPOS | MAPA` selects the tendency lists. Offline simulations (`analysis/diagnostics/operant_sample_sim.py`, `tendency_variants_sim.py`)
+  checked the mechanism before each cluster run.
+- **`p107_operant` (CAMPOS tendencies, both worlds):** the table learns (gray EAT about -0.99, food +0.8) and changes choices a little (gray share 0.58 -> 0.52),
+  but regulation is worse in every seed (d(H) 0.17 -> 0.31): learners linger next to gray apples they will not eat, because under hunger dl2l's tendency filter
+  (Campos's lists) leaves only EAT or WANDER at contact.
+- **Mapa keeps AVOID:** in ALifeWorld 0.9.5 every emotion lists approach, avoid, eat, sleep, wander, touch, play (`HUNGER_ACTIONS = 7`); dl2l copied Campos's
+  0.7.5.1 lists in #57.
+- **`p107_tendency` (MAPA lists and no filter, both worlds):** learning still avoids gray apples (gray share -0.20 with MAPA) but all 30 pilot-world learners starved
+  within 3-10 minutes, against 3 and 9 of 15 frozen. They chose food EATs about half as often; sleep is not the cause; the hysteresis gate overrides about 40% of
+  decisions in these variants (6% under CAMPOS). Not explained yet.
+- **Where this leaves A2:** in every variant tested, per-outcome operant learning makes regulation worse, while the untrained arbiter (uniform choice) regulates
+  near the floor. The next step is a diagnosis of why learned EAT values lower food choices (candidate lists and gate decisions per cycle), before any campaign.
+- **Process:** the size-of-reduction run was stopped after its scarce world; python3 3.15's duckdb 2.0 broke the analysis, which now runs on python3.13.
+
 ---
 
 ## Which results still stand
