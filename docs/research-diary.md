@@ -347,6 +347,26 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
   from the paper's §8.1 with the thresholds fixed (margin 0.124, calibration in [0.8, 1.25]); zero tuning budget; 16 trials x 5 creatures, seeds
   10800-10815; six open items for the reviewer.
 
+### 11-11 (later) — A3 implemented: episodic controller, budget, fixed order; the prior spread that would have made it inert
+
+- **What:** `feature/a3-episodic`, plans `docs/plans/issue-111..116`. Engrams are written from closed episodes by a `ReturnSink` (`EngramWriter`, new record `EpisodicEngram`,
+  per-action FIFO of 2000, table `episodic_engram`); fixed hand-built key `[z(p)/sqrt(n_p); lambda z(h)/sqrt(n_h)]`, lambda 0.5; kNN estimator (m = 10, Q, SE, n_eff); efficiency
+  budget (episodic needs e >= 0.3; e is the creature's existing normalised behavioural efficiency) and novelty bonus; `Arbiter.Mode.FIXED_ORDER` for A5; configs `arbiter_a3/a5.conf`;
+  `p117_pilot.yml`; ladder analysis extended (early-life food share, operant calibration per cell, episodic calibration per episode, controller share by decile). 598 Java tests green.
+- **Three discrepancies resolved before code.** lambda = 0.5 (the issue said 0; paper and recipe say 0.5); novelty is 0.1 / sqrt(1 + n_eff) (checked on the rendered PDF: the text
+  extract drops the radical; the recipe's 0.1 / (1 + n_eff) was wrong and is corrected); the paper's "statistics ship in `model_contract.json`" is false, so the key's standardisation
+  constants live in the encoder as documented assumptions.
+- **The first estimator would have been inert.** I copied the operant's prior spread (sigma0 = 1) into the episodic sigma. `V(G | H)` is a deficit reduction (0.01-0.25), so the SE was
+  about 0.11 against value gaps of 0.005-0.01. Replaying the estimator on the real closed episodes of the pilot (`a3_episodic_replay.py`): decisive in 0 of 3000 queries. With sigma0 = 0.1 (one
+  meal's worth): 15-19% decisive, and APPROACH preferred toward food 59% of the time against 37% toward gray (A2: 50/50). Found offline, before any cluster time.
+- **The signal exists in the pilot data** (`a3_episodic_value_check.py`): V of APPROACH toward food minus toward gray = +0.032 in all three A2 trials; 53% of APPROACH steps come from
+  timed-out episodes, which zero them (paper 4.2), so half the signal is erased by design.
+- **Stand-in simulation** (coarse, budget ignored): A3 eats about 29% more food per decision than A2 and approaches food (0.63) more than gray (0.51); A5 gets the food but eats 60% more gray
+  apples (positional use of thin episodic evidence). No effect in the scarce world. Not evidence for the campaign, a check that the mechanism points the right way.
+- **Paper claim that does not hold as written:** with b the median neighbour distance, "one close, nine far gives n_eff about 1" is false (n_eff about 9.7); distant memory is wide through beta only.
+- **Open:** the budget may block episodic memory in calm creatures (e < 0.3; the pilot gate R0 reads it); the pilot on CCAD has not run.
+
+
 ---
 
 ## Which results still stand
