@@ -1,5 +1,6 @@
 package br.cefetmg.lsi.l2l.cluster.settings;
 
+import br.cefetmg.lsi.l2l.creature.arbiter.FocusTracker;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
@@ -83,8 +84,17 @@ public class LearningSettings implements Serializable {
     // --- Focal drive (issue #99) — default-off: filters see the per-cycle most-aroused emotion ---
     private final boolean focalDriveEnabled;
 
-    // --- Operant estimator behind the episode close-out (issue #110) — default-off; needs focalDriveEnabled ---
+    // --- Operant estimator (A2), fed per outcome by Valuation — default-off; independent of focalDriveEnabled ---
     private final boolean operantEstimatorEnabled;
+
+    // --- Focus tracker thresholds (follow-up to the p107 gate; docs/plans/focus-tracker-theta-config.md) ---
+    // Defaults are FocusTracker.Params.defaults(), so every existing configuration is unchanged.
+    private final double focusThetaOn;
+    private final double focusThetaOff;
+
+    // --- Operant learning switch (p107 untrained-table control) — default ON. Off: the operant table answers the
+    // arbiter but is never updated, so it stays at its prior (docs/experiments/p107_operant_recipe.md).
+    private final boolean operantLearningEnabled;
 
     /**
      * Which mechanism chooses the action (issue #104). {@code FILTER_BASED} is the legacy filter chain;
@@ -93,6 +103,27 @@ public class LearningSettings implements Serializable {
     public enum ActionSelectorMode { FILTER_BASED, ARBITER }
 
     private final ActionSelectorMode actionSelector;
+
+    /**
+     * Which innate emotion -> action tendency sets the {@code ActionTendencyFilter} uses (p107 tendency experiment,
+     * docs/experiments/p107_tendency_recipe.md). {@code CAMPOS} is the default and dl2l's set since #57 (Campos, ALifeWorld
+     * 0.7.5.1: hunger = eat, approach, wander). {@code MAPA} is Mapa's (ALifeWorld 0.9.5, {@code aLife/emotionalSystem/*.java}): every
+     * emotion lists approach, avoid, eat, sleep, wander, touch, play ({@code HUNGER_ACTIONS = 7}; escape commented out).
+     */
+    public enum ActionTendencySet { CAMPOS, MAPA }
+
+    public static final Map<String, Set<ActionType>> MAPA_ACTION_TENDENCIES;
+    static {
+        EnumSet<ActionType> mapa = EnumSet.of(ActionType.APPROACH, ActionType.AVOID, ActionType.EAT, ActionType.SLEEP,
+                ActionType.WANDER, ActionType.TOUCH, ActionType.PLAY);
+        MAPA_ACTION_TENDENCIES = Map.of(
+                Constants.HUNGER, Collections.unmodifiableSet(EnumSet.copyOf(mapa)),
+                Constants.SLEEP,  Collections.unmodifiableSet(EnumSet.copyOf(mapa)),
+                Constants.PAIN,   Collections.unmodifiableSet(EnumSet.copyOf(mapa)),
+                Constants.TEDIUM, Collections.unmodifiableSet(EnumSet.copyOf(mapa)));
+    }
+
+    private final ActionTendencySet actionTendencySet;
 
     public LearningSettings(boolean circadianEnabled,
                             boolean consolidationEnabled,
@@ -186,10 +217,9 @@ public class LearningSettings implements Serializable {
     }
 
     /**
-     * @throws IllegalArgumentException if {@code operantEstimatorEnabled} is set without
-     *                                  {@code focalDriveEnabled}: the estimator is only fed by episodes,
-     *                                  and episodes exist only under the focal drive; or if {@code actionSelector}
-     *                                  is {@code ARBITER} and any of these holds: the operant estimator is off
+     * @throws IllegalArgumentException if {@code actionSelector} is {@code ARBITER} and any of these holds
+     *                                  ({@code operantEstimatorEnabled} does not need {@code focalDriveEnabled}:
+     *                                  the operant table learns per outcome, not from focus episodes): the operant estimator is off
      *                                  (the arbiter's only controller reads it); {@code enabledFilters} holds a
      *                                  filter other than {@code TARGET_DISTANCE} (the arbiter replaces the rest);
      *                                  neuromodulation is on (tau is a constant, see #104 Q7)
@@ -207,9 +237,90 @@ public class LearningSettings implements Serializable {
                             boolean focalDriveEnabled,
                             boolean operantEstimatorEnabled,
                             ActionSelectorMode actionSelector) {
-        if (operantEstimatorEnabled && !focalDriveEnabled) {
-            throw new IllegalArgumentException("operantEstimatorEnabled requires focalDriveEnabled");
+        this(circadianEnabled, consolidationEnabled, enabledFilters, expectancyEnabled, expectancyMode,
+                neuromodulationEnabled, actionTendencyEnabled, orexinEnabled, endocrineEnabled, tickGatedCognition,
+                focalDriveEnabled, operantEstimatorEnabled, actionSelector,
+                FocusTracker.Params.defaults().thetaOn(), FocusTracker.Params.defaults().thetaOff());
+    }
+
+    /**
+     * @param focusThetaOn  urgency at which a drive opens an episode ({@code FocusTracker.Params.thetaOn})
+     * @param focusThetaOff urgency at or below which the focal episode closes as regulated
+     * @throws IllegalArgumentException additionally if {@code 0 <= focusThetaOff < focusThetaOn} does not hold
+     *                                  (hysteresis: an episode must not close the cycle it opens)
+     */
+    public LearningSettings(boolean circadianEnabled,
+                            boolean consolidationEnabled,
+                            List<ActionSelectionType> enabledFilters,
+                            boolean expectancyEnabled,
+                            ExpectancyMode expectancyMode,
+                            boolean neuromodulationEnabled,
+                            boolean actionTendencyEnabled,
+                            boolean orexinEnabled,
+                            boolean endocrineEnabled,
+                            boolean tickGatedCognition,
+                            boolean focalDriveEnabled,
+                            boolean operantEstimatorEnabled,
+                            ActionSelectorMode actionSelector,
+                            double focusThetaOn,
+                            double focusThetaOff) {
+        this(circadianEnabled, consolidationEnabled, enabledFilters, expectancyEnabled, expectancyMode,
+                neuromodulationEnabled, actionTendencyEnabled, orexinEnabled, endocrineEnabled, tickGatedCognition,
+                focalDriveEnabled, operantEstimatorEnabled, actionSelector, focusThetaOn, focusThetaOff, true);
+    }
+
+    /**
+     * @param operantLearningEnabled false freezes the operant table at its prior (an experimental control); it is only
+     *                               meaningful with {@code operantEstimatorEnabled}
+     */
+    public LearningSettings(boolean circadianEnabled,
+                            boolean consolidationEnabled,
+                            List<ActionSelectionType> enabledFilters,
+                            boolean expectancyEnabled,
+                            ExpectancyMode expectancyMode,
+                            boolean neuromodulationEnabled,
+                            boolean actionTendencyEnabled,
+                            boolean orexinEnabled,
+                            boolean endocrineEnabled,
+                            boolean tickGatedCognition,
+                            boolean focalDriveEnabled,
+                            boolean operantEstimatorEnabled,
+                            ActionSelectorMode actionSelector,
+                            double focusThetaOn,
+                            double focusThetaOff,
+                            boolean operantLearningEnabled) {
+        this(circadianEnabled, consolidationEnabled, enabledFilters, expectancyEnabled, expectancyMode,
+                neuromodulationEnabled, actionTendencyEnabled, orexinEnabled, endocrineEnabled, tickGatedCognition,
+                focalDriveEnabled, operantEstimatorEnabled, actionSelector, focusThetaOn, focusThetaOff,
+                operantLearningEnabled, ActionTendencySet.CAMPOS);
+    }
+
+    /** @param actionTendencySet the tendency sets of {@link #getActionTendencies()}; null means {@code CAMPOS} */
+    public LearningSettings(boolean circadianEnabled,
+                            boolean consolidationEnabled,
+                            List<ActionSelectionType> enabledFilters,
+                            boolean expectancyEnabled,
+                            ExpectancyMode expectancyMode,
+                            boolean neuromodulationEnabled,
+                            boolean actionTendencyEnabled,
+                            boolean orexinEnabled,
+                            boolean endocrineEnabled,
+                            boolean tickGatedCognition,
+                            boolean focalDriveEnabled,
+                            boolean operantEstimatorEnabled,
+                            ActionSelectorMode actionSelector,
+                            double focusThetaOn,
+                            double focusThetaOff,
+                            boolean operantLearningEnabled,
+                            ActionTendencySet actionTendencySet) {
+        this.actionTendencySet = actionTendencySet == null ? ActionTendencySet.CAMPOS : actionTendencySet;
+        this.operantLearningEnabled = operantLearningEnabled;
+        if (!(focusThetaOff >= 0 && focusThetaOff < focusThetaOn)) {
+            throw new IllegalArgumentException("focus thresholds need 0 <= thetaOff < thetaOn, got thetaOn="
+                    + focusThetaOn + ", thetaOff=" + focusThetaOff);
         }
+        this.focusThetaOn  = focusThetaOn;
+        this.focusThetaOff = focusThetaOff;
         ActionSelectorMode mode = actionSelector == null ? ActionSelectorMode.FILTER_BASED : actionSelector;
         if (mode == ActionSelectorMode.ARBITER) {
             if (!operantEstimatorEnabled) {
@@ -238,6 +349,16 @@ public class LearningSettings implements Serializable {
         this.tickGatedCognition     = tickGatedCognition;
         this.focalDriveEnabled      = focalDriveEnabled;
         this.operantEstimatorEnabled = operantEstimatorEnabled;
+    }
+
+    /** Urgency at which a drive opens an episode (default 2.0). Only read when {@link #isFocalDriveEnabled()}. */
+    public double getFocusThetaOn() {
+        return focusThetaOn;
+    }
+
+    /** Urgency at or below which the focal episode closes as regulated (default 0.5). */
+    public double getFocusThetaOff() {
+        return focusThetaOff;
     }
 
     /**
@@ -289,6 +410,11 @@ public class LearningSettings implements Serializable {
      * Issue #110: whether the operant estimator is created behind a TypedActor facade and fed the
      * values of closed episodes. Always false unless {@link #isFocalDriveEnabled()}.
      */
+    /** False only in the untrained-table control: the operant table is read but never updated. Default true. */
+    public boolean isOperantLearningEnabled() {
+        return operantLearningEnabled;
+    }
+
     public boolean isOperantEstimatorEnabled() {
         return operantEstimatorEnabled;
     }
@@ -334,7 +460,11 @@ public class LearningSettings implements Serializable {
 
     /** The emotion→action tendency map used when {@link #isActionTendencyEnabled()}. */
     public Map<String, Set<ActionType>> getActionTendencies() {
-        return DEFAULT_ACTION_TENDENCIES;
+        return actionTendencySet == ActionTendencySet.MAPA ? MAPA_ACTION_TENDENCIES : DEFAULT_ACTION_TENDENCIES;
+    }
+
+    public ActionTendencySet getActionTendencySet() {
+        return actionTendencySet;
     }
 
     public boolean isConsolidationEnabled() {

@@ -6,7 +6,6 @@ import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.arbiter.DecisionRecord;
 import br.cefetmg.lsi.l2l.creature.arbiter.Estimate;
 import br.cefetmg.lsi.l2l.creature.arbiter.FocusEvent;
-import br.cefetmg.lsi.l2l.creature.arbiter.OperantStore;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.creature.bd.EpisodeReturnState;
 import br.cefetmg.lsi.l2l.creature.common.Action;
@@ -25,18 +24,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Issue #110, component level: {@code Valuation} receives the decision, focus and outcome messages of
- * one episode and writes its closed steps to the operant store.
+ * one episode and writes its closed steps to the {@code episode_return} table. The operant table is not fed
+ * from them any more (it learns per outcome: {@code ValuationOperantTest}).
  *
  * <p>The decision cycle is held at 2 while the messages are drained, so each outcome is stamped 2 on
  * arrival in every ordering. Only the queue order differs: the outcome is delivered after the close, or
  * after the decision that follows the close. The buffer's settle rule must then give the same written
- * values, and the same operant estimates, as in order.
+ * values as in order.
  *
  * <p>Expected values, with the default {@code HomeostaticValue} (set point 0.18, unit weights) and
  * {@code gamma = 2^(-1/5)} = {@code g}: hunger {@code h = 2}, so {@code d(h) = 1.82}. An EAT at cycle 2 with
  * outcome {@code K = -1} at cycle 2 has {@code G = -1} and value {@code 1.82 - 0.82 = 1.0}, giving
- * {@code Q = 1.0 / (1 + 1) = 0.5} in the EAT cell. An APPROACH at cycle 1 has {@code G = -g} and value
- * {@code g}, giving {@code Q = g / 2} in the APPROACH cell.
+ * the written value 1.0. An APPROACH at cycle 1 has {@code G = -g} and value {@code g}.
  */
 class ValuationEpisodeTest {
 
@@ -114,26 +113,28 @@ class ValuationEpisodeTest {
         return h;
     }
 
-    private static List<Estimate> estimates(TestingHarness h) {
-        OperantStore store = h.creature().operantStore();
-        return store.estimate(List.of(EAT, APPROACH), HUNGRY, HUNGER);
+    /** What the episode close-out wrote: one {@code action:value:closeType} entry per closed step. */
+    private static List<String> written(TestingHarness h) {
+        return h.bdSink().ofType(EpisodeReturnState.class).stream()
+                .map(r -> r.getAction() + ":" + r.getValue() + ":" + r.getCloseType()).toList();
     }
 
     @Test
-    void outOfOrderDeliveryWritesTheSameEstimatesAsInOrder() {
-        List<Estimate> ordered = estimates(drained(inOrder()));
-        List<Estimate> afterClose = estimates(drained(outcomeAfterClose()));
-        List<Estimate> afterClosingDecision = estimates(drained(outcomeAfterCloseDecision()));
+    void outOfOrderDeliveryWritesTheSameEpisodeReturnsAsInOrder() {
+        List<String> ordered = written(drained(inOrder()));
+        List<String> afterClose = written(drained(outcomeAfterClose()));
+        List<String> afterClosingDecision = written(drained(outcomeAfterCloseDecision()));
+        assertEquals(2, ordered.size());
 
         assertEquals(ordered, afterClose);
         assertEquals(ordered, afterClosingDecision);
     }
 
     @Test
-    void closedEpisodeMovesTheRecordedCellsByTheHandComputedValues() {
+    void closedEpisodeWritesItsReturnsButNoLongerTouchesTheOperantTable() {
         TestingHarness h = TestingHarness.builder().learningSettings(settings()).build();
-        Estimate eatBefore = h.creature().operantStore().estimate(List.of(EAT), HUNGRY, HUNGER).get(0);
-        assertEquals(new Estimate(0, 1, 1), eatBefore, "an unseen cell has the prior");
+        Estimate prior = new Estimate(0, 1, 1);
+        assertEquals(prior, h.creature().operantStore().estimate(List.of(EAT), HUNGRY, HUNGER).get(0));
 
         h.creature().memory().tickDecisionCycle();
         h.creature().memory().tickDecisionCycle();
@@ -142,10 +143,10 @@ class ValuationEpisodeTest {
         }
         h.processUntilQuiescent();
 
-        List<Estimate> after = h.creature().operantStore().estimate(List.of(EAT, APPROACH), HUNGRY, HUNGER);
-        assertEquals(0.5, after.get(0).q(), TOL, "EAT: value 1.0 over one observation");
-        assertEquals(GAMMA / 2, after.get(1).q(), TOL, "APPROACH: value gamma over one observation");
-        assertEquals(1 / Math.sqrt(2), after.get(0).se(), TOL);
+        // The table learns per outcome (ValuationOperantTest), not from closed episodes: both cells stay at the prior.
+        assertEquals(List.of(prior, prior),
+                h.creature().operantStore().estimate(List.of(EAT, APPROACH), HUNGRY, HUNGER));
+        assertTrue(h.bdSink().ofType(br.cefetmg.lsi.l2l.creature.bd.OperantUpdateState.class).isEmpty());
 
         // Persistence sink: one row per written step, in decision order.
         List<EpisodeReturnState> rows = h.bdSink().ofType(EpisodeReturnState.class);
@@ -158,10 +159,6 @@ class ValuationEpisodeTest {
         assertEquals(List.of(2L, 1L), rows.stream().map(EpisodeReturnState::getStepsToClose).toList());
         assertTrue(Double.isNaN(rows.get(0).getBootstrap()), "a regulated step is not pre-empted");
 
-        // A cell nothing was decided in stays unseen.
-        Estimate sleep = h.creature().operantStore().estimate(
-                List.of(action(ActionType.SLEEP, null, 5)), HUNGRY, HUNGER).get(0);
-        assertEquals(new Estimate(0, 1, 1), sleep);
     }
 
     // Review follow-up: a tracker event that breaks the buffer's invariants must not escape onReceive,
@@ -172,9 +169,9 @@ class ValuationEpisodeTest {
         messages.add(focus(new FocusEvent.Resumed(0, HUNGER)));
         messages.addAll(inOrder());
 
-        List<Estimate> recovered = estimates(drained(messages));
+        List<String> recovered = written(drained(messages));
 
-        assertEquals(estimates(drained(inOrder())), recovered);
+        assertEquals(written(drained(inOrder())), recovered);
     }
 
     // Review follow-up: the death close-out reaches the buffer and writes the open episode as DEATH.

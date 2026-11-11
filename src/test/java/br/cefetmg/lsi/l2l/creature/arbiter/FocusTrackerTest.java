@@ -46,6 +46,17 @@ class FocusTrackerTest {
     }
 
     @Test
+    void opensAtAConfiguredLowerThetaOnAndClosesAtItsThetaOff() {
+        tracker = new FocusTracker(new FocusTracker.Params(0.5, 0.2, params.delta(), params.thetaCrit(),
+                params.tMax(), params.resumeWindow(), params.hStar(), params.scale()));
+        assertTrue(step(0.4, 0).isEmpty());
+        assertEquals(List.of(new Opened(2, H)), step(0.55, 0));
+        assertTrue(step(0.3, 0).isEmpty());
+        assertEquals(H, tracker.focalDrive().orElseThrow());
+        assertEquals(List.of(new Closed(4, H, FocusEvent.Outcome.REGULATED)), step(0.15, 0));
+    }
+
+    @Test
     void opensAtThetaOn() {
         var events = step(2.0, 0);
         assertEquals(List.of(new Opened(1, H)), events);

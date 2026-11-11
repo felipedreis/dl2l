@@ -249,6 +249,104 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
 - **Rule:** tests must be deterministic; anything that cannot be tested that way is measured in the experiment metrics instead.
   The older #104 `ArbiterTest` seed-search and statistical-bound cases still break it (to clean up separately).
 
+### 11-04 — #107 arbiter-ladder pilot, stage 1 gate: A2 never trains in the A0 world
+
+- **What:** ran the gate of `docs/plans/arbiter-ladder-pilot.md` (approved the same day): one trial each of A1, A2 and A2 with
+  finite food, seed 10700, 5 creatures, 120 min (30 for finite food), local Mac. Recipe `docs/experiments/p107_pilot_recipe.md`,
+  data on HF `p107_pilot_gate/`. Added `simulations/arbiter_a1.conf`, `arbiter_a2.conf` and `experiments/p107_pilot_gate.yml`.
+- **G1 fails.** A2 closed 0 episodes in all 5 creatures over about 217,600 decisions each (focused share 0.0); there is no
+  `episode_returns` file. Max hunger 1.59, mean 0.30: no drive reaches the open threshold, so the operant table is never trained.
+  This is the fixed point predicted from p104, now at full length.
+- **A1 telemetry is fine** (G3): 17.5-22.1% of decisions focused, 9,162 episodes (counted per creature and id: `episode_id` restarts for each creature), 93% of them PREEMPTED by another drive. A1 is
+  less well regulated than predicted (max hunger 3.79, max tedium 4.03, mean hunger 1.34 vs 0.30 in A2).
+- **Death close-out holds on a real run** (G4): all 5 dead creatures in the finite-food world have focused decisions equal to
+  episode steps and at least one DEATH row (the p105 miss was 1 creature of 10).
+- **Not done, by the plan:** stage 2 (3 arms x 3 trials) does not start after a G1 fail. Next is the user's choice among
+  lowering theta_on, a world where drives bind, or training the NONE bucket / falling back to the A1 filters when unfocused.
+- **Infrastructure findings:** the Pi attempt failed twice for reasons unrelated to the simulation. The Mac's Docker had no
+  insecure-registry entry for the Pi registry (added). Then the NFS share the Pis mount from the Mac stopped answering
+  (`nfsd` connections stuck in `CLOSE_WAIT`), hanging the running Pi job and new submissions; needs `sudo nfsd restart` on the
+  Mac, not yet done. Separately, the local playbook skips the HF upload (`experiment_finished` is set on a different host than
+  the one that checks it in `collect_upload`); the upload was run by hand with `dl2l_data.upload`. Not fixed.
+
+### 11-06 — #107 pilot: focus thresholds tuned to 0.4 / 0.15, gate 2 passes
+
+- **What:** made the focus tracker's `thetaOn` / `thetaOff` config keys (`feature/focus-theta-config`, not merged; also written
+  to `run_info`), tuned them on A2 (seed 10710, 30 min, four settings; recipe `docs/experiments/p107_theta_tune_recipe.md`), and
+  re-ran the three gate conditions with the chosen 0.4 / 0.15 (recipe `docs/experiments/p107_gate2_recipe.md`, data on HF
+  `p107_theta_tune/` and `p107_pilot_gate2/`). Plan: `docs/plans/focus-tracker-theta-config.md`.
+- **Tuning:** 0.4 / 0.15 was the only setting where >= 4 of 5 creatures had >= 3 closed episodes and focused share >= 0.02 (19-41
+  episodes per creature in 30 min); 0.8 / 0.3 had almost none. The recipe's rule was ambiguous; read at setting level it would have
+  chosen 0.6 / 0.2, and the user chose 0.4 / 0.15. My prediction (0.5 or 0.6) was wrong.
+- **Gate 2 passes G1-G5.** A2 closed 137-165 episodes per creature in 120 min, focused 4.2-5.1% of decisions, informed share 1.0;
+  its regulation is unchanged from gate 1 (mean hunger 0.30, max 1.55), so training the table did not cost regulation. The death
+  close-out holds again (5 of 5, DEATH rows in all).
+- **A1 changed with the thresholds** (they are global): focused about 68% of decisions (was 17-22%), mean hunger 0.98 (was 1.34),
+  and one creature died at 4,946 s (gate 1: none). One trial, so no attribution, but the pre- and post-change A1 are different
+  arms for #108.
+- **Mistakes found on the way:** (1) the Java branch was cut from `main` and lacked `arbiter_a1/a2.conf`; HOCON ignores a missing
+  include, so the first tuning run silently had no world and no creatures (30 min lost, data deleted). The new confs' includes are
+  now checked before running. (2) Two shell slips of mine (`timeout` and `setsid` do not exist on macOS) had me misread Docker as
+  down earlier in the Pi attempt.
+- **Next:** stage 2 is allowed by the plan, after merging the Java branch and settling the open decisions (environment, 5 vs 3
+  creatures, `regulated_emotion`, backups, and whether to add the random-selection control).
+
+### 11-07/08 — #107 pilot stage 2, the #106 analysis, the untrained-table control and a bug that turned out not to matter
+
+- **Stage 2 (CCAD, `p107_pilot`, 3 arms x 3 trials x 5 creatures, seeds 10701-10703, data on HF `p107_pilot/`).** The first attempt failed for A1 and A2: the CCAD
+  job script waited at most about 90 minutes for a simulation that runs 120; ceiling raised to about 150 (`run_trial.sh.j2`), failed attempt kept aside on the cluster,
+  all nine trials re-run. Results: d(H) over life A0 3.66, A1 1.24, A2 0.16; deaths 15/15, 1/15, 0/15; creatures alive at the cap are observed to about 7,195 s.
+  Plan and recipe: `docs/experiments/p107_pilot_stage2_recipe.md`.
+- **#106 analysis module** (`analysis/experiments/arbiter_ladder.py`, plan `docs/plans/issue-106-arbiter-ladder-analysis.md`, 8 unit tests): runs end to end on the pilot
+  and writes the report skeleton. Episode ids restart for every creature, so episodes are counted as `(creature_key, episode_id)`; some earlier episode totals in the
+  gate entries were undercounted that way and are corrected. Data caveat found: in creatures that survive to the cap, `mouth_interactions` holds a whole number of
+  128-row blocks (and `body_states` exactly 217,728 rows), so EAT counts of A1/A2 survivors are lower bounds (short by up to 127 each).
+- **Sample size for #107** (`docs/reports/p107_pilot_sample_size.md`): paired trials per arm are small because the effects dwarf the between-seed SD (A2 - A1 on d(H) over life
+  needs 2-3). Non-inferiority of A2 against A1 with equal true means needs 7 trials at a 0.06 margin (22 on the upper-bound SD), 3 (7) at 10% of the A1 mean, 3 (4) at 20%. The
+  margin is #107's decision. A0's focus-switch statistic cannot be sized (approximation), and survival is better a guard than a powered outcome.
+- **Control: A2 with a table that never trains** (`focusThetaOn = 99`, `p107_pilot_ctl`, same seeds): d(H) over life 0.160 against 0.163 for the trained A2, per-seed
+  differences +0.002, +0.006, +0.002, inside the pre-registered +-0.06; feeding identical (red+green 25.4 against 25.3 per minute), all 15 alive. So training the table adds nothing
+  measurable in this world, and A2's advantage over A1 comes from replacing the filter chain with the arbiter, which with an untrained table chooses uniformly among the candidates.
+- **A suspected bug that did not matter.** Reading the arbiter and the filters showed that `ActionProbabilityFilter` (the `AFFORDANCE` filter of A0 / A1) returned its first
+  candidate (APPROACH) whenever every learned weight was 0 (0/0 = NaN). Fixed without a flag (`fix/affordance-zero-weight`, issue #130) and tested on the pilot's seeds
+  (`p107_pilot_fix`): A0 still dies 15/15, the APPROACH share is unchanged (about 65%), d(H) rises (A0 3.66 -> 4.27, A1 1.24 -> 1.63, A1 deaths 1 -> 4 of 15). I had first
+  written that the bug probably explained A0 starving and put withdrawal notices on 15 reports; the measurement refuted that and the notices on the older reports were removed
+  (`docs/known-issues/affordance-zero-weight.md`). Lesson: measure the effect before invalidating. Why A0 / A1 spend about 65% of cycles on APPROACH and eat 0.9% of the time is unexplained.
+- **Process slips on the way:** Homebrew upgraded `python3` to 3.15 without the analysis packages, which made the ansible spec validation fail on three submissions and
+  cost a night (libraries now installed); the CEFET VPN dropped once and a submission waited for it.
+- **Open for #107:** the margin, the pre-registration document itself (`docs/experiments/arbiter_ladder_recipe.md`), equal tuning budget (the focus thresholds were tuned on A2 only),
+  config keys for the arbiter's theta / epsilon / tau, and a random-selection control is now answered by the untrained-table control.
+
+### 11-10/11 — The per-outcome operant table learns the right values and makes the creatures worse, under every tendency set
+
+- **What:** the review (`docs/plans/arbiter-proposal-review.md`) made the A2 operant table a basic per-outcome learner keyed by (object type, action), like the
+  legacy table and Mapa (no drives, no episodes). The sample is the outcome's valence (+1 / -1, no change counts as -1): the size of the drive reduction was tried
+  first and could not tell eating a gray apple (0) from an untried action (prior 0). A switch (`operantLearningEnabled`) freezes the table for the controls, and
+  `actionTendencySet = CAMPOS | MAPA` selects the tendency lists. Offline simulations (`analysis/diagnostics/operant_sample_sim.py`, `tendency_variants_sim.py`)
+  checked the mechanism before each cluster run.
+- **`p107_operant` (CAMPOS tendencies, both worlds):** the table learns (gray EAT about -0.99, food +0.8) and changes choices a little (gray share 0.58 -> 0.52),
+  but regulation is worse in every seed (d(H) 0.17 -> 0.31): learners linger next to gray apples they will not eat, because under hunger dl2l's tendency filter
+  (Campos's lists) leaves only EAT or WANDER at contact.
+- **Mapa keeps AVOID:** in ALifeWorld 0.9.5 every emotion lists approach, avoid, eat, sleep, wander, touch, play (`HUNGER_ACTIONS = 7`); dl2l copied Campos's
+  0.7.5.1 lists in #57.
+- **`p107_tendency` (MAPA lists and no filter, both worlds):** learning still avoids gray apples (gray share -0.20 with MAPA) but all 30 pilot-world learners starved
+  within 3-10 minutes, against 3 and 9 of 15 frozen. They chose food EATs about half as often; sleep is not the cause; the hysteresis gate overrides about 40% of
+  decisions in these variants (6% under CAMPOS). Not explained yet.
+- **Where this leaves A2:** in every variant tested, per-outcome operant learning makes regulation worse, while the untrained arbiter (uniform choice) regulates
+  near the floor. The next step is a diagnosis of why learned EAT values lower food choices (candidate lists and gate decisions per cycle), before any campaign.
+- **Process:** the size-of-reduction run was stopped after its scarce world; python3 3.15's duckdb 2.0 broke the analysis, which now runs on python3.13.
+
+### 11-11 — Diagnosis of the operant result; configuration settled; #107 pre-registration drafted
+
+- **Diagnosis from the existing data** (`analysis/diagnostics/p107_exposure_diagnosis.py`): at food, learners eat at least as readily as frozen creatures;
+  they spend half as long at food and 2-3x as long next to gray apples. The habit table cannot value APPROACH (no immediate outcome), so learners
+  approach gray apples as readily as food, refuse them, and hop to the next one; under Mapa's lists they mostly sleep next to them (10-cycle sleep lock).
+- **Settled:** A0's classic configuration (CAMPOS tendencies) for every arm; the operant controller as implemented. A2 is not tuned further; its
+  limitation is a finding and the contrast A3 is meant to address (review §10).
+- **#107:** `docs/experiments/arbiter_ladder_recipe.md` drafted for review: arms A0-A3, A5; primary outcome d(H) over life; adoption criteria
+  from the paper's §8.1 with the thresholds fixed (margin 0.124, calibration in [0.8, 1.25]); zero tuning budget; 16 trials x 5 creatures, seeds
+  10800-10815; six open items for the reviewer.
+
 ---
 
 ## Which results still stand

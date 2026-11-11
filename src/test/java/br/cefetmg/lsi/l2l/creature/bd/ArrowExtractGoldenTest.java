@@ -153,10 +153,10 @@ class ArrowExtractGoldenTest {
 
     /** A greedy decision whose pick is EAT (Q 1 against AVOID's Q 0): executed action EAT, no tie. */
     private static ArbitrationDecision greedyEat() {
-        OperantEstimator e = new OperantEstimator(new double[] {50, 100}, 1.0);
+        OperantEstimator e = new OperantEstimator(1.0);
         for (int i = 0; i < 20; i++) {
-            e.record(Constants.HUNGER, on(ActionType.EAT), 2.0);
-            e.record(Constants.HUNGER, on(ActionType.AVOID), 0.0);
+            e.record(on(ActionType.EAT), 2.0);
+            e.record(on(ActionType.AVOID), 0.0);
         }
         return new Arbiter(List.of(new Arbiter.Controller(Arbiter.ControllerType.OPERANT, e)),
                 new Arbiter.Params(0.8, 0.0, 0.0), new java.util.Random(1))
@@ -183,6 +183,11 @@ class ArrowExtractGoldenTest {
 
     /** Writes the creatures and the decision rows, plus the given episode steps, as a raw dump. */
     private void writeArbitrationDump(Path rawDir, List<PersistenceState> episodes) throws Exception {
+        writeArbitrationDump(rawDir, episodes, List.of());
+    }
+
+    private void writeArbitrationDump(Path rawDir, List<PersistenceState> episodes, List<PersistenceState> operant)
+            throws Exception {
         ArrowIpcBackend backend = new ArrowIpcBackend(rawDir, null, ArrowIpcBackend.DEFAULT_ALLOCATOR_LIMIT_MB,
                 ArrowIpcBackend.DEFAULT_BATCH_ROWS, CompressionUtil.CodecType.NO_COMPRESSION);
         try {
@@ -194,6 +199,9 @@ class ArrowExtractGoldenTest {
             backend.persistBatch(Map.of("arbitration_decision_state", arbitrationRows()));
             if (!episodes.isEmpty()) {
                 backend.persistBatch(Map.of("episode_return", episodes));
+            }
+            if (!operant.isEmpty()) {
+                backend.persistBatch(Map.of("operant_update_state", operant));
             }
             backend.dumpToParquet();
         } finally {
@@ -245,6 +253,40 @@ class ArrowExtractGoldenTest {
                 "assert m.loc[m.creature_key == 1, 'episode_id'].tolist() == [10, 10]",
                 "print('ARB_OK')"),
                 outDir.resolve("1_baseline").resolve("arbitration_decisions.parquet"));
+    }
+
+    @Test
+    void operantUpdatesAreExtractedInWriteOrderAndSkippedWhenTheRawTableIsAbsent(@TempDir Path tmp) throws Exception {
+        assumeEnvironmentReady();
+        Path rawDir = tmp.resolve("raw");
+        Files.createDirectories(rawDir);
+        Path outDir = tmp.resolve("out");
+        Files.createDirectories(outDir);
+        writeArbitrationDump(rawDir, List.of(), List.of(
+                new OperantUpdateState(2L, 0L, 10L, 5L, "RED_APPLE", "EAT", 1.0, 1.0, 0.5, 0.7, 1.0),
+                new OperantUpdateState(1L, 1L, 12L, 6L, "RED_APPLE", "EAT", 1.0, 1.995, 0.66, 0.5, 0.9),
+                new OperantUpdateState(1L, 0L, 11L, 5L, "GREEN_APPLE", "EAT", -1.0, 1.0, -0.5, 0.7, 1.0)));
+
+        String output = extractOrFail(rawDir, outDir);
+
+        assertFalse(output.contains("operant_updates skipped"), output);
+        verifyWithPython(String.join("\n",
+                "import pandas as pd, sys",
+                "df = pd.read_parquet(sys.argv[1])",
+                "assert list(df.columns)[:11] == ['creature_key','seq','time_ms','cycle','object_type','action','sample','n','q','se','sigma'], list(df.columns)",
+                "assert list(zip(df.creature_key, df.seq)) == [(1, 0), (1, 1), (2, 0)], list(zip(df.creature_key, df.seq))",
+                "assert df.object_type.tolist() == ['GREEN_APPLE', 'RED_APPLE', 'RED_APPLE']",
+                "print('ARB_OK')"),
+                outDir.resolve("1_baseline").resolve("operant_updates.parquet"));
+
+        // A dump without the raw table (written before it existed) is extracted with the table skipped.
+        Path rawDir2 = tmp.resolve("raw2");
+        Files.createDirectories(rawDir2);
+        Path outDir2 = tmp.resolve("out2");
+        Files.createDirectories(outDir2);
+        writeArbitrationDump(rawDir2, List.of());
+        Files.deleteIfExists(rawDir2.resolve("operant_update_state.arrow"));
+        assertTrue(extractOrFail(rawDir2, outDir2).contains("operant_updates skipped"));
     }
 
     @Test

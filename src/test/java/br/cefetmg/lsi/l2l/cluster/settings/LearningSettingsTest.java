@@ -1,5 +1,6 @@
 package br.cefetmg.lsi.l2l.cluster.settings;
 
+import br.cefetmg.lsi.l2l.creature.arbiter.FocusTracker;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
 import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyMode;
 import org.junit.jupiter.api.Test;
@@ -179,15 +180,58 @@ public class LearningSettingsTest {
     }
 
     @Test
-    void operant_estimator_defaults_off_and_requires_the_focal_drive() {
+    void operant_estimator_defaults_off_and_does_not_need_the_focal_drive() {
         assertFalse(new LearningSettings().isOperantEstimatorEnabled());
 
         LearningSettings on = new Simulation(com.typesafe.config.ConfigFactory.parseString(
                 simulationWith("focalDriveEnabled = true\noperantEstimatorEnabled = true"))).getLearningSettings();
         assertTrue(on.isOperantEstimatorEnabled());
 
-        assertThrows(IllegalArgumentException.class, () -> new Simulation(com.typesafe.config.ConfigFactory
-                .parseString(simulationWith("operantEstimatorEnabled = true"))).getLearningSettings());
+        // The operant table learns per outcome, so it no longer needs focus episodes.
+        LearningSettings withoutFocus = new Simulation(com.typesafe.config.ConfigFactory
+                .parseString(simulationWith("operantEstimatorEnabled = true"))).getLearningSettings();
+        assertTrue(withoutFocus.isOperantEstimatorEnabled());
+        assertFalse(withoutFocus.isFocalDriveEnabled());
+    }
+
+    @Test
+    void focus_thresholds_default_to_the_tracker_defaults_and_parse_from_config() {
+        FocusTracker.Params d = FocusTracker.Params.defaults();
+        assertEquals(d.thetaOn(), new LearningSettings().getFocusThetaOn());
+        assertEquals(d.thetaOff(), new LearningSettings().getFocusThetaOff());
+        assertEquals(d.thetaOn(), parse("circadianEnabled = false").getFocusThetaOn());
+
+        LearningSettings ls = parse("focalDriveEnabled = true\nfocusThetaOn = 0.5\nfocusThetaOff = 0.2");
+        assertEquals(0.5, ls.getFocusThetaOn());
+        assertEquals(0.2, ls.getFocusThetaOff());
+    }
+
+    @Test
+    void tendency_set_defaults_to_campos_and_parses_mapa() {
+        assertEquals(LearningSettings.ActionTendencySet.CAMPOS, new LearningSettings().getActionTendencySet());
+        assertEquals(LearningSettings.DEFAULT_ACTION_TENDENCIES, parse("circadianEnabled = false").getActionTendencies());
+        LearningSettings mapa = parse("actionTendencySet = MAPA");
+        assertEquals(LearningSettings.ActionTendencySet.MAPA, mapa.getActionTendencySet());
+        java.util.Set<br.cefetmg.lsi.l2l.creature.common.ActionType> hunger = mapa.getActionTendencies().get(br.cefetmg.lsi.l2l.common.Constants.HUNGER);
+        assertTrue(hunger.contains(br.cefetmg.lsi.l2l.creature.common.ActionType.AVOID));
+        assertTrue(hunger.contains(br.cefetmg.lsi.l2l.creature.common.ActionType.SLEEP));
+        assertFalse(hunger.contains(br.cefetmg.lsi.l2l.creature.common.ActionType.OBSERVE));
+        assertFalse(hunger.contains(br.cefetmg.lsi.l2l.creature.common.ActionType.ESCAPE));
+        assertEquals(hunger, mapa.getActionTendencies().get(br.cefetmg.lsi.l2l.common.Constants.TEDIUM), "same list for every emotion, as in Mapa");
+    }
+
+    @Test
+    void operant_learning_defaults_on_and_parses_off() {
+        assertTrue(new LearningSettings().isOperantLearningEnabled());
+        assertTrue(parse("circadianEnabled = false").isOperantLearningEnabled());
+        assertFalse(parse("operantEstimatorEnabled = true\noperantLearningEnabled = false").isOperantLearningEnabled());
+    }
+
+    @Test
+    void focus_thresholds_must_keep_the_hysteresis() {
+        assertThrows(IllegalArgumentException.class, () -> parse("focusThetaOn = 0.2\nfocusThetaOff = 0.2"));
+        assertThrows(IllegalArgumentException.class, () -> parse("focusThetaOn = 0.2\nfocusThetaOff = 0.5"));
+        assertThrows(IllegalArgumentException.class, () -> parse("focusThetaOn = 1.0\nfocusThetaOff = -0.1"));
     }
 
     private static LearningSettings parse(String body) {

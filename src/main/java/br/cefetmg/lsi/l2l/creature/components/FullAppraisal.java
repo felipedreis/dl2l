@@ -143,7 +143,10 @@ public class FullAppraisal extends CreatureComponent {
         wanderRandom = new Random(Seeds.derive(rootSeed, "creature", id.key, "wander"));
 
         if (learningSettings.isFocalDriveEnabled()) {
-            focusTracker = new FocusTracker(FocusTracker.Params.defaults());
+            FocusTracker.Params defaults = FocusTracker.Params.defaults();
+            focusTracker = new FocusTracker(new FocusTracker.Params(learningSettings.getFocusThetaOn(),
+                    learningSettings.getFocusThetaOff(), defaults.delta(), defaults.thetaCrit(), defaults.tMax(),
+                    defaults.resumeWindow(), defaults.hStar(), defaults.scale()));
         }
 
         // When mlExt is null (e.g. TestingCreature), the WORLD_MODEL filter is silently

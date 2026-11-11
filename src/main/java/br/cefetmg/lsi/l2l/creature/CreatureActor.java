@@ -79,7 +79,7 @@ public class CreatureActor implements Creature {
 
     private MemorySystem memory;
 
-    /** Issue #110: learning operant table behind a facade; null unless operantEstimatorEnabled. */
+    /** Learning operant table behind a facade; null unless operantEstimatorEnabled. */
     private OperantStore operantStore;
     /** Issue #110: whether focalDriveEnabled, so episode messages and the death message are sent. */
     private boolean focalDriveInUse;
@@ -152,9 +152,9 @@ public class CreatureActor implements Creature {
         // Register under this creature's key so components can find it via learningSettings(id.key).
         ext.configure(id.key, effective);
 
-        // Issue #110: the operant estimator is a TypedActor facade, so Valuation (the writer, through
-        // OperantReturnSink) and FullAppraisal (the reader, from #104) share one table. The focal drive
-        // is passed with each estimate call, not shared through a reference (#104, Q1).
+        // The operant estimator is a TypedActor facade, so Valuation (the writer, one record per outcome) and
+        // FullAppraisal (the reader, from #104) share one table. The focal drive is passed with each estimate
+        // call, not shared through a reference (#104, Q1); the table ignores it.
         focalDriveInUse = effective.isFocalDriveEnabled();
         if (effective.isOperantEstimatorEnabled()) {
             operantStore = TypedActor.get(TypedActor.context())

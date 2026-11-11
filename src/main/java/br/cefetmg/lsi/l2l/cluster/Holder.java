@@ -138,7 +138,8 @@ public class Holder extends AbstractActor implements Registrable {
         PersistenceExtension.of(context().system()).configure(saveDir);
         PersistenceExtension.of(context().system()).bdActor().tell(
                 new RunInfoState(seed, seedGenerated, System.getenv().getOrDefault("TRIAL_ID", "local"),
-                        System.currentTimeMillis()), self());
+                        System.currentTimeMillis(), learningSettings.getFocusThetaOn(),
+                        learningSettings.getFocusThetaOff()), self());
         // Eagerly load the species ML models once for this JVM node, so an invalid model
         // contract fails fast here rather than mid-run. Skipped entirely when the filter
         // chain has no WORLD_MODEL: nothing in the run would touch the models, and loading

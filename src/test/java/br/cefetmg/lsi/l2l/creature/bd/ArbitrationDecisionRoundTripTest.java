@@ -50,10 +50,10 @@ class ArbitrationDecisionRoundTripTest {
 
     /** EAT Q = 1 and AVOID Q = 0, one controller, so the stopping rule is trivially decided by OPERANT. */
     private static OperantEstimator operant() {
-        OperantEstimator e = new OperantEstimator(new double[] {50, 100}, 1.0);
+        OperantEstimator e = new OperantEstimator(1.0);
         for (int i = 0; i < 20; i++) {
-            e.record(HUNGER, on(ActionType.EAT), 2.0);
-            e.record(HUNGER, on(ActionType.AVOID), 0.0);
+            e.record(on(ActionType.EAT), 2.0);
+            e.record(on(ActionType.AVOID), 0.0);
         }
         return e;
     }
@@ -69,9 +69,9 @@ class ArbitrationDecisionRoundTripTest {
 
         // A Thompson pick (seed chosen so the draw is not the best): executed as chosen.
         // A close pair (Q 0.5 vs 0, one observation each) so the Thompson draw picks the lower one often.
-        OperantEstimator close = new OperantEstimator(new double[] {50, 100}, 1.0);
-        close.record(HUNGER, on(ActionType.EAT), 1.0);
-        close.record(HUNGER, on(ActionType.AVOID), 0.0);
+        OperantEstimator close = new OperantEstimator(1.0);
+        close.record(on(ActionType.EAT), 1.0);
+        close.record(on(ActionType.AVOID), 0.0);
         // Seed 5 was found once (a scan outside the test) to give a THOMPSON pick on this fixture.
         ArbitrationDecision thompson = new Arbiter(List.of(new Controller(ControllerType.OPERANT, close)),
                 new Params(0.8, 0.0, 1.0), new Random(5L)).decide(two, H, HUNGER);

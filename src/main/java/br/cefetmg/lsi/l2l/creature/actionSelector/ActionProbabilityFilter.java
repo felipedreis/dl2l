@@ -106,6 +106,15 @@ public class ActionProbabilityFilter implements ActionFilter {
                     sumOfProbabilities += probability;
                 }
 
+                // No learned preference among these candidates (every weight is 0 - e.g. a red apple seen at a
+                // distance, where the table has learned EAT only): choose uniformly. Dividing 0 by 0 gave NaN,
+                // every comparison with NaN is false, and the loop below then always returned the FIRST candidate
+                // (APPROACH, by the order actionsAtDistance builds), a fixed rule instead of a sample.
+                if (!(sumOfProbabilities > 0.0) || !Double.isFinite(sumOfProbabilities)) {
+                    disambiguatedActs.add(actsToDisambiguate.get(random.nextInt(numberOfActions)));
+                    continue;
+                }
+
                 for (int j = 0; j < numberOfActions; ++j) {
                     probabilities[j] /= sumOfProbabilities;
                 }

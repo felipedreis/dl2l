@@ -48,7 +48,7 @@ public interface Creature {
     OperantConditioning operantConditioning();
     MemorySystem memory();
 
-    /// Learning operant table fed by closed episodes (issue #110); null unless operantEstimatorEnabled
+    /// Learning operant table fed per outcome by Valuation; null unless operantEstimatorEnabled
     OperantStore operantStore();
 
     /// Symbolic reward-expectancy predictor (baseline for the dopaminergic RPE)

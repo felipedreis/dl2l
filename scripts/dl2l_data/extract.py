@@ -56,6 +56,7 @@ OPTIONAL_RAW = {
     "run_info": "run_info",                                    # issue #95
     "episode_returns": "episode_return",                       # issue #110
     "arbitration_decisions": "arbitration_decision_state",     # issue #105
+    "operant_updates": "operant_update_state",                 # operant per-outcome (A2)
 }
 
 

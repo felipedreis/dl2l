@@ -396,11 +396,25 @@ TABLES["arbitration_decisions"] = (
 
 # Run setup (issue #95): one row per holder JVM with the root seed. Absent from raw dumps
 # written before that change, so extract.py skips it when the view does not exist.
+# SELECT * on purpose: dumps from before the focus-tracker thresholds were configurable lack
+# focus_theta_on / focus_theta_off, and extract.py must still read them.
 TABLES["run_info"] = (
     """
-    SELECT seed, seed_generated, trial_id, started_at
+    SELECT *
     FROM data.run_info
     ORDER BY started_at
+    """,
+    None,
+)
+
+# One row per update of the A2 operant table: the sample recorded into the (object_type, action) cell and the
+# cell's n, Q, SE and sigma right after it (docs/plans/operant-per-outcome.md). Empty/absent unless
+# operantEstimatorEnabled.
+TABLES["operant_updates"] = (
+    """
+    SELECT creature_key, seq, time_ms, "cycle", object_type, action, sample, n, q, se, sigma
+    FROM data.operant_update_state
+    ORDER BY creature_key, seq
     """,
     None,
 )
@@ -412,7 +426,7 @@ TABLE_ORDER = [
     "perceptions", "smell_perceptions", "mouth_interactions", "sleep_episodes", "neuromodulators",
     "endocrine", "expectancy", "engrams", "consolidation_episodes",
     "consolidation_batches", "memory_traces", "conditioning", "memory_decisions",
-    "episode_returns", "arbitration_decisions", "run_info",
+    "episode_returns", "arbitration_decisions", "run_info", "operant_updates",
 ]
 
 assert set(TABLE_ORDER) == set(TABLES)

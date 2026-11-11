@@ -1,0 +1,16 @@
+# Arbiter-ladder pilot, stage 2: docs/experiments/p107_pilot_stage2_recipe.md. Seeds paired across arms, disjoint from campaigns.
+# Descriptive, not a hypothesis test. Run on CCAD: pass the image on the command line,
+#   -e dl2l_image=ghcr.io/felipedreis/dl2l:sha-3ec1a4b
+name: p107_pilot
+trials: 3
+seeds: [10701, 10702, 10703]
+conditions:
+- {key: a0, simulation: simulations/arbiter_a0.conf,    label: A0 baseline,        color: '#333333'}
+- {key: a1, simulation: simulations/p107_gate2_a1.conf, label: A1 focus tracker,   color: '#3b7dd8'}
+- {key: a2, simulation: simulations/p107_gate2_a2.conf, label: A2 operant arbiter, color: '#d8733b'}
+image:
+  source: registry
+data_dir: ml/data_p107_pilot
+extract: {format: parquet, backup: false, tables: all}
+upload: {enabled: true, prefix: p107_pilot}
+analysis: {module: arbiter_ladder}

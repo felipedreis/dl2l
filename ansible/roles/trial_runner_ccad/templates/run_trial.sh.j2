@@ -406,14 +406,18 @@ SCRAPE_PID=$!
 # is deliberately opportunistic not load-bearing).
 echo "Waiting for the simulation to finish..."
 sim_done=0
-# ~90 min ceiling: generous margin beyond the in-sim maxRuntimeMinutes cap
-# (currently 60 minutes across simulations/20260714_memory_vs_wm_dense_reposition_*.conf).
+# ~150 min ceiling (was ~90, which killed every 120-minute A1/A2 trial of p107_pilot at ~90 min,
+# mid-run and before extraction; keep ~30 min of margin over the longest in-sim maxRuntimeMinutes,
+# currently 120 in simulations/arbiter_a*.conf and the p107 confs; SBATCH --time of 3 h stays the
+# backstop, and extraction needs the remaining ~30 min).
+# Original note: generous margin beyond the in-sim maxRuntimeMinutes cap
+# (then 60 minutes across simulations/20260714_memory_vs_wm_dense_reposition_*.conf).
 # CONFIRMED LIVE a tighter 50-min ceiling raced against a simulation that
 # legitimately ran its full 40-minute in-sim deadline plus real-world JVM/
 # processing overhead (jobs completed at 41-47 min wall-clock for a 40-min
 # cap) — keep a similar ~25-30 min margin over whatever the cap is. SBATCH
 # --time is the ultimate backstop regardless.
-for _ in $(seq 1 1080); do
+for _ in $(seq 1 1800); do
   if curl -s -m 3 "http://localhost:${METRICS_MANAGER_PORT}/metrics" 2>/dev/null \
       | grep -qE '^dl2l_simulation_running\{[^}]*\} 0(\.0)?$'; then
     echo "Completion detected via /metrics (dl2l_simulation_running=0)"

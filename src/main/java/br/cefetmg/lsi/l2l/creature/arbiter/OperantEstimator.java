@@ -1,6 +1,5 @@
 package br.cefetmg.lsi.l2l.creature.arbiter;
 
-import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.creature.common.Action;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
@@ -10,11 +9,13 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Operant table (habit) of the uncertainty arbitration paper, section 4.4: the cheapest controller.
+ * Operant table (habit) of the uncertainty arbitration paper, section 4.4: the cheapest controller, and a basic
+ * per-outcome learner like the legacy {@code OperantConditioning} table (docs/plans/arbiter-proposal-review.md).
  *
- * <p>Keeps decayed Welford statistics of the value experienced per cell
- * {@code (focal drive, object type, distance bin, action type)} and turns them into an
- * {@link Estimate} by the paper's formulas, with {@code kappa = 1} and {@code Q0 = 0}:
+ * <p>Keeps decayed Welford statistics of the value experienced per cell {@code (object type, action type)}: no
+ * drive and no distance in the key. Each sample is the realised drive reduction of one outcome
+ * ({@code -arousalVariation}), fed by {@code Valuation} from the same events that reinforce the legacy table.
+ * The statistics turn into an {@link Estimate} by the paper's formulas, with {@code kappa = 1} and {@code Q0 = 0}:
  * <ul>
  *   <li>{@code Q = (n * mean + kappa * Q0) / (n + kappa)}: frequency alone never inflates {@code Q};</li>
  *   <li>{@code sigma}: the prior {@code sigma0 = 1} while {@code n <= 1}; from then on the sample variance
@@ -31,17 +32,14 @@ import java.util.List;
  * {@code sqrt(SE^2 + sigma^2)} is 0. The blend keeps {@code sigma} (hence {@code SE}) strictly
  * positive and still shrinking with evidence, while converging to {@code s} for a noisy cell.
  *
- * <p>Binning: the distance bins are the intervals between the sorted upper edges given at
- * construction, with each edge inclusive on its lower bin. The default has three bins at one third
- * and two thirds of {@link Constants#DEFAULT_VISION_FIELD_RADIUS}. Candidates without an object
- * (WANDER, SLEEP, ...) use the {@code NONE} object bucket and bin 0; a {@code null} focal drive is
- * the {@code NONE} focal bucket.
+ * <p>Candidates without an object (WANDER, SLEEP, ...) use the {@code NONE} object bucket; {@code Valuation}
+ * never records into it (outcomes on the creature itself are left out, like the legacy table), so it stays at
+ * the prior.
  *
- * <p>{@link #estimate} is read-only and returns one estimate per candidate, in order. Its
- * {@code h} argument is unused: the value was already evaluated against H when it was recorded.
+ * <p>{@link #estimate} is read-only and returns one estimate per candidate, in order. Its {@code h} and
+ * {@code focalDrive} arguments are unused: the table is not conditioned on the drives.
  *
- * <p>Not thread-safe, and no owner is assumed: where this instance lives and who writes to it is
- * decided by the wiring issues, not here. Each creature's estimator should be its own actor's state.
+ * <p>Not thread-safe, and no owner is assumed: it lives behind a TypedActor facade in {@code CreatureActor}.
  */
 public final class OperantEstimator implements OperantStore {
 
@@ -55,77 +53,64 @@ public final class OperantEstimator implements OperantStore {
     private static final double NU0 = 1.0;
 
     /**
-     * Cell key. {@code null} in a field means that bucket is {@code NONE}. The object type is keyed by its
+     * Cell key. {@code null} object type is the {@code NONE} bucket. The object type is keyed by its
      * {@link WorldObjectType#name()}, not by the instance: some types (e.g. {@code Self}) have no value equality,
      * so keying by instance would never let a cell accumulate from one perception to the next.
      */
-    private record Key(String focalDrive, String objectType, int distanceBin, ActionType actionType) {
+    private record Key(String objectType, ActionType actionType) {
     }
 
-    private final double[] distanceEdges;
     private final WelfordTable<Key> table;
 
-    /**
-     * Default binning ({@code DEFAULT_VISION_FIELD_RADIUS / 3} and {@code 2 * .../3}) and
-     * {@link #DEFAULT_DECAY}.
-     */
+    /** {@link #DEFAULT_DECAY}. */
     public OperantEstimator() {
-        this(defaultDistanceEdges(), DEFAULT_DECAY);
+        this(DEFAULT_DECAY);
     }
 
     /**
-     * The focal drive is not a constructor argument: it arrives with each call to {@link #estimate}, so
-     * the estimator holds no reference to any other actor's state (issue #104, Q1).
-     *
-     * @param distanceEdges strictly increasing, finite upper edges of the distance bins; empty for one bin
-     * @param decay         forgetting factor applied to the updated cell only; in (0, 1]
-     *                      ({@code 1} forgets nothing)
-     * @throws IllegalArgumentException if {@code distanceEdges} is null, an edge
-     *                                  is not finite or the edges are not strictly increasing, or
-     *                                  {@code decay} is not in (0, 1]
+     * @param decay forgetting factor applied to the updated cell only; in (0, 1] ({@code 1} forgets nothing)
+     * @throws IllegalArgumentException if {@code decay} is not in (0, 1]
      */
-    public OperantEstimator(double[] distanceEdges, double decay) {
-        if (distanceEdges == null) {
-            throw new IllegalArgumentException("distanceEdges must not be null");
-        }
-        for (int i = 0; i < distanceEdges.length; i++) {
-            if (!Double.isFinite(distanceEdges[i])) {
-                throw new IllegalArgumentException("distanceEdges[" + i + "] is not finite: " + distanceEdges[i]);
-            }
-            if (i > 0 && distanceEdges[i] <= distanceEdges[i - 1]) {
-                throw new IllegalArgumentException("distanceEdges must be strictly increasing at index " + i);
-            }
-        }
-        this.distanceEdges = distanceEdges.clone();
+    public OperantEstimator(double decay) {
         this.table = new WelfordTable<>(decay);
     }
 
-    private static double[] defaultDistanceEdges() {
-        double radius = Constants.DEFAULT_VISION_FIELD_RADIUS;
-        return new double[] {radius / 3, 2 * radius / 3};
-    }
-
     /**
-     * Records the value experienced after {@code action}, in the cell of the given focal drive.
+     * Records the value experienced after {@code action} on {@code target}.
      *
-     * @throws IllegalArgumentException if {@code action} (or its perception) is null, or
-     *                                  {@code value} is NaN or infinite; the table is then unchanged
+     * @param target the object type acted on; {@code null} is the {@code NONE} bucket
+     * @return the cell after the update
+     * @throws IllegalArgumentException if {@code action} is null or {@code value} is NaN or infinite; the
+     *                                  table is then unchanged
      */
     @Override
-    public void record(String focalDrive, Action action, double value) {
+    public OperantUpdate record(WorldObjectType target, ActionType action, double value) {
+        if (action == null) {
+            throw new IllegalArgumentException("action must not be null");
+        }
         if (!Double.isFinite(value)) {
             throw new IllegalArgumentException("value must be finite: " + value);
         }
-        table.observe(keyOf(focalDrive, action), value);
+        Key key = keyOf(target, action);
+        table.observe(key, value);
+        WelfordTable.Stats s = table.stats(key);
+        return new OperantUpdate(s.n(), estimateOf(s));
+    }
+
+    /** Convenience for the cell an {@link Action} falls in: its target and type. */
+    public OperantUpdate record(Action action, double value) {
+        if (action == null) {
+            throw new IllegalArgumentException("action must not be null");
+        }
+        return record(targetOf(action), action.type, value);
     }
 
     /**
-     * Read-only. The cell of each candidate is keyed by the focal drive passed in, not by any state of
-     * this estimator, so the answer depends only on the arguments and the table.
+     * Read-only.
      *
      * @param candidates candidate actions; may be empty
-     * @param h          unused by this estimator (see the class javadoc)
-     * @param focalDrive focal drive to read the cells of; {@code null} is the {@code NONE} bucket
+     * @param h          unused (see the class javadoc)
+     * @param focalDrive unused (see the class javadoc)
      * @return one estimate per candidate, in order; unmodifiable
      * @throws IllegalArgumentException if {@code candidates} is null or holds a null action
      */
@@ -136,29 +121,20 @@ public final class OperantEstimator implements OperantStore {
         }
         List<Estimate> out = new ArrayList<>(candidates.size());
         for (Action action : candidates) {
-            out.add(estimateOf(table.stats(keyOf(focalDrive, action))));
+            out.add(estimateOf(table.stats(keyOf(targetOf(action), action.type))));
         }
         return Collections.unmodifiableList(out);
     }
 
-    private Key keyOf(String drive, Action action) {
+    private static WorldObjectType targetOf(Action action) {
         if (action == null || action.perception == null) {
             throw new IllegalArgumentException("action and its perception must not be null");
         }
-        WorldObjectType target = action.getTarget();
-        if (target == null) {
-            return new Key(drive, null, 0, action.type);
-        }
-        return new Key(drive, target.name(), distanceBin(action.perception.distance), action.type);
+        return action.getTarget();
     }
 
-    /** Bin {@code i} holds distances in {@code (edge[i-1], edge[i]]}; the last bin is open-ended. */
-    private int distanceBin(double distance) {
-        int bin = 0;
-        while (bin < distanceEdges.length && distance > distanceEdges[bin]) {
-            bin++;
-        }
-        return bin;
+    private static Key keyOf(WorldObjectType target, ActionType action) {
+        return new Key(target == null ? null : target.name(), action);
     }
 
     private static double blendedSigma(double n, double sampleSd) {
