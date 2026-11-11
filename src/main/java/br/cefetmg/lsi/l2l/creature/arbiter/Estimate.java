@@ -18,12 +18,23 @@ package br.cefetmg.lsi.l2l.creature.arbiter;
  * @param q     expected value {@code V(K | H)}; finite, may be negative
  * @param se    standard error of {@code q}; finite and non-negative
  * @param sigma outcome spread; finite and non-negative
+ * @param nEff  effective number of neighbours behind the estimate (episodic controller, #113); {@code NaN} when the
+ *              controller has no such notion (the operant table). The arbiter's novelty bonus and the fixed-order
+ *              evidence test read it
  * @throws IllegalArgumentException if {@code q} is not finite, or {@code se} or {@code sigma}
- *                                  is not finite and non-negative
+ *                                  is not finite and non-negative, or {@code nEff} is negative or infinite
  */
-public record Estimate(double q, double se, double sigma) {
+public record Estimate(double q, double se, double sigma, double nEff) {
+
+    /** An estimate without an effective neighbour count. */
+    public Estimate(double q, double se, double sigma) {
+        this(q, se, sigma, Double.NaN);
+    }
 
     public Estimate {
+        if (Double.isInfinite(nEff) || nEff < 0) {
+            throw new IllegalArgumentException("nEff must be NaN or finite and non-negative: " + nEff);
+        }
         if (!Double.isFinite(q)) {
             throw new IllegalArgumentException("q must be finite: " + q);
         }
@@ -48,6 +59,6 @@ public record Estimate(double q, double se, double sigma) {
         if (!Double.isFinite(factor) || factor < 0) {
             throw new IllegalArgumentException("factor must be finite and non-negative: " + factor);
         }
-        return new Estimate(q, se * factor, sigma);
+        return new Estimate(q, se * factor, sigma, nEff);
     }
 }
