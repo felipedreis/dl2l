@@ -336,6 +336,17 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
   near the floor. The next step is a diagnosis of why learned EAT values lower food choices (candidate lists and gate decisions per cycle), before any campaign.
 - **Process:** the size-of-reduction run was stopped after its scarce world; python3 3.15's duckdb 2.0 broke the analysis, which now runs on python3.13.
 
+### 11-11 — Diagnosis of the operant result; configuration settled; #107 pre-registration drafted
+
+- **Diagnosis from the existing data** (`analysis/diagnostics/p107_exposure_diagnosis.py`): at food, learners eat at least as readily as frozen creatures;
+  they spend half as long at food and 2-3x as long next to gray apples. The habit table cannot value APPROACH (no immediate outcome), so learners
+  approach gray apples as readily as food, refuse them, and hop to the next one; under Mapa's lists they mostly sleep next to them (10-cycle sleep lock).
+- **Settled:** A0's classic configuration (CAMPOS tendencies) for every arm; the operant controller as implemented. A2 is not tuned further; its
+  limitation is a finding and the contrast A3 is meant to address (review §10).
+- **#107:** `docs/experiments/arbiter_ladder_recipe.md` drafted for review: arms A0-A3, A5; primary outcome d(H) over life; adoption criteria
+  from the paper's §8.1 with the thresholds fixed (margin 0.124, calibration in [0.8, 1.25]); zero tuning budget; 16 trials x 5 creatures, seeds
+  10800-10815; six open items for the reviewer.
+
 ---
 
 ## Which results still stand
