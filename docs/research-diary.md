@@ -367,6 +367,17 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
 - **Open:** the budget may block episodic memory in calm creatures (e < 0.3; the pilot gate R0 reads it); the pilot on CCAD has not run.
 
 
+### 11-12 — A3/A5 pilot on CCAD: runs fine, the budget leaves the episodic controller idle 93% of the time
+
+- **Run:** `p117_pilot` (3 trials each, seeds 10701-10703, image `sha-fd2c1bb`, jobs 2949 / 2952), all 6 trials completed, 30/30 creatures alive at the cap. Process: the preview image build wedged in `queued` (cancel failed), re-triggered with a new commit; `ansible/ccad-status.yml` added for read-only progress checks and used for the watch; the playbook skips the HF upload (done by hand, `p117_pilot/`).
+- **R0 passes narrowly:** the episodic controller decides 4.5-6.7% of decisions, but is affordable in 7.1% only (efficiency mean 0.18, 7% of decisions at or above the 0.3 threshold). Calm creatures cannot afford it.
+- **R2 and R3 fail:** early-life food share a3 vs a2n +0.004 (not higher in all seeds), and P(APPROACH) toward gray equals toward food in every arm (0.40 / 0.40), against the replay's 37% / 59%. The signal is in the stored values; at 6% of decisions it does not reach behaviour.
+- **A3 and A5 are indistinguishable** (d(H) life difference 0.002, SD 0.004): the main contrast has no power under this budget.
+- **Unexplained, and unregistered:** a3 and a5 regulate better than the earlier a2n (d(H) 0.25 vs 0.31, every seed; +2.6 EATs/min). A2 was run on another day, so this may be a machine effect; an A2 arm in the same window is needed.
+- **Calibration (measured):** operant statistic 1.12-1.21 per trial, inside [0.8, 1.25]; episodic z variance 0.6-0.7 (SE conservative).
+- Details and the campaign consequences: `docs/experiments/p117_pilot_recipe.md` section 7, `docs/reports/p117_pilot_report.md`.
+
+
 ---
 
 ## Which results still stand
