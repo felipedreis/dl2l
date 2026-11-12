@@ -148,5 +148,24 @@ class LadderArmsTest(unittest.TestCase):
         self.assertEqual(al.present_arms(cr), ["a3", "a5"])
 
 
+class FactorialTest(unittest.TestCase):
+    KEYS = [f"{a}_L{l}T{t}" for a in ("a3", "a5") for l in (1, 0) for t in (1, 0)]
+
+    def test_controller_contrast_per_cell_then_each_prior_removed_against_both_on(self):
+        pairs = al.factorial_pairs(self.KEYS)
+        self.assertEqual(pairs[:4], [("a3_L1T1", "a5_L1T1"), ("a3_L1T0", "a5_L1T0"), ("a3_L0T1", "a5_L0T1"), ("a3_L0T0", "a5_L0T0")])
+        self.assertIn(("a3_L0T0", "a3_L1T1"), pairs)
+        self.assertIn(("a5_L1T0", "a5_L1T1"), pairs)
+        self.assertEqual(len(pairs), 4 + 3 + 3)
+
+    def test_other_conditions_give_no_factorial_pairs(self):
+        self.assertEqual(al.factorial_pairs(["a0", "a1", "a2", "a3", "a5"]), [])
+        self.assertEqual(al.factorial_pairs(["a3_L1T1"]), [])
+
+    def test_present_arms_lists_cells_after_the_ladder_arms_in_spec_order(self):
+        cr = pd.DataFrame({"condition": ["a5_L0T0", "a3_L1T1", "a3_L1T1", "a5_L1T1"]})
+        self.assertEqual(al.present_arms(cr), ["a5_L0T0", "a3_L1T1", "a5_L1T1"])
+
+
 if __name__ == "__main__":
     unittest.main()

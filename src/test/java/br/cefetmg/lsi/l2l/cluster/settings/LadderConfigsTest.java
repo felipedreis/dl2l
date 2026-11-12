@@ -79,6 +79,29 @@ class LadderConfigsTest {
         }
     }
 
+    @Test
+    void theFactorialArmsCrossTheTwoPriorsOnTheSameWorldAndCap() {
+        for (String arm : new String[] {"a3", "a5"}) {
+            LearningSettings base = load(arm.equals("a3") ? "arbiter_a3.conf" : "arbiter_a5.conf");
+            for (int lock = 0; lock <= 1; lock++) {
+                for (int tend = 0; tend <= 1; tend++) {
+                    String name = "p117_fact_" + arm + "_L" + lock + "T" + tend + ".conf";
+                    Simulation sim = sim(name);
+                    LearningSettings x = sim.getLearningSettings();
+                    assertEquals(lock == 1, x.isSleepHysteresisEnabled(), name);
+                    assertEquals(tend == 1, x.isActionTendencyEnabled(), name);
+                    assertEquals(base.isEpisodicEstimatorEnabled(), x.isEpisodicEstimatorEnabled(), name);
+                    assertEquals(base.isArbiterFixedOrder(), x.isArbiterFixedOrder(), name);
+                    assertEquals(60, sim.getMaxRuntimeMinutes(), name);
+                    java.util.Map<String, Integer> w = new java.util.HashMap<>();
+                    sim.getWorldObjectSettings().forEach(o -> w.put(o.getType().name(), o.getQuantity()));
+                    assertEquals(java.util.Map.of("RED_APPLE", 100, "GREEN_APPLE", 100, "GRAY_APPLE", 300, "CACTUS", 140, "ALOE", 140), w, name);
+                    assertSameApartFromEpisodic(base, x, false);
+                }
+            }
+        }
+    }
+
     private static Simulation sim(String name) {
         return new Simulation(ConfigFactory.parseFile(new File("simulations/" + name)).resolve());
     }

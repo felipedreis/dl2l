@@ -12,6 +12,7 @@ telemetry, a block in `arm_telemetry`.
 from __future__ import annotations
 
 import math
+import re
 from pathlib import Path
 
 import numpy as np
@@ -32,6 +33,8 @@ ARMS = ["a0", "a1", "a2", "a3", "a5"]
 # contrast (arbitration against the same two controllers in a fixed order).
 PAIRS = [("a1", "a0"), ("a2", "a1"), ("a2", "a0"), ("a3", "a2"), ("a3", "a5")]
 SURVIVAL_PAIRS = [("a0", "a1"), ("a1", "a2"), ("a2", "a3"), ("a3", "a5")]
+# Factorial arms (p117_factorial): key = <controller>_L<lock 0|1>T<tendency 0|1>, 1 = the hand-built prior is on
+CELL_KEY = re.compile(r"^(a\d)_L([01])T([01])$")
 OPERANT_PRIOR = (0.0, 1.0, 1.0)   # (Q, SE, sigma) of an unseen operant cell (OperantEstimator)
 EARLY_LIFE = 0.2                  # recipe 5: the first 20% of a creature's life
 MIN_CELL_UPDATES = 30             # recipe 5: cells with fewer updates are not in the calibration statistic
@@ -342,7 +345,7 @@ def paired_table(cr: pd.DataFrame) -> str:
     lines = ["| measure | contrast | per-seed differences | mean | SD (2 df) | 80% upper bound on SD |", "|---|---|---|---|---|---|"]
     for col, label in CREATURE_METRICS:
         tm = trial_means(cr, col)
-        for later, earlier in PAIRS:
+        for later, earlier in PAIRS + factorial_pairs(tm.columns):
             r = paired_differences(tm, later, earlier)
             if r is None:
                 continue
@@ -350,10 +353,32 @@ def paired_table(cr: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
+def factorial_pairs(keys) -> list[tuple[str, str]]:
+    """Contrasts of a lock x tendency factorial, (later, earlier) as in PAIRS: per cell, A3 - A5 (arbitration against the fixed order);
+    per controller, each cell with a prior off minus the cell with both on (the effect of removing that prior or both)."""
+    cells: dict[str, dict[tuple[int, int], str]] = {}
+    for k in keys:
+        m = CELL_KEY.match(k)
+        if m:
+            cells.setdefault(m.group(1), {})[(int(m.group(2)), int(m.group(3)))] = k
+    order = [(1, 1), (1, 0), (0, 1), (0, 0)]
+    pairs = []
+    for cell in order:
+        if cell in cells.get("a3", {}) and cell in cells.get("a5", {}):
+            pairs.append((cells["a3"][cell], cells["a5"][cell]))
+    for arm in sorted(cells):
+        base = cells[arm].get((1, 1))
+        for cell in order[1:]:
+            if base and cell in cells[arm]:
+                pairs.append((cells[arm][cell], base))
+    return pairs
+
+
 def present_arms(cr: pd.DataFrame) -> list[str]:
-    """The ladder arms that have data in this experiment, in ladder order."""
-    have = set(cr["condition"])
-    return [a for a in ARMS if a in have]
+    """The arms that have data in this experiment: the ladder arms in ladder order, then any other condition (the factorial's cells) in the
+    order the spec lists them."""
+    have = list(dict.fromkeys(cr["condition"]))
+    return [a for a in ARMS if a in have] + [a for a in have if a not in ARMS]
 
 
 def arm_table(cr: pd.DataFrame, cfg) -> str:
@@ -371,7 +396,7 @@ def arm_table(cr: pd.DataFrame, cfg) -> str:
 
 def survival_text(cr: pd.DataFrame) -> str:
     out = []
-    for a, b in SURVIVAL_PAIRS:
+    for a, b in SURVIVAL_PAIRS + factorial_pairs(set(cr["condition"])):
         r = survival_comparison(cr, a, b)
         if not r:
             continue
