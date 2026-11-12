@@ -378,6 +378,15 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
 - Details and the campaign consequences: `docs/experiments/p117_pilot_recipe.md` section 7, `docs/reports/p117_pilot_report.md`.
 
 
+### 11-12 (later) — Plants world, no sleep lock, no tendency: the ladder separates, and the fixed order wins
+
+- **What:** answering "what did we forget to turn off": hunger drift is 2.70 per creature-minute in every arm; A0 feeds at half of it and starves, A1 onward feed at or above it (net 0.00 for A1 and A3), and the pilot world has instant respawn of 200 food apples, so it saturates. Two hand-built priors sit under the arbiter: the action tendency lists (on since 2026-07-07) and the sleep hysteresis lock (an unconditional 10-cycle gate, 4.1% of decisions overridden). Added a switch for the lock (`sleepHysteresisEnabled`, default on) and ran A2, A3, A5 in the pilot world plus 140 cactus and 140 aloe with both off (`p117_plants`, 3 trials, one window).
+- **Result:** deaths 15/15 (A2, all within 433 s), 13/15 (A3, mean 2984 s), 7/15 (A5, KM median beyond the cap). A3 beats A2 in every seed (log-rank p < 0.0001); **A5 beats A3**: deaths 7/15 vs 13/15, log-rank p = 0.029, observed time better in every seed. The paper's main contrast goes the wrong way.
+- **The budget was not the problem:** here the episodic controller is affordable in 63-70% of decisions and decides 62-63%, against 7% and 6% in the calm pilot world. Efficiency follows arousal; the pilot's idle controller was a property of that world.
+- **Not isolated:** both switches and the world changed at once, there is no lock-on or tendency-on control, and n = 3. The next step is the factorial in this world at the campaign's sample size, with early-life food share replaced by survival and d(H) as primary outcomes.
+- Process: `ansible/ccad-limits.yml` (read-only SLURM limits: `short_qos` 144 CPUs per user, `dev_qos` 5 h but 2 running jobs per user) and `ccad-status.yml`; details in `docs/experiments/p117_plants_recipe.md` section 6 and `docs/reports/p117_plants_report.md`.
+
+
 ---
 
 ## Which results still stand
