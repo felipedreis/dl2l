@@ -161,7 +161,9 @@ public class Simulation {
                 // A3 / A5 (issues #111-#116): the episodic controller, its fixed-order control, the key's lambda.
                 ls.hasPath("episodicEstimatorEnabled") && ls.getBoolean("episodicEstimatorEnabled"),
                 ls.hasPath("arbiterFixedOrder") && ls.getBoolean("arbiterFixedOrder"),
-                ls.hasPath("episodicKeyLambda") ? ls.getDouble("episodicKeyLambda") : EngramKeyEncoder.DEFAULT_LAMBDA);
+                ls.hasPath("episodicKeyLambda") ? ls.getDouble("episodicKeyLambda") : EngramKeyEncoder.DEFAULT_LAMBDA,
+                // Sleep hysteresis gate: default ON; false is an experimental control (docs/plans/sleep-hysteresis-switch.md).
+                !ls.hasPath("sleepHysteresisEnabled") || ls.getBoolean("sleepHysteresisEnabled"));
     }
 
     public Long getNumHolders() {

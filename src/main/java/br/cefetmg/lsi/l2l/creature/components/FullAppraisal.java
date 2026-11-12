@@ -406,12 +406,19 @@ public class FullAppraisal extends CreatureComponent {
      * the motor command correctly reflects the enforced SLEEP posture (speed=0, focus=0).
      */
     private Action enforceHysteresisGate(Action action, double behaviouralEfficiency) {
-        if (sleepEpisode.isActive()
-                && action.type != ActionType.SLEEP
-                && sleepEpisode.dwellTicks < Constants.MIN_SLEEP_TICKS) {
+        if (action.type != ActionType.SLEEP
+                && holdsSleep(learningSettings.isSleepHysteresisEnabled(), sleepEpisode.isActive(), sleepEpisode.dwellTicks)) {
             return new Action(ActionType.SLEEP, action.perception);
         }
         return action;
+    }
+
+    /**
+     * Whether the anti-micro-nap gate holds a creature in SLEEP: the switch is on, a sleep episode is active and it has not yet
+     * lasted {@link Constants#MIN_SLEEP_TICKS} cycles. Pure, so the switch and the boundary are testable without a creature.
+     */
+    static boolean holdsSleep(boolean hysteresisEnabled, boolean episodeActive, int dwellTicks) {
+        return hysteresisEnabled && episodeActive && dwellTicks < Constants.MIN_SLEEP_TICKS;
     }
 
     /**

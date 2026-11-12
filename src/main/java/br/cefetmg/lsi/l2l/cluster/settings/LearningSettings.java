@@ -102,6 +102,9 @@ public class LearningSettings implements Serializable {
     private final boolean arbiterFixedOrder;
     private final double episodicKeyLambda;
 
+    // --- Sleep hysteresis gate (FullAppraisal.enforceHysteresisGate) — default ON; off is an experimental control ---
+    private final boolean sleepHysteresisEnabled;
+
     /**
      * Which mechanism chooses the action (issue #104). {@code FILTER_BASED} is the legacy filter chain;
      * {@code ARBITER} is the uncertainty arbiter over the operant estimator.
@@ -325,15 +328,7 @@ public class LearningSettings implements Serializable {
                 operantLearningEnabled, actionTendencySet, false, false, EngramKeyEncoder.DEFAULT_LAMBDA);
     }
 
-    /**
-     * @param actionTendencySet the tendency sets of {@link #getActionTendencies()}; null means {@code CAMPOS}
-     * @param episodicEstimatorEnabled the episodic controller (A3): engrams are written from closed episodes and the
-     *                                 arbiter consults a kNN estimator over them. Needs the arbiter and the focus tracker
-     * @param arbiterFixedOrder        A5: the arbiter decides positionally (episodic if it has evidence, else operant)
-     *                                 instead of by decisiveness. Needs {@code episodicEstimatorEnabled}
-     * @param episodicKeyLambda        weight of the internal-state block of the engram key (paper: 0.5)
-     * @throws IllegalArgumentException additionally if an episodic flag is set without what it needs, or the lambda is bad
-     */
+    /** Sleep hysteresis on, as before the switch existed. */
     public LearningSettings(boolean circadianEnabled,
                             boolean consolidationEnabled,
                             List<ActionSelectionType> enabledFilters,
@@ -354,6 +349,39 @@ public class LearningSettings implements Serializable {
                             boolean episodicEstimatorEnabled,
                             boolean arbiterFixedOrder,
                             double episodicKeyLambda) {
+        this(circadianEnabled, consolidationEnabled, enabledFilters, expectancyEnabled, expectancyMode,
+                neuromodulationEnabled, actionTendencyEnabled, orexinEnabled, endocrineEnabled, tickGatedCognition,
+                focalDriveEnabled, operantEstimatorEnabled, actionSelector, focusThetaOn, focusThetaOff,
+                operantLearningEnabled, actionTendencySet, episodicEstimatorEnabled, arbiterFixedOrder,
+                episodicKeyLambda, true);
+    }
+
+    /**
+     * @param sleepHysteresisEnabled false disables the anti-micro-nap gate that holds a sleeping creature in SLEEP for
+     *                               {@code MIN_SLEEP_TICKS} cycles (an experimental control; default true)
+     */
+    public LearningSettings(boolean circadianEnabled,
+                            boolean consolidationEnabled,
+                            List<ActionSelectionType> enabledFilters,
+                            boolean expectancyEnabled,
+                            ExpectancyMode expectancyMode,
+                            boolean neuromodulationEnabled,
+                            boolean actionTendencyEnabled,
+                            boolean orexinEnabled,
+                            boolean endocrineEnabled,
+                            boolean tickGatedCognition,
+                            boolean focalDriveEnabled,
+                            boolean operantEstimatorEnabled,
+                            ActionSelectorMode actionSelector,
+                            double focusThetaOn,
+                            double focusThetaOff,
+                            boolean operantLearningEnabled,
+                            ActionTendencySet actionTendencySet,
+                            boolean episodicEstimatorEnabled,
+                            boolean arbiterFixedOrder,
+                            double episodicKeyLambda,
+                            boolean sleepHysteresisEnabled) {
+        this.sleepHysteresisEnabled = sleepHysteresisEnabled;
         if (episodicEstimatorEnabled && !(actionSelector == ActionSelectorMode.ARBITER && focalDriveEnabled)) {
             throw new IllegalArgumentException(
                     "episodicEstimatorEnabled requires actionSelector = ARBITER and focalDriveEnabled");
@@ -467,6 +495,11 @@ public class LearningSettings implements Serializable {
     /** False only in the untrained-table control: the operant table is read but never updated. Default true. */
     public boolean isOperantLearningEnabled() {
         return operantLearningEnabled;
+    }
+
+    /** Whether a sleeping creature is held in SLEEP for {@code MIN_SLEEP_TICKS} cycles (true unless configured off). */
+    public boolean isSleepHysteresisEnabled() {
+        return sleepHysteresisEnabled;
     }
 
     /** A3: the episodic controller is wired into the arbiter, and closed episodes are written as engrams. */

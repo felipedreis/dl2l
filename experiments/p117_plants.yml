@@ -1,0 +1,16 @@
+# A2, A3 and A5 in the harder world with plants (cactus, aloe) and the sleep hysteresis gate off, same window, same seeds:
+# docs/experiments/p117_plants_recipe.md. Descriptive. Run on CCAD; pass the image on the command line,
+#   -e dl2l_image=ghcr.io/felipedreis/dl2l:sha-<commit>
+name: p117_plants
+trials: 3
+seeds: [10701, 10702, 10703]
+conditions:
+- {key: a2, simulation: simulations/p117_plants_a2.conf, label: 'A2 operant arbiter, plants world, no sleep lock', color: '#d8733b'}
+- {key: a3, simulation: simulations/p117_plants_a3.conf, label: 'A3 + episodic, plants world, no sleep lock',        color: '#2ca02c'}
+- {key: a5, simulation: simulations/p117_plants_a5.conf, label: 'A5 fixed order, plants world, no sleep lock',        color: '#8c564b'}
+image:
+  source: registry
+data_dir: ml/data_p117_plants
+extract: {format: parquet, backup: false, tables: all}
+upload: {enabled: true, prefix: p117_plants}
+analysis: {module: arbiter_ladder}

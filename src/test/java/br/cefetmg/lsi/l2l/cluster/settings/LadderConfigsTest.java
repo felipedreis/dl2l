@@ -57,7 +57,37 @@ class LadderConfigsTest {
         }
     }
 
+    @Test
+    void theArmsOfThePlantsWorldAreTheSameArmsWithPlantsNoSleepLockAndNoTendency() {
+        String[][] pairs = {{"p107_gate2_a2.conf", "p117_plants_a2.conf"}, {"arbiter_a3.conf", "p117_plants_a3.conf"},
+                {"arbiter_a5.conf", "p117_plants_a5.conf"}};
+        for (String[] p : pairs) {
+            Simulation base = sim(p[0]);
+            Simulation plants = sim(p[1]);
+            LearningSettings b = base.getLearningSettings();
+            LearningSettings x = plants.getLearningSettings();
+            assertTrue(b.isSleepHysteresisEnabled(), p[0]);
+            assertFalse(x.isSleepHysteresisEnabled(), p[1]);
+            assertTrue(b.isActionTendencyEnabled(), p[0]);
+            assertFalse(x.isActionTendencyEnabled(), p[1]);
+            assertSameApartFromEpisodic(b, x, false);
+            assertEquals(b.isEpisodicEstimatorEnabled(), x.isEpisodicEstimatorEnabled(), p[1]);
+            assertEquals(b.isArbiterFixedOrder(), x.isArbiterFixedOrder(), p[1]);
+            java.util.Map<String, Integer> w = new java.util.HashMap<>();
+            plants.getWorldObjectSettings().forEach(o -> w.put(o.getType().name(), o.getQuantity()));
+            assertEquals(java.util.Map.of("RED_APPLE", 100, "GREEN_APPLE", 100, "GRAY_APPLE", 300, "CACTUS", 140, "ALOE", 140), w, p[1]);
+        }
+    }
+
+    private static Simulation sim(String name) {
+        return new Simulation(ConfigFactory.parseFile(new File("simulations/" + name)).resolve());
+    }
+
     private static void assertSameApartFromEpisodic(LearningSettings x, LearningSettings y) {
+        assertSameApartFromEpisodic(x, y, true);
+    }
+
+    private static void assertSameApartFromEpisodic(LearningSettings x, LearningSettings y, boolean sameTendency) {
         assertEquals(x.getActionSelector(), y.getActionSelector());
         assertEquals(x.getEnabledFilters(), y.getEnabledFilters());
         assertEquals(x.isFocalDriveEnabled(), y.isFocalDriveEnabled());
@@ -66,6 +96,8 @@ class LadderConfigsTest {
         assertEquals(x.getFocusThetaOn(), y.getFocusThetaOn(), 0.0);
         assertEquals(x.getFocusThetaOff(), y.getFocusThetaOff(), 0.0);
         assertEquals(x.getActionTendencySet(), y.getActionTendencySet());
-        assertEquals(x.isActionTendencyEnabled(), y.isActionTendencyEnabled());
+        if (sameTendency) {
+            assertEquals(x.isActionTendencyEnabled(), y.isActionTendencyEnabled());
+        }
     }
 }

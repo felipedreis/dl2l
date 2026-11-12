@@ -47,6 +47,19 @@ public class EpisodicControllerIntegrationTest {
         }
     }
 
+    /** The plants world's objects and the hysteresis switch off, on the integration world (400 x 400, one creature). */
+    private static final String PLANTS = String.join("\n",
+            "simulation.worldObjectSettings = [",
+            "  { objectType = \"RED_APPLE\", quantity = 10 }, { objectType = \"GRAY_APPLE\", quantity = 10 },",
+            "  { objectType = \"CACTUS\", quantity = 15 }, { objectType = \"ALOE\", quantity = 15 } ]",
+            "simulation.learningSettings.sleepHysteresisEnabled = false",
+            "simulation.learningSettings.actionTendencyEnabled = false");
+
+    @Test
+    void a3RunsInAWorldWithPlantsNoSleepLockAndNoTendency(@TempDir Path saveDir) throws Exception {
+        runAndCheck(saveDir, A3 + "\n" + PLANTS);
+    }
+
     @Test
     void a3BootsWithTheEpisodicControllerAndDecides(@TempDir Path saveDir) throws Exception {
         runAndCheck(saveDir, A3);
