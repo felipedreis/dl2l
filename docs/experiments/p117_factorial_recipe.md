@@ -50,4 +50,13 @@ write section 6 and the diary entry.
 
 ## 6. Results
 
-*(to be filled in after the run)*
+Full report: [`docs/reports/p117_factorial_report.md`](../reports/p117_factorial_report.md). Run 2026-11-12/13, image `sha-a2611e8`, all 96 trials complete (3 re-run after a start-up race, same seeds), HF `p117_factorial/`.
+
+- **F0:** tendency-on cells are at or near the ceiling (1-2 deaths of 60; 10-11 of 12 trials with every creature alive); the four tendency-off cells are readable (none floor-limited by the 600 s rule).
+- **F1 (A3 - A5):** never in A3's favour. Lock on / tendency off: -579 s, 12 of 12 seeds, paired p = 0.0002 (deaths 60 vs 58). Lock off / tendency off: deaths 29 vs 15 of 60, log-rank p = 0.0085; trial-level -390 s, 8 of 12 seeds, paired p = 0.22. Tendency on: no difference (ceiling).
+- **F2:** removing the tendency is lethal with the lock on (deaths 60/60 A3, 58/60 A5; -3132 / -2508 s, 12 of 12 seeds); removing the lock alone does nothing with the tendency on (p = 0.5-0.6); removing both costs less than removing the tendency alone (29 and 15 deaths).
+- **F3:** strong interaction: with the tendency off the lock overrides 42% of decisions and is the main cause of death; with the tendency on it overrides 2% and is harmless.
+- **B:** episodic decides 27-32% with the tendency on (efficiency 0.27-0.28), 61-86% with it off.
+- **Cal:** operant statistic in range with both priors on (A3 mean 0.99, A5 1.00); episodic z mean -0.03 to +0.07, variance 0.30-0.76 (conservative).
+
+Predictions: (1) replicates on the creature-level test, not on the trial-level check; (2) holds; (3) **wrong** for the tendency-off cells (the lock is harmful there); (4) arbitration loses only where the tendency is off, the only place the controllers can be told apart in this world.

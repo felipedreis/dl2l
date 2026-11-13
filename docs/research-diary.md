@@ -387,6 +387,14 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
 - Process: `ansible/ccad-limits.yml` (read-only SLURM limits: `short_qos` 144 CPUs per user, `dev_qos` 5 h but 2 running jobs per user) and `ccad-status.yml`; details in `docs/experiments/p117_plants_recipe.md` section 6 and `docs/reports/p117_plants_report.md`.
 
 
+### 11-13 — Factorial (A3 / A5 x sleep lock x tendency, plants world, 12 trials per arm): arbitration never beats the fixed order
+
+- **Run:** `p117_factorial`, 8 arms x 12 trials, seeds 10900-10911, 60-minute cap, one CCAD window (about 11 h at 10 concurrent trials). 3 trials hit a pre-existing start-up race (holder resolves the collision detector before it exists, `ActorNotFound`) and were re-run with the same seed; my first re-run of them was submitted from the wrong directory (relative `--output` path) and had to be repeated. Report: `docs/reports/p117_factorial_report.md`.
+- **A3 never beats A5.** Lock on / tendency off: A5 lives longer in 12 of 12 seeds (paired p = 0.0002). Lock off / tendency off: 15 vs 29 deaths of 60 (log-rank p = 0.0085), trial level 8 of 12 seeds (p = 0.22). Tendency on: both at the ceiling.
+- **The tendency lists carry survival in this world;** without them and with the lock on, 118 of 120 creatures die. **The sleep lock is harmful only without the tendency** (it overrides 42% of decisions there, 2% with the tendency on), which is what made `p117_plants`' "both off" arms die; removing the lock alone, with the tendency on, changes nothing.
+- **Consequence for #117:** in the pre-registered world, with the tendency and the lock on, A3 vs A5 sits at the ceiling and cannot be tested. The ladder needs a world where the tendency is on but survival is not saturated, or the tendency-off / lock-off setting, before the campaign; and a retry for the start-up race.
+
+
 ---
 
 ## Which results still stand
