@@ -371,14 +371,8 @@ def _arbitration_post_process(df):
 
 TABLES["arbitration_decisions"] = (
     """
-    SELECT d.creature_key, d.seq, d.time_ms, d.cycle, d.focal_drive, d.efficiency, d.affordable_controller,
-           d.candidate_count, d.deciding_controller, d.n_consulted, d.source, d.n_tied_at_max,
-           d.chosen_action, d.chosen_object_type, d.chosen_q, d.chosen_se, d.chosen_sigma,
-           d.best_q, d.best_se, d.best_sigma, d.runnerup_q, d.runnerup_se, d.runnerup_sigma,
-           d.executed_action, d.executed_object_type, d.executed_source, d.executed_q, d.executed_se, d.executed_sigma,
-           d.operant_conf, d.operant_q, d.operant_se, d.operant_sigma,
-           d.episodic_conf, d.episodic_q, d.episodic_se, d.episodic_sigma,
-           d.planner_conf, d.planner_q, d.planner_se, d.planner_sigma,
+    -- d.* on purpose (like run_info): dumps from before novelty_bonus (issue #114) lack that column and must still extract.
+    SELECT d.* EXCLUDE (id),
            er.episode_id, er.drive AS episode_drive, er.close_type, er.steps_to_close,
            er.bootstrap, er.value AS realised_value,
            er.action AS episode_action, er.dup_n AS episode_dup_n
@@ -419,6 +413,20 @@ TABLES["operant_updates"] = (
     None,
 )
 
+# Issue #111: one row per episodic engram (A3/A5): the closed step's decision-time drive levels h_*, return g_*,
+# bootstrap term (0 unless pre-empted), steps to the outcome and the retrieval key k_00..k_14 (EngramKeyEncoder).
+# Empty/absent unless episodicEstimatorEnabled.
+TABLES["episodic_engrams"] = (
+    """
+    SELECT creature_key, seq, time_ms, episode_id, drive, close_type, step_cycle, steps_to_outcome, action,
+           object_type, h_hunger, h_sleep, h_pain, h_tedium, g_hunger, g_sleep, g_pain, g_tedium, bootstrap_term,
+           k_00, k_01, k_02, k_03, k_04, k_05, k_06, k_07, k_08, k_09, k_10, k_11, k_12, k_13, k_14
+    FROM data.episodic_engram
+    ORDER BY creature_key, seq
+    """,
+    None,
+)
+
 # Tables written before pg_dump/manifest bookkeeping, in the order exp_extract.py
 # originally wrote them (a couple of analyses key off this ordering in logs).
 TABLE_ORDER = [
@@ -426,7 +434,7 @@ TABLE_ORDER = [
     "perceptions", "smell_perceptions", "mouth_interactions", "sleep_episodes", "neuromodulators",
     "endocrine", "expectancy", "engrams", "consolidation_episodes",
     "consolidation_batches", "memory_traces", "conditioning", "memory_decisions",
-    "episode_returns", "arbitration_decisions", "run_info", "operant_updates",
+    "episode_returns", "arbitration_decisions", "run_info", "operant_updates", "episodic_engrams",
 ]
 
 assert set(TABLE_ORDER) == set(TABLES)

@@ -1,0 +1,35 @@
+---
+# Read-only: what SLURM on CCAD allows this account. Partitions (time limit, nodes, CPUs), the QOSes this user may use with their limits
+# (MaxWall, per-user CPU / job / submit caps, priority), and the user's association. Changes nothing.
+#
+#   ansible-playbook -i inventories/ccad ccad-limits.yml
+- name: Report the SLURM limits of this account
+  hosts: runner
+  gather_facts: false
+  tasks:
+    - name: Partitions
+      ansible.builtin.command:
+        argv: [sinfo, -h, -o, "%P|%l|%D|%c|%m|%a|%G|%N"]
+      register: _sinfo
+      changed_when: false
+      failed_when: false
+    - name: QOS limits
+      ansible.builtin.command:
+        argv: [sacctmgr, -n, -P, show, qos, "format=Name,Priority,MaxWall,MaxTRESPU,MaxJobsPU,MaxSubmitPU,MaxTRES,GrpTRES,Flags"]
+      register: _qos
+      changed_when: false
+      failed_when: false
+    - name: This user's association (allowed QOS, default QOS, limits)
+      ansible.builtin.command:
+        argv: [sacctmgr, -n, -P, show, assoc, "user={{ ansible_user }}", "format=Account,Partition,QOS,DefaultQOS,MaxJobs,MaxSubmit,MaxTRES,GrpTRES,MaxWall"]
+      register: _assoc
+      changed_when: false
+      failed_when: false
+    - name: Partition detail for the CPU partitions
+      ansible.builtin.shell: "for p in dev short normal; do scontrol show partition $p | tr '\\n' ' ' | sed 's/  */ /g'; echo; done"
+      register: _part
+      changed_when: false
+      failed_when: false
+    - name: Report
+      ansible.builtin.debug:
+        msg: "{{ ['sinfo (partition|timelimit|nodes|cpus|mem|avail|gres|nodelist):'] + _sinfo.stdout_lines + ['', 'QOS (name|prio|maxwall|maxtres/user|maxjobs/user|maxsubmit/user|maxtres|grptres|flags):'] + _qos.stdout_lines + ['', 'association:'] + (_assoc.stdout_lines + _assoc.stderr_lines) + ['', 'scontrol:'] + _part.stdout_lines }}"

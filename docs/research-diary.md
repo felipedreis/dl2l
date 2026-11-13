@@ -347,6 +347,62 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
   from the paper's §8.1 with the thresholds fixed (margin 0.124, calibration in [0.8, 1.25]); zero tuning budget; 16 trials x 5 creatures, seeds
   10800-10815; six open items for the reviewer.
 
+### 11-11 (later) — A3 implemented: episodic controller, budget, fixed order; the prior spread that would have made it inert
+
+- **What:** `feature/a3-episodic`, plans `docs/plans/issue-111..116`. Engrams are written from closed episodes by a `ReturnSink` (`EngramWriter`, new record `EpisodicEngram`,
+  per-action FIFO of 2000, table `episodic_engram`); fixed hand-built key `[z(p)/sqrt(n_p); lambda z(h)/sqrt(n_h)]`, lambda 0.5; kNN estimator (m = 10, Q, SE, n_eff); efficiency
+  budget (episodic needs e >= 0.3; e is the creature's existing normalised behavioural efficiency) and novelty bonus; `Arbiter.Mode.FIXED_ORDER` for A5; configs `arbiter_a3/a5.conf`;
+  `p117_pilot.yml`; ladder analysis extended (early-life food share, operant calibration per cell, episodic calibration per episode, controller share by decile). 598 Java tests green.
+- **Three discrepancies resolved before code.** lambda = 0.5 (the issue said 0; paper and recipe say 0.5); novelty is 0.1 / sqrt(1 + n_eff) (checked on the rendered PDF: the text
+  extract drops the radical; the recipe's 0.1 / (1 + n_eff) was wrong and is corrected); the paper's "statistics ship in `model_contract.json`" is false, so the key's standardisation
+  constants live in the encoder as documented assumptions.
+- **The first estimator would have been inert.** I copied the operant's prior spread (sigma0 = 1) into the episodic sigma. `V(G | H)` is a deficit reduction (0.01-0.25), so the SE was
+  about 0.11 against value gaps of 0.005-0.01. Replaying the estimator on the real closed episodes of the pilot (`a3_episodic_replay.py`): decisive in 0 of 3000 queries. With sigma0 = 0.1 (one
+  meal's worth): 15-19% decisive, and APPROACH preferred toward food 59% of the time against 37% toward gray (A2: 50/50). Found offline, before any cluster time.
+- **The signal exists in the pilot data** (`a3_episodic_value_check.py`): V of APPROACH toward food minus toward gray = +0.032 in all three A2 trials; 53% of APPROACH steps come from
+  timed-out episodes, which zero them (paper 4.2), so half the signal is erased by design.
+- **Stand-in simulation** (coarse, budget ignored): A3 eats about 29% more food per decision than A2 and approaches food (0.63) more than gray (0.51); A5 gets the food but eats 60% more gray
+  apples (positional use of thin episodic evidence). No effect in the scarce world. Not evidence for the campaign, a check that the mechanism points the right way.
+- **Paper claim that does not hold as written:** with b the median neighbour distance, "one close, nine far gives n_eff about 1" is false (n_eff about 9.7); distant memory is wide through beta only.
+- **Open:** the budget may block episodic memory in calm creatures (e < 0.3; the pilot gate R0 reads it); the pilot on CCAD has not run.
+
+
+### 11-12 — A3/A5 pilot on CCAD: runs fine, the budget leaves the episodic controller idle 93% of the time
+
+- **Run:** `p117_pilot` (3 trials each, seeds 10701-10703, image `sha-fd2c1bb`, jobs 2949 / 2952), all 6 trials completed, 30/30 creatures alive at the cap. Process: the preview image build wedged in `queued` (cancel failed), re-triggered with a new commit; `ansible/ccad-status.yml` added for read-only progress checks and used for the watch; the playbook skips the HF upload (done by hand, `p117_pilot/`).
+- **R0 passes narrowly:** the episodic controller decides 4.5-6.7% of decisions, but is affordable in 7.1% only (efficiency mean 0.18, 7% of decisions at or above the 0.3 threshold). Calm creatures cannot afford it.
+- **R2 and R3 fail:** early-life food share a3 vs a2n +0.004 (not higher in all seeds), and P(APPROACH) toward gray equals toward food in every arm (0.40 / 0.40), against the replay's 37% / 59%. The signal is in the stored values; at 6% of decisions it does not reach behaviour.
+- **A3 and A5 are indistinguishable** (d(H) life difference 0.002, SD 0.004): the main contrast has no power under this budget.
+- **Unexplained, and unregistered:** a3 and a5 regulate better than the earlier a2n (d(H) 0.25 vs 0.31, every seed; +2.6 EATs/min). A2 was run on another day, so this may be a machine effect; an A2 arm in the same window is needed.
+- **Calibration (measured):** operant statistic 1.12-1.21 per trial, inside [0.8, 1.25]; episodic z variance 0.6-0.7 (SE conservative).
+- Details and the campaign consequences: `docs/experiments/p117_pilot_recipe.md` section 7, `docs/reports/p117_pilot_report.md`.
+
+
+### 11-12 (later) — Plants world, no sleep lock, no tendency: the ladder separates, and the fixed order wins
+
+- **What:** answering "what did we forget to turn off": hunger drift is 2.70 per creature-minute in every arm; A0 feeds at half of it and starves, A1 onward feed at or above it (net 0.00 for A1 and A3), and the pilot world has instant respawn of 200 food apples, so it saturates. Two hand-built priors sit under the arbiter: the action tendency lists (on since 2026-07-07) and the sleep hysteresis lock (an unconditional 10-cycle gate, 4.1% of decisions overridden). Added a switch for the lock (`sleepHysteresisEnabled`, default on) and ran A2, A3, A5 in the pilot world plus 140 cactus and 140 aloe with both off (`p117_plants`, 3 trials, one window).
+- **Result:** deaths 15/15 (A2, all within 433 s), 13/15 (A3, mean 2984 s), 7/15 (A5, KM median beyond the cap). A3 beats A2 in every seed (log-rank p < 0.0001); **A5 beats A3**: deaths 7/15 vs 13/15, log-rank p = 0.029, observed time better in every seed. The paper's main contrast goes the wrong way.
+- **The budget was not the problem:** here the episodic controller is affordable in 63-70% of decisions and decides 62-63%, against 7% and 6% in the calm pilot world. Efficiency follows arousal; the pilot's idle controller was a property of that world.
+- **Not isolated:** both switches and the world changed at once, there is no lock-on or tendency-on control, and n = 3. The next step is the factorial in this world at the campaign's sample size, with early-life food share replaced by survival and d(H) as primary outcomes.
+- Process: `ansible/ccad-limits.yml` (read-only SLURM limits: `short_qos` 144 CPUs per user, `dev_qos` 5 h but 2 running jobs per user) and `ccad-status.yml`; details in `docs/experiments/p117_plants_recipe.md` section 6 and `docs/reports/p117_plants_report.md`.
+
+
+### 11-13 — Factorial (A3 / A5 x sleep lock x tendency, plants world, 12 trials per arm): arbitration never beats the fixed order
+
+- **Run:** `p117_factorial`, 8 arms x 12 trials, seeds 10900-10911, 60-minute cap, one CCAD window (about 11 h at 10 concurrent trials). 3 trials hit a pre-existing start-up race (holder resolves the collision detector before it exists, `ActorNotFound`) and were re-run with the same seed; my first re-run of them was submitted from the wrong directory (relative `--output` path) and had to be repeated. Report: `docs/reports/p117_factorial_report.md`.
+- **A3 never beats A5.** Lock on / tendency off: A5 lives longer in 12 of 12 seeds (paired p = 0.0002). Lock off / tendency off: 15 vs 29 deaths of 60 (log-rank p = 0.0085), trial level 8 of 12 seeds (p = 0.22). Tendency on: both at the ceiling.
+- **The tendency lists carry survival in this world;** without them and with the lock on, 118 of 120 creatures die. **The sleep lock is harmful only without the tendency** (it overrides 42% of decisions there, 2% with the tendency on), which is what made `p117_plants`' "both off" arms die; removing the lock alone, with the tendency on, changes nothing.
+- **Consequence for #117:** in the pre-registered world, with the tendency and the lock on, A3 vs A5 sits at the ceiling and cannot be tested. The ladder needs a world where the tendency is on but survival is not saturated, or the tendency-off / lock-off setting, before the campaign; and a retry for the start-up race.
+
+
+### 11-13 (later) — Why A5 beats A3: the stop rule hands food to a habit whose draw is nearly random
+
+- **Mechanism** (`docs/reports/p117_factorial_mechanism.md`, `analysis/diagnostics/p117_why_a5.py`): arbitration stops at the habit when it is "decisive", measured on its two best candidates (food EAT 0.85 against an untried 0 with SE 1: conf about 0.80). Its Thompson draw then runs over all 10-30 candidates in view, so an untried N(0, 1) almost always beats the food. When the habit decides with a food EAT on offer, it eats 38% of the time with 4 candidates and under 3% with 20 or more, matching Φ(0.85)^(n-1). In A3, 286k such decisions went to the habit through the stop rule (it ate 7.6%); in A5, 60.
+- **What episodic memory learns:** right consummatory values (EAT food +0.167, gray +0.006, cactus -0.21), but APPROACH food is worth +0.008, less than wandering near food, because the timeout rule zeroes APPROACH steps (63% of them) and only them. It decides on value rarely: gap 0.006 vs SE 0.055, decisive in 1-2%, novelty (0.031) larger than the gaps.
+- **Arousal:** efficiency follows hunger; with the tendency on, creatures sit at e = 0.26-0.30 all life, so the 0.3 budget gives episodic memory a third of the decisions.
+- **Suggested changes** (untested): decisiveness against all candidates or a habit prior on its own scale; APPROACH not singled out by the timeout rule; novelty on the value scale; revisit the 0.3 threshold.
+
+
 ---
 
 ## Which results still stand

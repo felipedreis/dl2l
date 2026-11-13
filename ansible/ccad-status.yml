@@ -1,0 +1,79 @@
+---
+# Read-only progress check for an experiment already submitted to CCAD. Changes nothing, syncs nothing.
+#
+#   ansible-playbook -i inventories/ccad ccad-status.yml -e experiment=<name>
+#
+# Reports, per condition: the SLURM state of every array task (squeue for what is queued or running, sacct for
+# what has ended, with exit code and elapsed time) and how many trials have a DONE sentinel. Unlike
+# `run-experiment.yml -e rescue=true` it never rsyncs data back and never decides the experiment is finished, so
+# it is safe to run as often as wanted (it still needs the CEFET VPN, which drops when idle).
+#
+# Reads the job ids the submission persisted at ansible/.run/experiment_<name>.ccad.jobs.
+
+- name: Load the experiment spec and its job ids
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - ansible.builtin.include_role:
+        name: experiment_spec
+    - name: Read the persisted job id mapping
+      ansible.builtin.set_fact:
+        _status_job_ids: "{{ lookup('ansible.builtin.file', repo_root + '/ansible/.run/experiment_' + experiment_cfg.name + '.ccad.jobs') | from_yaml }}"
+
+- name: Report SLURM state per condition
+  hosts: runner
+  gather_facts: false
+  tasks:
+    - ansible.builtin.include_role:
+        name: experiment_spec
+
+    - name: "squeue: queued or running tasks of {{ experiment_cfg.name }}"
+      ansible.builtin.command:
+        argv: [squeue, -h, -r, -u, "{{ ansible_user }}", -o, "%i|%j|%T|%M|%R"]
+      register: _squeue
+      changed_when: false
+      failed_when: false
+
+    - name: "sacct: every array task submitted, queued, running or ended"
+      ansible.builtin.command:
+        argv:
+          - sacct
+          - -n
+          - -P
+          - -X
+          - -j
+          - "{{ hostvars['localhost']._status_job_ids.values() | map('string') | join(',') }}"
+          - --format=JobID,JobName,State,Elapsed,ExitCode,NodeList
+      register: _sacct
+      changed_when: false
+      failed_when: false
+
+    - name: "DONE sentinels per condition"
+      ansible.builtin.stat:
+        path: "{{ remote_work_dir }}/data/{{ experiment_cfg.name }}/{{ item.0.key }}/trial_{{ item.1 }}/DONE"
+      register: _done
+      loop: "{{ experiment_cfg.conditions | product(range(1, experiment_cfg.trials + 1) | list) | list }}"
+      loop_control:
+        label: "{{ item.0.key }}/trial_{{ item.1 }}"
+
+    - name: DONE count per condition
+      ansible.builtin.set_fact:
+        _done_lines: "{{ (_done_lines | default([])) + [item.key ~ ': ' ~ (_done.results | selectattr('item.0.key', 'equalto', item.key) | selectattr('stat.exists') | list | length | string) ~ '/' ~ (experiment_cfg.trials | string)] }}"
+      loop: "{{ experiment_cfg.conditions }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg: "{{ lines }}"
+      vars:
+        _queue_lines: "{{ _squeue.stdout_lines | default([]) }}"
+        lines: >-
+          {{ [experiment_cfg.name ~ ' jobs ' ~ (hostvars['localhost']._status_job_ids | string),
+              'sacct (JobID | name | state | elapsed | exit | node):']
+             + (_sacct.stdout_lines | default([]))
+             + ['squeue (JobID | name | state | time | reason/node), this user:']
+             + (_queue_lines if _queue_lines | length > 0 else ['(queue empty)'])
+             + ['DONE sentinels:']
+             + _done_lines }}

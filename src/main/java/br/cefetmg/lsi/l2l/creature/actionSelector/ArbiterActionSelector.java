@@ -49,7 +49,7 @@ public class ArbiterActionSelector implements ActionSelector {
             }
             narrowed = filter.filter(narrowed, ctx.toRegulate());
         }
-        lastDecision = arbiter.decide(narrowed, ctx.h(), ctx.focalDrive());
+        lastDecision = arbiter.decide(narrowed, ctx.h(), ctx.focalDrive(), ctx.efficiency());
         return lastDecision.chosen();
     }
 
@@ -61,13 +61,13 @@ public class ArbiterActionSelector implements ActionSelector {
     }
 
     /**
-     * The estimate of one action under the cheapest controller, in the context's focal drive. Asks the
-     * arbiter about this single action: a lone candidate is decided by the first controller consulted (its
-     * decisiveness is 1, which reaches any theta) and draws no random number, so this is exactly one
-     * estimate call and does not disturb the arbiter's stream.
+     * The estimate of one action, in the context's focal drive. Asks the arbiter about this single action: a lone
+     * candidate is decided by the first controller consulted (its decisiveness is 1, which reaches any theta; in
+     * fixed-order mode, by the same positional rule) and draws no random number, so this does not disturb the
+     * arbiter's stream.
      */
     public Estimate valueOf(Action executed, SelectionContext ctx) {
-        return arbiter.decide(List.of(executed), ctx.h(), ctx.focalDrive()).chosenEstimate();
+        return arbiter.decide(List.of(executed), ctx.h(), ctx.focalDrive(), ctx.efficiency()).chosenEstimate();
     }
 
     @Override

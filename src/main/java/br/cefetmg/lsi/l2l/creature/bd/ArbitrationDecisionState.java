@@ -39,6 +39,8 @@ public class ArbitrationDecisionState implements PersistenceState {
     private int nConsulted;
     private String source;
     private int nTiedAtMax;
+    /** The novelty bonus of the chosen candidate (#114); 0 when the deciding controller has no neighbour count. */
+    private double noveltyBonus;
 
     private String chosenAction;
     private String chosenObjectType;
@@ -95,6 +97,7 @@ public class ArbitrationDecisionState implements PersistenceState {
         s.nConsulted = d.consultations().size();
         s.source = d.source().name();
         s.nTiedAtMax = d.nTiedAtMax();
+        s.noveltyBonus = d.noveltyBonus();
 
         s.chosenAction = d.chosen().type.name();
         s.chosenObjectType = objectTypeName(d.chosen());
@@ -152,6 +155,7 @@ public class ArbitrationDecisionState implements PersistenceState {
     public int getNConsulted() { return nConsulted; }
     public String getSource() { return source; }
     public int getNTiedAtMax() { return nTiedAtMax; }
+    public double getNoveltyBonus() { return noveltyBonus; }
     public String getChosenAction() { return chosenAction; }
     public String getChosenObjectType() { return chosenObjectType; }
     public double getChosenQ() { return chosenQ; }

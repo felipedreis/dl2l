@@ -12,10 +12,12 @@ telemetry, a block in `arm_telemetry`.
 from __future__ import annotations
 
 import math
+import re
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 
 from analysis.dl2l_analysis.config import ExperimentAnalysis
 from analysis.dl2l_analysis.figures import plt, save
@@ -26,8 +28,16 @@ DRIVES = ["hunger", "sleep", "pain", "tedium"]
 H_STAR = 0.18            # FocusTracker hStar / Constants.MIN_AROUSAL_LEVEL: the set point a deficit is measured from
 WINDOW_S = 180.0         # common window for d(H): A0 creatures live about 4-8 minutes
 UPPER_FACTOR = 2.12      # sqrt(2 / chi2_{0.20, df=2}): one-sided 80% upper bound factor for an SD from 3 pairs
-ARMS = ["a0", "a1", "a2"]
-PAIRS = [("a1", "a0"), ("a2", "a1"), ("a2", "a0")]   # (later arm, earlier arm): difference = later - earlier
+ARMS = ["a0", "a1", "a2", "a3", "a5"]
+# (later arm, earlier arm): difference = later - earlier. A3 against A2 is what episodic memory adds; A3 against A5 is the paper's main
+# contrast (arbitration against the same two controllers in a fixed order).
+PAIRS = [("a1", "a0"), ("a2", "a1"), ("a2", "a0"), ("a3", "a2"), ("a3", "a5")]
+SURVIVAL_PAIRS = [("a0", "a1"), ("a1", "a2"), ("a2", "a3"), ("a3", "a5")]
+# Factorial arms (p117_factorial): key = <controller>_L<lock 0|1>T<tendency 0|1>, 1 = the hand-built prior is on
+CELL_KEY = re.compile(r"^(a\d)_L([01])T([01])$")
+OPERANT_PRIOR = (0.0, 1.0, 1.0)   # (Q, SE, sigma) of an unseen operant cell (OperantEstimator)
+EARLY_LIFE = 0.2                  # recipe 5: the first 20% of a creature's life
+MIN_CELL_UPDATES = 30             # recipe 5: cells with fewer updates are not in the calibration statistic
 SOURCE_LABELS = ["SINGLE", "GREEDY", "THOMPSON", "EPSILON"]
 
 # (column, label, higher-is-what) — the per-creature measures that get paired comparisons
@@ -45,6 +55,7 @@ CREATURE_METRICS = [
     ("open_tracker_per100", "focus opens per 100 cycles (tracker)"),
     ("focused_share", "focused share of cycles (tracker)"),
     ("episodes", "episodes per creature"),
+    ("early_food_share", f"food share of EATs, first {EARLY_LIFE:.0%} of life (A3 criterion)"),
 ]
 
 
@@ -96,6 +107,65 @@ def calibration_z(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame({"n": g.size(), "mean": g.mean(), "variance": g.var(), "rms": g.apply(lambda s: float(np.sqrt((s ** 2).mean())))})
 
 
+def operant_updates_z(u: pd.DataFrame) -> pd.DataFrame:
+    """z of every operant update against the cell's estimate *before* it (recipe 5): the previous row of the same
+    (creature, object type, action) in write order, or the unseen-cell prior for its first update.
+    `u` holds the `operant_updates` rows of one trial; the row's q / se / sigma are the cell after the update."""
+    key = ["creature_key", "object_type", "action"]
+    u = u.sort_values(key + ["seq"], kind="stable").copy()
+    g = u.groupby(key)
+    prior_q, prior_se, prior_sigma = OPERANT_PRIOR
+    q0 = g["q"].shift(1).fillna(prior_q)
+    se0 = g["se"].shift(1).fillna(prior_se)
+    sigma0 = g["sigma"].shift(1).fillna(prior_sigma)
+    u["z"] = (u["sample"] - q0) / np.sqrt(se0 ** 2 + sigma0 ** 2)
+    return u
+
+
+def operant_calibration(u: pd.DataFrame, min_updates: int = MIN_CELL_UPDATES) -> dict:
+    """The per-trial operant calibration statistic of recipe 5. A cell is (object type, action) over the trial's creatures. The
+    statistic is the variance of z in each cell with at least `min_updates` updates whose samples are not all equal, averaged over those
+    cells weighted by their update counts. Cells with constant samples (EAT on a gray apple: always -1) are left out of it and reported
+    apart, with the pooled variance of all z for comparison.
+    Returns {"statistic", "cells" (DataFrame), "constant_cells" (DataFrame), "pooled_variance", "n_updates"}."""
+    z = operant_updates_z(u)
+    z = z[np.isfinite(z["z"])]
+    cells = z.groupby(["object_type", "action"]).agg(n=("z", "size"), mean_z=("z", "mean"), variance=("z", "var"),
+                                                     constant=("sample", lambda s: bool(s.nunique() == 1)))
+    eligible = cells[(cells["n"] >= min_updates) & ~cells["constant"]]
+    stat = float(np.average(eligible["variance"], weights=eligible["n"])) if len(eligible) else float("nan")
+    return {"statistic": stat, "cells": eligible, "constant_cells": cells[(cells["n"] >= min_updates) & cells["constant"]],
+            "pooled_variance": float(z["z"].var()) if len(z) > 1 else float("nan"), "n_updates": int(len(z))}
+
+
+def episodic_z(d: pd.DataFrame) -> pd.DataFrame:
+    """z of the realised value of every decision the episodic controller made, against its estimate of the executed action (#115).
+    Only rows whose executed action was a candidate of the decision (CHOSEN or OTHER_CANDIDATE) carry the deciding controller's own estimate:
+    a VALUE_OF row is estimated afresh by the cheapest controller, so it is left out. `d` is `arbitration_decisions`."""
+    e = d[(d["deciding_controller"] == "EPISODIC") & d["executed_source"].isin(["CHOSEN", "OTHER_CANDIDATE"])]
+    e = e.dropna(subset=["episode_id", "realised_value", "executed_q", "executed_se", "executed_sigma"]).copy()
+    e["z"] = (e["realised_value"] - e["executed_q"]) / np.sqrt(e["executed_se"] ** 2 + e["executed_sigma"] ** 2)
+    return e[np.isfinite(e["z"])]
+
+
+def episodic_calibration(d: pd.DataFrame) -> dict:
+    """Mean and variance of the episodic z, overall and by close type (a timed-out APPROACH is zeroed by the buffer, so it is shown apart)."""
+    z = episodic_z(d)
+    by = z.groupby("close_type")["z"].agg(n="size", mean="mean", variance="var")
+    return {"n": int(len(z)), "mean": float(z["z"].mean()) if len(z) else float("nan"),
+            "variance": float(z["z"].var()) if len(z) > 1 else float("nan"), "by_close_type": by}
+
+
+def controller_share_by_decile(d: pd.DataFrame, controller: str = "EPISODIC") -> list[float]:
+    """Share of decisions decided by `controller` in each decile of a creature's decision sequence (recipe 5: controller share over life)."""
+    d = d.copy()
+    d["rank"] = d.groupby(KEY).cumcount()
+    d["n"] = d.groupby(KEY)["rank"].transform("size")
+    d["decile"] = (d["rank"] / d["n"] * 10).astype(int).clip(upper=9)
+    share = (d["deciding_controller"] == controller).groupby(d["decile"]).mean()
+    return [round(float(share.get(i, float("nan"))), 4) for i in range(10)]
+
+
 # ---------------------------------------------------------------- loading
 
 def load(cfg: ExperimentAnalysis, fname: str, columns: list[str] | None = None) -> pd.DataFrame:
@@ -145,9 +215,11 @@ def creature_frame(cfg) -> pd.DataFrame:
     eat["rg"] = eat["object_type"].isin(["RED_APPLE", "GREEN_APPLE"])
     n_eat = eat.groupby(KEY).size().rename("n_eat")
     n_rg = eat[eat["rg"]].groupby(KEY).size().rename("n_eat_rg")
+    early_food = eat[frac < EARLY_LIFE].groupby(KEY)["rg"].mean().rename("early_food_share")
     deciles = eat.groupby(KEY)["decile"].nunique().rename("feeding_deciles")
     out = out.merge(n_eat.reset_index(), on=KEY, how="left").merge(n_rg.reset_index(), on=KEY, how="left") \
              .merge(deciles.reset_index(), on=KEY, how="left")
+    out = out.merge(early_food.reset_index(), on=KEY, how="left")   # NaN when the creature had no EAT in that window
     for c in ("n_eat", "n_eat_rg", "feeding_deciles"):
         out[c] = out[c].fillna(0)
     out["eat_per_min"] = out["n_eat"] / (out["observed_s"] / 60.0)
@@ -194,14 +266,16 @@ def episode_tables(cfg) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 def a2_telemetry(cfg) -> dict:
     cols = ["creature_key", "seq", "focal_drive", "candidate_count", "source", "n_tied_at_max", "executed_source",
-            "deciding_controller", "episode_id", "close_type", "realised_value", "executed_q", "executed_se", "executed_sigma"]
+            "deciding_controller", "episode_id", "close_type", "realised_value", "executed_q", "executed_se", "executed_sigma",
+            "n_consulted", "affordable_controller", "efficiency", "novelty_bonus"]   # the last four: dumps from before #114 lack some
     out = {}
     for cond in [c for c in cfg.cond_keys if (cfg.data_dir_for(c) / c / "trial_1" / "arbitration_decisions.parquet").exists()]:
         parts = []
         for trial in cfg.trial_range:
             p = cfg.data_dir_for(cond) / cond / f"trial_{trial}" / "arbitration_decisions.parquet"
             if p.exists():
-                d = pd.read_parquet(p, columns=cols)
+                have = set(pq.read_schema(p).names)
+                d = pd.read_parquet(p, columns=[c for c in cols if c in have])
                 d["condition"], d["trial"] = cond, trial
                 parts.append(d)
         d = pd.concat(parts, ignore_index=True)
@@ -218,8 +292,34 @@ def a2_telemetry(cfg) -> dict:
             "informed_share": float((late["n_tied_at_max"] < late["candidate_count"]).mean()) if len(late) else float("nan"),
             "controller_by_decile": d.groupby("decile")["deciding_controller"].agg(lambda s: s.value_counts(normalize=True).round(3).to_dict()).to_dict(),
             "z": calibration_z(d),
+            "episodic": episodic_calibration(d),
+            "episodic_share_by_decile": controller_share_by_decile(d, "EPISODIC"),
+            "consulted_episodic": float((d["n_consulted"] >= 2).mean()) if "n_consulted" in d else float("nan"),
+            "affordable_episodic": float((d["affordable_controller"] == "EPISODIC").mean()) if "affordable_controller" in d else float("nan"),
+            "novelty_mean": float(d["novelty_bonus"].mean()) if "novelty_bonus" in d else float("nan"),
         }
     return out
+
+
+def operant_calibration_table(cfg) -> tuple[pd.DataFrame, dict]:
+    """Per condition and trial: the operant calibration statistic of recipe 5, from `operant_updates`. Also returns, per condition,
+    the per-cell detail pooled over its trials (for the report)."""
+    rows, detail = [], {}
+    for cond in cfg.cond_keys:
+        parts = []
+        for trial in cfg.trial_range:
+            p = cfg.data_dir_for(cond) / cond / f"trial_{trial}" / "operant_updates.parquet"
+            if not p.exists():
+                continue
+            u = pd.read_parquet(p, columns=["creature_key", "seq", "object_type", "action", "sample", "q", "se", "sigma"])
+            r = operant_calibration(u)
+            rows.append({"condition": cond, "trial": trial, "statistic": r["statistic"], "pooled_variance": r["pooled_variance"],
+                         "n_updates": r["n_updates"], "cells": len(r["cells"]), "constant_cells": len(r["constant_cells"])})
+            u["trial"] = trial
+            parts.append(u)
+        if parts:
+            detail[cond] = operant_calibration(pd.concat(parts, ignore_index=True))
+    return pd.DataFrame(rows), detail
 
 
 # ---------------------------------------------------------------- tables and figures
@@ -245,7 +345,7 @@ def paired_table(cr: pd.DataFrame) -> str:
     lines = ["| measure | contrast | per-seed differences | mean | SD (2 df) | 80% upper bound on SD |", "|---|---|---|---|---|---|"]
     for col, label in CREATURE_METRICS:
         tm = trial_means(cr, col)
-        for later, earlier in PAIRS:
+        for later, earlier in PAIRS + factorial_pairs(tm.columns):
             r = paired_differences(tm, later, earlier)
             if r is None:
                 continue
@@ -253,11 +353,40 @@ def paired_table(cr: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
+def factorial_pairs(keys) -> list[tuple[str, str]]:
+    """Contrasts of a lock x tendency factorial, (later, earlier) as in PAIRS: per cell, A3 - A5 (arbitration against the fixed order);
+    per controller, each cell with a prior off minus the cell with both on (the effect of removing that prior or both)."""
+    cells: dict[str, dict[tuple[int, int], str]] = {}
+    for k in keys:
+        m = CELL_KEY.match(k)
+        if m:
+            cells.setdefault(m.group(1), {})[(int(m.group(2)), int(m.group(3)))] = k
+    order = [(1, 1), (1, 0), (0, 1), (0, 0)]
+    pairs = []
+    for cell in order:
+        if cell in cells.get("a3", {}) and cell in cells.get("a5", {}):
+            pairs.append((cells["a3"][cell], cells["a5"][cell]))
+    for arm in sorted(cells):
+        base = cells[arm].get((1, 1))
+        for cell in order[1:]:
+            if base and cell in cells[arm]:
+                pairs.append((cells[arm][cell], base))
+    return pairs
+
+
+def present_arms(cr: pd.DataFrame) -> list[str]:
+    """The arms that have data in this experiment: the ladder arms in ladder order, then any other condition (the factorial's cells) in the
+    order the spec lists them."""
+    have = list(dict.fromkeys(cr["condition"]))
+    return [a for a in ARMS if a in have] + [a for a in have if a not in ARMS]
+
+
 def arm_table(cr: pd.DataFrame, cfg) -> str:
-    lines = ["| measure | " + " | ".join(cfg.label_by_key.get(a, a) for a in ARMS) + " |", "|---|" + "---|" * len(ARMS)]
+    arms = present_arms(cr)
+    lines = ["| measure | " + " | ".join(cfg.label_by_key.get(a, a) for a in arms) + " |", "|---|" + "---|" * len(arms)]
     for col, label in CREATURE_METRICS:
         cells = []
-        for a in ARMS:
+        for a in arms:
             v = cr[cr["condition"] == a][col].dropna()
             tm = cr[cr["condition"] == a].groupby("trial")[col].mean().dropna()
             cells.append("n/a" if v.empty else f"{fmt(float(v.mean()))} (trials {', '.join(fmt(float(x)) for x in tm)})")
@@ -267,7 +396,7 @@ def arm_table(cr: pd.DataFrame, cfg) -> str:
 
 def survival_text(cr: pd.DataFrame) -> str:
     out = []
-    for a, b in [("a0", "a1"), ("a1", "a2")]:
+    for a, b in SURVIVAL_PAIRS + factorial_pairs(set(cr["condition"])):
         r = survival_comparison(cr, a, b)
         if not r:
             continue
@@ -280,6 +409,7 @@ def survival_text(cr: pd.DataFrame) -> str:
 
 def figures(cr: pd.DataFrame, cfg) -> None:
     colors = cfg.palette
+    ARMS = present_arms(cr)   # noqa: N806  (shadows the module list on purpose: only arms with data are drawn)
     # d(H)
     fig, ax = plt.subplots(1, 2, figsize=(10, 4))
     for axis, col, title in [(ax[0], "dH_life", "d(H) over life"), (ax[1], "dH_window", f"d(H), first {WINDOW_S:.0f} s")]:
@@ -336,6 +466,7 @@ def run(cfg: ExperimentAnalysis) -> None:
     surv_md = survival_text(cr)
     mix, length = episode_tables(cfg)
     a2 = a2_telemetry(cfg)
+    op_cal, op_detail = operant_calibration_table(cfg)
     print(arm_md, "\n", surv_md, "\n", paired_md, sep="")
     figures(cr, cfg)
 
@@ -347,6 +478,13 @@ def run(cfg: ExperimentAnalysis) -> None:
                        f"Executed action not the chosen one: {t['executed_not_chosen']:.2%}. "
                        f"Informed share (late half, focused multi-candidate): {fmt(t['informed_share'])}. "
                        f"Deciding controller by life decile: {ctl}.\n\nDescriptive z by close type:\n\n{z}")
+        if t["episodic"]["n"]:
+            ec = t["episodic"]
+            tele_md[-1] += (f"\n\nEpisodic calibration (decisions the episodic controller made, per closed episode): n = {ec['n']:,}, "
+                            f"mean z {fmt(ec['mean'])}, variance {fmt(ec['variance'])} (an honest SE gives 0 and 1). "
+                            f"Episodic share of decisions by life decile: {t['episodic_share_by_decile']}. "
+                            f"Consulted the episodic controller in {fmt(t['consulted_episodic'])} of decisions, affordable in {fmt(t['affordable_episodic'])}; "
+                            f"mean novelty bonus {fmt(t['novelty_mean'], 4)}.\n\n{md_table(ec['by_close_type'])}")
     print("\n".join(tele_md))
 
     rb = ReportBuilder(cfg, "Report: arbiter-ladder pilot (A0 / A1 / A2), analysis skeleton")
@@ -367,6 +505,14 @@ def run(cfg: ExperimentAnalysis) -> None:
         rb.result("Episodes (A1, A2)", f"Close-type mix per arm:\n\n{md_table(mix)}\n\nSteps per episode:\n\n{md_table(length)}")
     if tele_md:
         rb.result("A2 decision telemetry", "\n\n".join(tele_md))
+    if len(op_cal):
+        cal = op_cal.set_index(["condition", "trial"])
+        detail_md = "\n\n".join(f"**{c.upper()}** cells (>= {MIN_CELL_UPDATES} updates, outcomes vary):\n\n{md_table(d['cells'])}"
+                                   + (f"\n\nConstant-outcome cells, left out:\n\n{md_table(d['constant_cells'])}" if len(d["constant_cells"]) else "")
+                                   for c, d in op_detail.items())
+        rb.result("Operant calibration (recipe 5)", "Per trial: variance of z per (object type, action) cell with enough updates and varying outcomes, "
+                  "weighted by update count; adoption range [0.8, 1.25] for A2 (mean over trials). `pooled_variance` is the unrestricted variance of all z, "
+                  "for comparison: constant cells drag it down.\n\n" + md_table(cal) + "\n\n" + detail_md)
     rb.result("Paired differences by seed", "Differences of trial means, later arm minus earlier arm; SD has 2 degrees of freedom, so size on "
               "the 80% upper bound (2.12 x SD), not the point estimate.\n\n" + paired_md)
     rb.analysis("To be written from the tables above (and the sample-size computation of #107).")

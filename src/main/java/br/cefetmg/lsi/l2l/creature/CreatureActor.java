@@ -14,6 +14,10 @@ import br.cefetmg.lsi.l2l.creature.bd.PersistenceExtension;
 import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
 import br.cefetmg.lsi.l2l.creature.arbiter.FocusTracker;
 import br.cefetmg.lsi.l2l.creature.arbiter.OperantEstimator;
+import br.cefetmg.lsi.l2l.creature.arbiter.EngramKeyEncoder;
+import br.cefetmg.lsi.l2l.creature.arbiter.EpisodicEstimator;
+import br.cefetmg.lsi.l2l.creature.arbiter.EpisodicStore;
+import br.cefetmg.lsi.l2l.creature.arbiter.HomeostaticValue;
 import br.cefetmg.lsi.l2l.creature.arbiter.OperantStore;
 import br.cefetmg.lsi.l2l.creature.components.*;
 import br.cefetmg.lsi.l2l.creature.conditioning.OperantConditioning;
@@ -81,6 +85,8 @@ public class CreatureActor implements Creature {
 
     /** Learning operant table behind a facade; null unless operantEstimatorEnabled. */
     private OperantStore operantStore;
+    /** A3/A5: the episodic controller behind a TypedActor facade (written by Valuation, read by FullAppraisal); else null. */
+    private EpisodicStore episodicStore;
     /** Issue #110: whether focalDriveEnabled, so episode messages and the death message are sent. */
     private boolean focalDriveInUse;
 
@@ -161,6 +167,16 @@ public class CreatureActor implements Creature {
                     .typedActorOf(new TypedProps<>(OperantStore.class,
                             (Creator<OperantEstimator>) () -> new OperantEstimator()),
                             "operantEstimator");
+        }
+        // Episodic controller (A3/A5, #111-#116): same facade pattern, for the same reason (single writer Valuation,
+        // reader FullAppraisal). The key lambda is the paper's 0.5 unless configured.
+        if (effective.isEpisodicEstimatorEnabled()) {
+            final double keyLambda = effective.getEpisodicKeyLambda();
+            episodicStore = TypedActor.get(TypedActor.context())
+                    .typedActorOf(new TypedProps<>(EpisodicStore.class,
+                            (Creator<EpisodicEstimator>) () -> new EpisodicEstimator(
+                                    new EngramKeyEncoder(keyLambda), HomeostaticValue.defaults())),
+                            "episodicEstimator");
         }
 
         // Expectancy predictor (TypedActor facade — serialises the single writer, Valuation).
@@ -431,6 +447,11 @@ public class CreatureActor implements Creature {
     @Override
     public OperantStore operantStore() {
         return operantStore;
+    }
+
+    @Override
+    public EpisodicStore episodicStore() {
+        return episodicStore;
     }
 
     @Override

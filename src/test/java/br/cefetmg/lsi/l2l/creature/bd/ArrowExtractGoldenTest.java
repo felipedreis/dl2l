@@ -188,6 +188,11 @@ class ArrowExtractGoldenTest {
 
     private void writeArbitrationDump(Path rawDir, List<PersistenceState> episodes, List<PersistenceState> operant)
             throws Exception {
+        writeArbitrationDump(rawDir, episodes, operant, List.of());
+    }
+
+    private void writeArbitrationDump(Path rawDir, List<PersistenceState> episodes, List<PersistenceState> operant,
+                                      List<PersistenceState> engrams) throws Exception {
         ArrowIpcBackend backend = new ArrowIpcBackend(rawDir, null, ArrowIpcBackend.DEFAULT_ALLOCATOR_LIMIT_MB,
                 ArrowIpcBackend.DEFAULT_BATCH_ROWS, CompressionUtil.CodecType.NO_COMPRESSION);
         try {
@@ -202,6 +207,9 @@ class ArrowExtractGoldenTest {
             }
             if (!operant.isEmpty()) {
                 backend.persistBatch(Map.of("operant_update_state", operant));
+            }
+            if (!engrams.isEmpty()) {
+                backend.persistBatch(Map.of("episodic_engram", engrams));
             }
             backend.dumpToParquet();
         } finally {
@@ -287,6 +295,47 @@ class ArrowExtractGoldenTest {
         writeArbitrationDump(rawDir2, List.of());
         Files.deleteIfExists(rawDir2.resolve("operant_update_state.arrow"));
         assertTrue(extractOrFail(rawDir2, outDir2).contains("operant_updates skipped"));
+    }
+
+    @Test
+    void episodicEngramsAreExtractedInWriteOrderWithTheirKeyAndSkippedWhenTheRawTableIsAbsent(@TempDir Path tmp) throws Exception {
+        assumeEnvironmentReady();
+        Path rawDir = tmp.resolve("raw");
+        Files.createDirectories(rawDir);
+        Path outDir = tmp.resolve("out");
+        Files.createDirectories(outDir);
+        double[] key = new double[br.cefetmg.lsi.l2l.creature.arbiter.EngramKeyEncoder.KEY_DIM];
+        key[14] = 0.5;
+        java.util.function.Function<Integer, br.cefetmg.lsi.l2l.creature.arbiter.EpisodicEngram> engram = cycle ->
+                new br.cefetmg.lsi.l2l.creature.arbiter.EpisodicEngram(
+                        br.cefetmg.lsi.l2l.creature.common.ActionType.EAT, "RED_APPLE", key, H.clone(),
+                        new double[] {-1, 0, 0, 0}, 0.0, 3L, Constants.HUNGER,
+                        br.cefetmg.lsi.l2l.creature.arbiter.ClosedStep.CloseType.REGULATED, cycle, 2);
+        writeArbitrationDump(rawDir, List.of(), List.of(), List.of(
+                new EpisodicEngramState(2L, 0L, 10L, engram.apply(5)),
+                new EpisodicEngramState(1L, 1L, 12L, engram.apply(7)),
+                new EpisodicEngramState(1L, 0L, 11L, engram.apply(6))));
+
+        String output = extractOrFail(rawDir, outDir);
+
+        assertFalse(output.contains("episodic_engrams skipped"), output);
+        verifyWithPython(String.join("\n",
+                "import pandas as pd, sys",
+                "df = pd.read_parquet(sys.argv[1])",
+                "assert list(zip(df.creature_key, df.seq)) == [(1, 0), (1, 1), (2, 0)], list(zip(df.creature_key, df.seq))",
+                "assert df.step_cycle.tolist() == [6, 7, 5]",
+                "assert 'k_00' in df.columns and 'k_14' in df.columns and 'bootstrap_term' in df.columns",
+                "assert (df.k_14 == 0.5).all() and (df.g_hunger == -1.0).all()",
+                "print('ARB_OK')"),
+                outDir.resolve("1_baseline").resolve("episodic_engrams.parquet"));
+
+        Path rawDir2 = tmp.resolve("raw2");
+        Files.createDirectories(rawDir2);
+        Path outDir2 = tmp.resolve("out2");
+        Files.createDirectories(outDir2);
+        writeArbitrationDump(rawDir2, List.of());
+        Files.deleteIfExists(rawDir2.resolve("episodic_engram.arrow"));
+        assertTrue(extractOrFail(rawDir2, outDir2).contains("episodic_engrams skipped"));
     }
 
     @Test
