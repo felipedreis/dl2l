@@ -395,6 +395,14 @@ Java 21 + collision quadtree (2025-01), WebSocket geometry API (2025-06).
 - **Consequence for #117:** in the pre-registered world, with the tendency and the lock on, A3 vs A5 sits at the ceiling and cannot be tested. The ladder needs a world where the tendency is on but survival is not saturated, or the tendency-off / lock-off setting, before the campaign; and a retry for the start-up race.
 
 
+### 11-13 (later) — Why A5 beats A3: the stop rule hands food to a habit whose draw is nearly random
+
+- **Mechanism** (`docs/reports/p117_factorial_mechanism.md`, `analysis/diagnostics/p117_why_a5.py`): arbitration stops at the habit when it is "decisive", measured on its two best candidates (food EAT 0.85 against an untried 0 with SE 1: conf about 0.80). Its Thompson draw then runs over all 10-30 candidates in view, so an untried N(0, 1) almost always beats the food. When the habit decides with a food EAT on offer, it eats 38% of the time with 4 candidates and under 3% with 20 or more, matching Φ(0.85)^(n-1). In A3, 286k such decisions went to the habit through the stop rule (it ate 7.6%); in A5, 60.
+- **What episodic memory learns:** right consummatory values (EAT food +0.167, gray +0.006, cactus -0.21), but APPROACH food is worth +0.008, less than wandering near food, because the timeout rule zeroes APPROACH steps (63% of them) and only them. It decides on value rarely: gap 0.006 vs SE 0.055, decisive in 1-2%, novelty (0.031) larger than the gaps.
+- **Arousal:** efficiency follows hunger; with the tendency on, creatures sit at e = 0.26-0.30 all life, so the 0.3 budget gives episodic memory a third of the decisions.
+- **Suggested changes** (untested): decisiveness against all candidates or a habit prior on its own scale; APPROACH not singled out by the timeout rule; novelty on the value scale; revisit the 0.3 threshold.
+
+
 ---
 
 ## Which results still stand
