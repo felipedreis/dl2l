@@ -163,7 +163,16 @@ public class Simulation {
                 ls.hasPath("arbiterFixedOrder") && ls.getBoolean("arbiterFixedOrder"),
                 ls.hasPath("episodicKeyLambda") ? ls.getDouble("episodicKeyLambda") : EngramKeyEncoder.DEFAULT_LAMBDA,
                 // Sleep hysteresis gate: default ON; false is an experimental control (docs/plans/sleep-hysteresis-switch.md).
-                !ls.hasPath("sleepHysteresisEnabled") || ls.getBoolean("sleepHysteresisEnabled"));
+                !ls.hasPath("sleepHysteresisEnabled") || ls.getBoolean("sleepHysteresisEnabled"),
+                // Kalman operant cell, whole-draw stop rule, APPROACH credit, theta (docs/plans/operant-kalman-and-stop-rule.md): defaults = today.
+                ls.hasPath("operantEstimator")
+                        ? LearningSettings.OperantKind.valueOf(ls.getString("operantEstimator").toUpperCase(java.util.Locale.ROOT))
+                        : LearningSettings.OperantKind.WELFORD,
+                ls.hasPath("arbiterStopRule")
+                        ? LearningSettings.ArbiterStopRule.valueOf(ls.getString("arbiterStopRule").toUpperCase(java.util.Locale.ROOT))
+                        : LearningSettings.ArbiterStopRule.TOP_TWO,
+                !ls.hasPath("timeoutZeroesApproach") || ls.getBoolean("timeoutZeroesApproach"),
+                ls.hasPath("arbiterTheta") ? ls.getDouble("arbiterTheta") : LearningSettings.DEFAULT_ARBITER_THETA);
     }
 
     public Long getNumHolders() {

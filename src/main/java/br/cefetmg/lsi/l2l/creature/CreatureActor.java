@@ -238,7 +238,7 @@ public class CreatureActor implements Creature {
         // Issue #110: the memory system buffers episodes between the arbiter's decisions and their
         // valuation, and sends the closed ones to Valuation.
         if (focalDriveInUse) {
-            memory.enableEpisodes(valuation());
+            memory.enableEpisodes(valuation(), effective.isTimeoutZeroesApproach());
         }
 
         // Issue #79 Phase B: captured while running ON the actor's own thread (init() is

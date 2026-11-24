@@ -49,6 +49,14 @@ public interface MemorySystem {
      */
     void enableEpisodes(ComponentRef valuation);
 
+    /**
+     * {@link #enableEpisodes(ComponentRef)} with the timeout rule chosen: {@code false} keeps the return of every step of a
+     * timed-out episode (docs/plans/operant-kalman-and-stop-rule.md, section 3). The default keeps today's rule.
+     */
+    default void enableEpisodes(ComponentRef valuation, boolean timeoutZeroesApproach) {
+        enableEpisodes(valuation);
+    }
+
     /** One decision, from FullAppraisal. Asynchronous. */
     void recordDecision(DecisionRecord decision);
 
