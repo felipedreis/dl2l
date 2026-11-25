@@ -1,18 +1,23 @@
-# Report: arbiter-ladder pilot (A0 / A1 / A2), analysis skeleton
+# Report: local pilot of the Kalman operant cell, the whole-draw stop rule and the APPROACH credit in A3 (p117_kalman_local, 20 minutes)
 
 ## Purpose
 
-Descriptive pilot of the arbiter ladder: spread of the outcomes #107 will pre-register, and a first run of the #106 analysis module end to end. Plan: `docs/plans/arbiter-ladder-pilot.md`, `docs/plans/issue-106-arbiter-ladder-analysis.md`; recipe: `docs/experiments/p107_pilot_stage2_recipe.md`. No pilot number enters a campaign result.
+A pilot of the `p117_kalman` campaign, run on the laptop because the cluster was not reachable: do the three changes of `docs/plans/operant-kalman-and-stop-rule.md` (APPROACH credit that survives a timeout, Kalman operant cell, whole-draw stop rule) move A3 in the plants world, added one at a time? It also served to debug the switches, the new columns and the analysis module before the cluster run. Recipe: `docs/experiments/p117_kalman_recipe.md` (sections 1-4 and 8). The powered test is the cluster run, reported in `p117_kalman_report.md`.
 
 ## Assumptions
 
-The trial is the unit; creatures within a trial share a world, a food supply and a seed. The same seed is used in every arm (pairs the initial world only; Akka scheduling keeps trajectories nondeterministic). d(H) is measured from the set point 0.18. A0's focus switches use an argmax-of-urgency approximation, because the regulated emotion is not persisted. A0 lives minutes and A1/A2 up to the cap, so d(H) over life is not like for like; the common-window d(H) is. A1 and A2 use the tuned focus thresholds 0.4 / 0.15. DATA CAVEAT: in creatures that survive to the cap, `mouth_interactions` holds a whole number of 128-row blocks per creature (and `body_states` exactly 217,728 rows), so the last partial block is missing: EAT counts of A1/A2 survivors are lower bounds, short by up to 127 each (up to about 8% in A1, 2% in A2); A0 creatures, which died, are not quantized. The ordering of arms is not affected; the feeding rates are not exact.
+- Four arms in the plants world with the sleep lock and the action tendency off: `a3_base`, `a3_mc` (+ APPROACH credit), `a3_kal` (+ Kalman operant), `a3_all` (+ whole-draw stop rule). **6 trials per arm, seeds 10900-10905, 5 creatures per trial, cap 20 minutes** (not 60), trials run one after the other on a laptop, image built from commit `8ce28ec`, UI on.
+- The trial is the unit; the seed pairs the initial world only. Survival is censored at 1200 s, so the numbers of `p117_factorial` (60 minutes) are not comparable. With n = 6 the readings are directional; a log-rank p near 0.05 is not a pass.
+- Kalman constants (tau2 = 1e-4, pooled-variance floor 0.16) were chosen on a replay of `p117_factorial` data and frozen before the run.
+- Data caveat as in `p117_kalman_report.md` (fruit interactions only; survivors' EAT counts are lower bounds).
 
 ## Hypothesis
 
-None: this is a descriptive pilot. Predictions recorded before the data are in the recipe.
+Recipe sections 3 and 4, with the 20-minute window of section 8: (1) `a3_mc` no worse than the control; (2) `a3_kal` fewer deaths than `a3_mc`; (3) `a3_all` fewer deaths than the control; (4) falsification: `a3_all` no better than the control. The cluster campaign, not this pilot, decides the stop rule.
 
 ## Results
+
+**Headline.** Deaths at 20 minutes (of 30 creatures per arm): control 7, + APPROACH credit 3, + Kalman operant 2, + whole-draw rule 2. EATs per minute 17.2, 18.2, 24.6, 27.0; d(H) over life 2.15, 1.50, 1.21, 1.27. All three changes against the control: 2 against 7 deaths (log-rank p = 0.060, Fisher p = 0.145); survival and d(H) better in 5 of 6 seeds, feeding in 6 of 6.
 
 ### Per-arm measures (creature mean, then trial means)
 
@@ -50,7 +55,7 @@ Per creature (dots) and per trial (diamonds).
 ![Feeding and focus](figures/p117_kalman_local/feeding_and_focus.png)
 
 EATs per minute, life deciles with an EAT, and the argmax-approximated focus transfers per 100 cycles.
-### Episodes (A1, A2)
+### Episodes (close types per arm)
 
 Close-type mix per arm:
 
@@ -69,7 +74,7 @@ Steps per episode:
 | a3_base | 5331.000 | 201.000 | 160.700 | 201.000 |
 | a3_kal | 6088.000 | 201.000 | 153.400 | 201.000 |
 | a3_mc | 5988.000 | 201.000 | 155.100 | 201.000 |
-### A2 decision telemetry
+### Decision telemetry (operant and episodic controllers)
 
 **A3_BASE** (919,572 decisions). Source mix: {'SINGLE': 0.0, 'GREEDY': 0.4552, 'THOMPSON': 0.5149, 'EPSILON': 0.03, 'ABSTAIN_UNIFORM': 0.0}. Executed action not the chosen one: 0.00%. Informed share (late half, focused multi-candidate): 0.834. Deciding controller by life decile: {0: {'EPISODIC': 0.649, 'OPERANT': 0.351}, 1: {'EPISODIC': 0.669, 'OPERANT': 0.331}, 2: {'EPISODIC': 0.595, 'OPERANT': 0.405}, 3: {'EPISODIC': 0.557, 'OPERANT': 0.443}, 4: {'EPISODIC': 0.596, 'OPERANT': 0.404}, 5: {'EPISODIC': 0.588, 'OPERANT': 0.412}, 6: {'EPISODIC': 0.572, 'OPERANT': 0.428}, 7: {'EPISODIC': 0.63, 'OPERANT': 0.37}, 8: {'EPISODIC': 0.648, 'OPERANT': 0.352}, 9: {'EPISODIC': 0.594, 'OPERANT': 0.406}}.
 
@@ -305,4 +310,6 @@ Differences of trial means, later arm minus earlier arm; SD has 2 degrees of fre
 
 ## Analysis
 
-To be written from the tables above (and the sample-size computation of #107).
+- **The Kalman cell is the change that moves feeding** (`a3_kal` against `a3_mc`: +6.5 EATs per minute and +2.9 RED+GREEN, 6 of 6 seeds); the share of the operant's decisions that execute EAT goes from 1.8% to 5.4%. The APPROACH credit alone moves little (+0.9 EATs per minute, mixed seeds; 7 to 3 deaths, p = 0.17). The whole-draw rule showed no measurable effect (2 and 2 deaths).
+- **What this pilot could not see:** the whole-draw rule. The cluster campaign (60 minutes, 12 trials) found it harmful (28 against 13 deaths, p = 0.004); deaths are spread over the hour, so a 20-minute window sees about a third of them. Read this pilot as a debugging run that pointed in the right direction for the Kalman cell and was wrong, by omission, about the stop rule.
+- **Not established:** survival differences (n = 6, log-rank p 0.06-0.62), selectivity of the extra eating (food share of EATs 0.445 against 0.476), and anything about A5 (not run). Full discussion and the verdict against the stop rule: `p117_kalman_report.md`, Analysis.

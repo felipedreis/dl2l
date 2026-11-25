@@ -1,18 +1,42 @@
-# Report: arbiter-ladder pilot (A0 / A1 / A2), analysis skeleton
+# Report: the Kalman operant cell, the whole-draw stop rule and the APPROACH credit in A3 (p117_kalman, CCAD, 60 minutes)
 
 ## Purpose
 
-Descriptive pilot of the arbiter ladder: spread of the outcomes #107 will pre-register, and a first run of the #106 analysis module end to end. Plan: `docs/plans/arbiter-ladder-pilot.md`, `docs/plans/issue-106-arbiter-ladder-analysis.md`; recipe: `docs/experiments/p107_pilot_stage2_recipe.md`. No pilot number enters a campaign result.
+Two hypotheses from the earlier experiments are tested. `p117_factorial` showed that A3 (arbitration between the operant and the episodic controller) dies more than A5 (the same controllers in a fixed order) in the plants world when the hand-built action tendency is off, and `docs/reports/p117_factorial_mechanism.md` traced it to three things in the arbiter: (1) untried operant cells enter the draw as lottery tickets, (2) the stop rule declares the habit decisive on the top two candidates while the draw runs over all of them, (3) a timed-out episode erases the credit of the approaches. The plan `docs/plans/operant-kalman-and-stop-rule.md` fixes them with a Kalman operant cell (drive-reduction sample, pooled prior, abstention), a whole-draw stop rule and an APPROACH credit that survives the timeout.
+
+**The question:** does A3 with these changes survive, regulate and feed at least as well as the fixed order (A5), and which change is responsible? Pre-registration: `docs/experiments/p117_kalman_recipe.md` (sections 1 to 4, revised in 2b before the run). Spec: `experiments/p117_kalman.yml`.
 
 ## Assumptions
 
-The trial is the unit; creatures within a trial share a world, a food supply and a seed. The same seed is used in every arm (pairs the initial world only; Akka scheduling keeps trajectories nondeterministic). d(H) is measured from the set point 0.18. A0's focus switches use an argmax-of-urgency approximation, because the regulated emotion is not persisted. A0 lives minutes and A1/A2 up to the cap, so d(H) over life is not like for like; the common-window d(H) is. A1 and A2 use the tuned focus thresholds 0.4 / 0.15. DATA CAVEAT: in creatures that survive to the cap, `mouth_interactions` holds a whole number of 128-row blocks per creature (and `body_states` exactly 217,728 rows), so the last partial block is missing: EAT counts of A1/A2 survivors are lower bounds, short by up to 127 each (up to about 8% in A1, 2% in A2); A0 creatures, which died, are not quantized. The ordering of arms is not affected; the feeding rates are not exact.
+- **Design.** Four arms, all in the plants world (pilot world plus 140 cactus and 140 aloe) with the sleep lock off and the action tendency off, the only cell of `p117_factorial` where the controllers were distinguishable and A3 was not floor-limited: `a3_base` (A3 control), `a3_kal` (A3 + APPROACH credit + Kalman operant), `a3_all` (+ whole-draw stop rule) and `a5_base` (A5 control, re-run on this image). 12 trials per arm, seeds 10900-10911 (the same in every arm and in `p117_factorial`), 5 creatures per trial (60 per arm), cap 60 minutes. CCAD, image `ghcr.io/felipedreis/dl2l:sha-7cb8310`, one image for all four arms.
+- **Unit.** The trial is the unit: creatures within a trial share a world, a food supply and a seed. The seed pairs the initial world only (Akka scheduling keeps trajectories nondeterministic). The log-rank and Fisher tests pool the 60 creatures of an arm and therefore treat creatures of one trial as independent; the paired trial-level differences are the check.
+- **Censoring.** A creature alive at 3600 s is censored, not missing. d(H) is measured from the set point 0.18.
+- **Frozen constants.** Kalman cell: tau2 = 1e-4, prior outcome variance 0.01, floor 0.0025, pooled-variance floor 0.16, chosen on the replay of the `a3_L0T0` data of `p117_factorial` (`analysis/diagnostics/kalman_operant_replay.py`) and frozen before this run. That replay used the same seeds and the same world as this campaign, so the calibration of the Kalman cell on these seeds is not an independent check. Theta 0.8, epsilon 0.03, tau 1 in every arm.
+- **Data caveat.** `mouth_interactions` records fruit interactions only (cactus and aloe do not appear in it) and, in creatures that survive to the cap, holds a whole number of 128-row blocks, so EAT counts of survivors are lower bounds short by up to 127 each (up to about 8% of a creature's count). The same applies to every arm; feeding rates are not exact, and the ordering of arms is not affected.
+- **Not comparable.** The `a3_base` and `a5_base` arms are re-runs on a newer image; the numbers of `p117_factorial` (A3 29 and A5 15 deaths of 60 in this cell) are not pooled with them.
 
 ## Hypothesis
 
-None: this is a descriptive pilot. Predictions recorded before the data are in the recipe.
+Written before the run (recipe sections 2b and 4):
+1. `a3_mc` no worse than the control (the arm was dropped after the local pilot; not tested here).
+2. `a3_kal` has fewer deaths than the arm before it, because untried operant cells no longer win draws.
+3. `a3_all` has no more deaths than `a5_base` and fewer than `a3_base`.
+4. **Stop rule, fixed before the run:** the arbiter work stops unless `a3_all` (or `a3_kal`) has fewer deaths than `a3_base` and no more deaths than `a5_base` (log-rank on creatures, trial-level paired differences as the check). The overall falsification of the plan was `a3_all` having no fewer deaths than `a3_base`.
 
 ## Results
+
+**Headline.** Deaths at 60 minutes (of 60 creatures per arm): `a3_base` 20, `a3_kal` **13**, `a3_all` 28, `a5_base` 16. EATs per minute: 18.6, 25.8, 27.6, 19.6. d(H) over life: 1.83, 1.39, 1.65, 1.40.
+
+| contrast | deaths | log-rank p | Fisher p |
+|---|---|---|---|
+| `a3_kal` vs `a3_base` | 13 vs 20 | 0.14 | 0.22 |
+| `a3_kal` vs `a5_base` | 13 vs 16 | 0.56 | 0.67 |
+| `a3_all` vs `a3_kal` | 28 vs 13 | 0.004 | 0.007 |
+| `a3_all` vs `a3_base` | 28 vs 20 | 0.16 | 0.19 |
+| `a3_all` vs `a5_base` | 28 vs 16 | 0.018 | 0.037 |
+| `a3_base` vs `a5_base` | 20 vs 16 | 0.37 | 0.55 |
+
+The tables and figures below are the generated ones (per-arm creature means with trial means in brackets, survival curves, calibration, paired differences by seed).
 
 ### Per-arm measures (creature mean, then trial means)
 
@@ -52,7 +76,7 @@ Per creature (dots) and per trial (diamonds).
 ![Feeding and focus](figures/p117_kalman/feeding_and_focus.png)
 
 EATs per minute, life deciles with an EAT, and the argmax-approximated focus transfers per 100 cycles.
-### Episodes (A1, A2)
+### Episodes (close types per arm)
 
 Close-type mix per arm:
 
@@ -71,7 +95,7 @@ Steps per episode:
 | a3_base | 34553.000 | 201.000 | 147.100 | 201.000 |
 | a3_kal | 36889.000 | 201.000 | 140.600 | 201.000 |
 | a5_base | 37608.000 | 201.000 | 141.400 | 201.000 |
-### A2 decision telemetry
+### Decision telemetry (operant and episodic controllers)
 
 **A3_BASE** (5,495,531 decisions). Source mix: {'SINGLE': 0.0, 'GREEDY': 0.4494, 'THOMPSON': 0.5206, 'EPSILON': 0.0299, 'ABSTAIN_UNIFORM': 0.0}. Executed action not the chosen one: 0.00%. Informed share (late half, focused multi-candidate): 0.848. Deciding controller by life decile: {0: {'EPISODIC': 0.648, 'OPERANT': 0.352}, 1: {'EPISODIC': 0.578, 'OPERANT': 0.422}, 2: {'EPISODIC': 0.576, 'OPERANT': 0.424}, 3: {'EPISODIC': 0.604, 'OPERANT': 0.396}, 4: {'EPISODIC': 0.622, 'OPERANT': 0.378}, 5: {'EPISODIC': 0.593, 'OPERANT': 0.407}, 6: {'EPISODIC': 0.598, 'OPERANT': 0.402}, 7: {'EPISODIC': 0.63, 'OPERANT': 0.37}, 8: {'EPISODIC': 0.638, 'OPERANT': 0.362}, 9: {'EPISODIC': 0.647, 'OPERANT': 0.353}}.
 
@@ -359,4 +383,37 @@ Differences of trial means, later arm minus earlier arm; SD has 2 degrees of fre
 
 ## Analysis
 
-To be written from the tables above (and the sample-size computation of #107).
+### 1. What the data say
+
+**The Kalman operant cell (with the APPROACH credit fix) brings A3 to the level of the fixed order.** `a3_kal` has 13 deaths against 16 for A5 (p = 0.56), the same d(H) (1.39 and 1.40; trial-level difference -0.02), and a mean observed time of 3258 s against 3240 s. In feeding it is clearly ahead of A5: +6.2 EATs per minute and +2.0 RED+GREEN EATs per minute, in 12 of 12 seeds. Against the A3 control the direction is the same everywhere: 13 against 20 deaths, d(H) lower in 10 of 12 seeds (mean -0.45), feeding higher in 12 of 12 seeds (+7.2 EATs per minute, +2.7 RED+GREEN). The A3 control and A5 do not differ here (20 against 16 deaths, p = 0.37), so in this run there was less deficit to close than in `p117_factorial` (29 against 15).
+
+**The whole-draw stop rule is harmful.** `a3_all` has 28 deaths, against 13 for the same arm without the rule (log-rank p = 0.004, Fisher p = 0.007), worse than A5 (p = 0.018) and, not significantly, than the control (p = 0.16-0.19). Its d(H) is 0.26 higher than `a3_kal`'s (8 of 12 seeds worse) and its observed time shorter (2851 s against 3258 s). The 20-minute local pilot had found no difference between these two arms (2 and 2 deaths of 30); deaths are spread over the hour (median death time 1839 s for `a3_kal`, 1946 s for `a3_all`), so a third of the window sees only a third of them.
+
+### 2. Mechanism
+
+- The share of the operant's own decisions that execute EAT goes from 1.8% (control) to 5.3% (`a3_kal`) and 6.3% (`a3_all`), against 0.8% in A5; the operant decides 39%, 46%, 49% and 37% of all decisions. That is the change the plan predicted for the Kalman cell: the operant acts at the object instead of handing out lottery tickets.
+- The Kalman operant abstains on about 97% of the executed candidates (APPROACH, WANDER, SLEEP never receive an outcome), and `ABSTAIN_UNIFORM` is the source of 42-44% of all decisions in both Kalman arms: when the operant decides and has no opinion, it picks at random among what it has no opinion on. This is what the old table did through lottery-ticket draws.
+- With the whole-draw rule the episodic controller executes EAT in 0.0% of its decisions (1.1% in the control, 0.6% in `a3_kal`): all the eating is the operant's.
+- The operant reaches decisiveness 0.8 in only 5-7% of decisions in every arm, with either stop rule, so the stop rule is not the lever the plan expected it to be. The share of decisions the episodic controller takes stays between 51% and 63% in all arms and follows the efficiency budget, not the rule.
+- Feeding is not more selective: the food share of EATs in the first fifth of life is 0.445 (`a3_all`), 0.461 (`a3_kal`), 0.480 (control) and 0.495 (A5), and gray apples (which feed nothing) are 56%, 54%, 50% and 49% of the fruit EATs. The Kalman arms eat more of everything, and `a3_all` spends the largest share of its EATs on gray apples. This fits `a3_all`'s worse survival but does not prove it: death causes were not analysed, and `mouth_interactions` does not record cactus or aloe, so eating of the painful plants cannot be checked here.
+
+### 3. Calibration
+
+The operant's per-trial calibration statistic (variance of z over varying cells, recipe 5; adoption range [0.8, 1.25]) has mean **0.84 for `a3_kal`** (trials 0.72-1.07) and **0.85 for `a3_all`** (0.68-1.02), against 1.16 for the Welford table of the control (0.94-1.43) and 1.16 for A5 (0.98-1.32): the Kalman cell is inside the band on average and close to its lower edge (SE slightly wide, the safe direction), and the old table was inside it too. One-step z by basis over all updates (including constant cells): first outcomes under the pooled prior, mean -0.11 (`a3_kal`) and -0.16 (`a3_all`), variance 1.23 and 1.19 (n = 240 per arm), a small optimism and honest spread; observed cells, mean 0.00, variance 0.41-0.42 (constant cells such as EAT on a gray apple drag it down; the varying-cell statistic above is the one to read). These match the replay that fixed the constants (0.81 and 1.3), on the same seeds, so they confirm the cell behaves in the live arbiter as it did offline; they are not an independent calibration test.
+
+### 4. Against the pre-registered readings
+
+- **Hypothesis 2** (`a3_kal` has fewer deaths than the arm before it): the arm before it was dropped; against the control, 13 against 20 deaths, directional, not significant.
+- **Hypothesis 3** (`a3_all` no more deaths than A5 and fewer than the control): **false** (28 against 16 and 28 against 20).
+- **Hypothesis 4 / stop rule:** `a3_kal` meets it in direction (13 < 20 and 13 <= 16) and without statistical support in either comparison; `a3_all` does not meet it. The overall falsification (`a3_all` no better than the control) **occurred** for `a3_all`.
+
+### 5. What this does not show
+
+- **Arbitration beating the fixed order.** `a3_kal` matches A5; it does not beat it (13 against 16 deaths, p = 0.56; same d(H)).
+- **A statistically established survival gain over the A3 control.** The control itself moved from 29 deaths of 60 in `p117_factorial` to 20 here, with the same seeds, cell and configuration, so a 7-death difference between arms is inside the run-to-run variation we have seen. The consistent signals are feeding (12 of 12 seeds) and d(H) (10 of 12), not the death counts.
+- **Why `a3_all` is worse.** The mechanism above is a correlate (more gray-apple eating, all eating by the operant), not an explanation.
+- **Generality.** One world, one cell (lock and tendency off), 12 seeds; with the tendency on both controllers are at the ceiling and cannot be told apart.
+
+### 6. Recommendation
+
+Keep `arbiterStopRule = TOP_TWO` (the default; every new switch defaults to today's behaviour). Take `a3_kal` (`operantEstimator = KALMAN`, `timeoutZeroesApproach = false`) as the classic baseline for the comparison with the JEPA: it is no worse than the fixed order, eats clearly more food, and it makes the operant a controller that reports in the same unit as the episodic one, which is what the controllers spec asks for. The arbiter work has met its stated goal of a fair baseline and has not met the stronger goal of arbitration winning; the decision to stop or continue belongs to the researcher.
