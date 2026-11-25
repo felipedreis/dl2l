@@ -57,7 +57,25 @@ progress with `ccad-status.yml`; collect with `-e rescue=true`; upload (`dl2l_da
 
 ## 7. Results
 
-(to be written after the run)
+Local pilot of section 8 (24 trials, image from `8ce28ec`, 2026-11-25, 00:22 to 08:38). Full generated report: [`docs/reports/p117_kalman_local_report.md`](../reports/p117_kalman_local_report.md). **n = 6 trials per arm, 5 creatures each, cap 20 minutes: directional only.**
+
+| | `a3_base` | `a3_mc` | `a3_kal` | `a3_all` |
+|---|---|---|---|---|
+| deaths at 20 min (of 30 creatures) | 7 | 3 | 2 | 2 |
+| d(H) over life (trial means) | 2.15 | 1.50 | 1.21 | 1.27 |
+| EATs per minute | 17.2 | 18.2 | 24.6 | 27.0 |
+| RED+GREEN EATs per minute | 8.2 | 8.6 | 11.5 | 12.0 |
+| observed time (s) | 1018 | 1121 | 1171 | 1157 |
+
+- **Survival.** `a3_all` against `a3_base`: 2 deaths against 7 (log-rank p = 0.060, Fisher p = 0.145); at trial level 5 of 6 seeds have a lower death share and 5 of 6 a longer observed time (mean +139 s). Step by step: `a3_mc` against `a3_base` 3 against 7 (p = 0.17); `a3_kal` against `a3_mc` 2 against 3 (p = 0.62); `a3_all` against `a3_kal` 2 against 2 (p = 0.97).
+- **Feeding is where the arms separate, and the Kalman cell is what moves it.** `a3_kal` against `a3_mc`: +6.5 EATs per minute and +2.9 RED+GREEN, in 6 of 6 seeds; `a3_mc` against `a3_base`: +0.9 and +0.4, mixed seeds. `a3_all` against `a3_base`: +9.7 and +3.8, 6 of 6 seeds. d(H) over life falls in 5 of 6 seeds (-0.88).
+- **Mechanism (H2).** The share of the operant's decisions that execute EAT goes from 1.8% (`a3_base`) to 5.4% (`a3_kal`) and 6.7% (`a3_all`); the episodic controller's EAT share goes from 1.3% to 0.6% and 0.0%. The operant now eats where it used to wander; episodic memory eats less.
+- **The whole-draw stop rule adds nothing measurable** (`a3_all` against `a3_kal`: deaths equal, d(H) +0.06, EATs +2.3 per minute, 6 of 6 seeds but small). The operant reaches decisiveness 0.8 in 7.3% of decisions under it, 6.1% under the two-best rule in the control, and the operant decides 47% of decisions against 39%: episodic memory is still affordable in about 55% of them either way.
+- **The extra eating is not more selective.** EATs on food rise 46% but all EATs rise 57%, and the food share of EATs in the first fifth of life is 0.445 (`a3_all`) against 0.476 (`a3_base`). The creature eats more of everything; the gain in d(H) and survival comes from eating more food, not from refusing non-food.
+- **Abstention is not rare.** 97% of the executed candidates are ones the Kalman operant abstains on, and `ABSTAIN_UNIFORM` is the source of 42.5% of all decisions: when the operant decides and has no opinion, it picks at random among the candidates it has no opinion on (the old Welford table did the same through lottery-ticket draws).
+- **Calibration.** Operant statistic (varying cells, per trial) 0.69-0.91 for `a3_kal` (mean 0.82) and 0.78-0.93 for `a3_all` (mean 0.87), inside [0.8, 1.25] on average and close to its lower edge, as in the replay (0.81); one-step z by basis: OBSERVED mean 0.00, POOLED_PRIOR mean -0.13 to -0.18 with variance 1.2-1.3 (n = 120 per arm). The `a3_base` statistic is 0.73-1.45 as before.
+
+**Hypotheses.** (1) `a3_mc` is no worse than `a3_base`: held (3 against 7 deaths). (2) `a3_kal` has fewer deaths than `a3_mc`: **not shown** (2 against 3, p = 0.62), but its mechanism indicator moved as predicted and feeding rose in 6 of 6 seeds. (3) `a3_all` has fewer deaths than `a3_base`: directionally yes (2 against 7); the comparison with the factorial's A5 was not possible (60 against 20 minutes). (4) The overall falsification (`a3_all` no better than `a3_base`) **did not occur**: deaths 2 against 7, feeding up in every seed, d(H) down in 5 of 6. This is a pilot: the log-rank p of 0.06 is not a pass, and the two-best-versus-whole-draw question and the A5 comparison remain open for the 60-minute run on the cluster (`experiments/p117_kalman.yml`).
 
 ## 8. Local pilot (2026-11-25): what was run instead of the CCAD campaign
 

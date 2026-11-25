@@ -187,3 +187,7 @@ is far from 1 (then its SE is not honest and the arbiter's choice of driver mean
 | tau2 = 1e-5 | +0.037 | 0.876 | pass |
 
 Two changes to the plan, both from this replay and both frozen: **tau2 = 1e-4** (not 8e-4; steady-state gain about 0.1, not 0.25: the calibration criterion picks the slower cell, and these data are stationary, so it is an upper bound on how slow the cell should be), and a **floor of 16 prior variances (0.16, SE 0.4) under the pooled prior's variance** (not 1): with the floor at one variance the first outcome on a new object scored z variance 8.0 (mean -0.68; EAT is +0.3 on an apple and -0.7 on a cactus, and the few cells seen so far understate that); at 16 it is 1.3 (mean -0.18, n = 240). The same on `a5_L0T0` (tau2 2e-4: 0.81; pooled 1.27). The per-decision candidate counts of the new stop rule cannot be measured from this data (only the best and the runner-up are stored); theta stays 0.8 as `arbiterTheta`.
+
+## Result of the local pilot (2026-11-25)
+
+`experiments/p117_kalman_local.yml` (4 arms x 6 trials, 20-minute cap): deaths 7 (control), 3 (+ APPROACH credit), 2 (+ Kalman operant), 2 (+ whole-draw rule) of 30 creatures; EATs per minute 17.2, 18.2, 24.6, 27.0. The Kalman cell is the change that moves feeding; the whole-draw stop rule adds nothing measurable. Details and caveats: `docs/experiments/p117_kalman_recipe.md`, section 7.
