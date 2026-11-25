@@ -26,6 +26,13 @@ and A3 was not floor-limited: deaths 29 of 60 for A3, 15 of 60 for A5). Each arm
 Configs `simulations/p117_kal_<arm>.conf`; a unit test pins that the arms differ only in these switches. **A5 is not re-run**: `p117_factorial/a5_L0T0` (same seeds, same world, defaults unchanged, pinned by tests) is
 the reference; code drift is possible and is the reason `a3_base` is re-run.
 
+### 2b. Revision of 2026-11-25, after the local pilot (before any cluster run)
+
+The pilot (section 7) showed that the APPROACH credit fix alone moves little (EATs per minute +0.9, deaths 7 to 3, p = 0.17) and that the whole-draw stop rule adds nothing measurable on top of the Kalman cell. The campaign is therefore **four arms**:
+`a3_base` (control), `a3_kal` (APPROACH credit + Kalman operant), `a3_all` (+ whole-draw rule) and **`a5_base`** (A5, the fixed-order control, re-run on this image). The `a3_mc` arm is dropped; the A5 control replaces it so the question that matters
+(does A3 with the changes catch A5?) is answered on one image and not against the factorial's older data. 12 trials per arm, 48 in all, seeds and cap unchanged. The stop rule below is fixed now:
+**the work on the arbiter stops after this run unless `a3_all` (or `a3_kal`) has fewer deaths than `a3_base` and no more deaths than `a5_base`** (log-rank on creatures, with the trial-level paired differences as the check).
+
 Sample size: the factorial's trial-level contrast A3 - A5 in this cell was -390 s (8 of 12 seeds); the same 12 pairs are used. **Not powered** to read a small effect in d(H) or EAT rates; reported, not read.
 
 ## 3. Outcomes and readings (fixed now)
@@ -39,7 +46,7 @@ Secondary: share dead at the cap, d(H) over life, EATs per minute, controller sh
 
 1. **`a3_mc` is no worse than `a3_base`.** The credit for approaching food comes back, so episodic memory can value approach. Falsified if `a3_mc` has more deaths with log-rank p < 0.05.
 2. **`a3_kal` has fewer deaths than `a3_mc`**: untried operant cells no longer win draws as tickets, so the habit stops overriding episodic memory in the contact decisions with food. Falsified if no fewer deaths and the share of EAT at food contact among the operant's decisive decisions stays near the factorial's 7.6%.
-3. **`a3_all` has deaths no greater than the factorial's A5 (15 of 60) and fewer than `a3_base` (29 of 60).**
+3. **`a3_all` has deaths no greater than `a5_base` (the factorial's A5 had 15 of 60, A3 29 of 60) and fewer than `a3_base`.**
 4. **Overall falsification (the stop criterion for this line of work):** `a3_all` has no fewer deaths than `a3_base` (log-rank p > 0.2 and a non-positive trial-level mean improvement). Then the three changes do not repair arbitration in this world, and this branch ends without a further iteration.
 
 I have no confident prior on 3; the prior run's direction (A5 > A3) is what the changes are meant to reverse, and the replay says only that the cell is calibrated, not that the arbiter will use it well.

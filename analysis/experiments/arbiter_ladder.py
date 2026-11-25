@@ -389,7 +389,8 @@ KALMAN_ARMS = ["a3_base", "a3_mc", "a3_kal", "a3_all"]
 def kalman_pairs(keys) -> list[tuple[str, str]]:
     """Contrasts of the p117_kalman arms, (later, earlier) as in PAIRS: each change on top of the one before it, then all three against the control."""
     have = set(keys)
-    pairs = [("a3_mc", "a3_base"), ("a3_kal", "a3_mc"), ("a3_all", "a3_kal"), ("a3_all", "a3_base")]
+    pairs = [("a3_mc", "a3_base"), ("a3_kal", "a3_mc"), ("a3_all", "a3_kal"), ("a3_all", "a3_base"),
+             ("a3_kal", "a3_base"), ("a3_all", "a5_base"), ("a3_kal", "a5_base"), ("a3_base", "a5_base")]
     return [(a, b) for a, b in pairs if a in have and b in have]
 
 

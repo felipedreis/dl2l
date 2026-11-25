@@ -125,6 +125,21 @@ class LadderConfigsTest {
     }
 
     @Test
+    void theKalmanCampaignsA5ControlIsTheFactorialsA5CellWithEverythingNewOff() {
+        LearningSettings factorial = load("p117_fact_a5_L0T0.conf");
+        LearningSettings a5 = load("p117_kal_a5_base.conf");
+        assertTrue(a5.isArbiterFixedOrder());
+        assertTrue(a5.isEpisodicEstimatorEnabled());
+        assertFalse(a5.isActionTendencyEnabled());
+        assertFalse(a5.isSleepHysteresisEnabled());
+        for (LearningSettings s : new LearningSettings[] {factorial, a5}) {
+            assertEquals(LearningSettings.OperantKind.WELFORD, s.getOperantKind());
+            assertEquals(LearningSettings.ArbiterStopRule.TOP_TWO, s.getArbiterStopRule());
+            assertTrue(s.isTimeoutZeroesApproach());
+        }
+    }
+
+    @Test
     void theKalmanCampaignAddsTheThreeChangesToTheFactorialControlOneAtATime() {
         LearningSettings factorial = load("p117_fact_a3_L0T0.conf");
         LearningSettings base = load("p117_kal_a3_base.conf");
