@@ -62,7 +62,7 @@ I have no confident prior on 3; the prior run's direction (A5 > A3) is what the 
 `mvn package` green; push the branch and `preview/a3-episodic`; pin the `sha-` tag; `cd ansible && ansible-playbook -i inventories/ccad run-experiment.yml -e experiment=p117_kalman -e dl2l_image=ghcr.io/felipedreis/dl2l:sha-<commit>` (CEFET VPN up);
 progress with `ccad-status.yml`; collect with `-e rescue=true`; upload (`dl2l_data.upload`); `PYTHONPATH=analysis python3.13 -m dl2l_analysis --experiment p117_kalman`; write section 7, the report in `docs/reports/`, and the diary entry.
 
-## 7. Results
+## 7. Results of the local pilot
 
 Local pilot of section 8 (24 trials, image from `8ce28ec`, 2026-11-25, 00:22 to 08:38). Full generated report: [`docs/reports/p117_kalman_local_report.md`](../reports/p117_kalman_local_report.md). **n = 6 trials per arm, 5 creatures each, cap 20 minutes: directional only.**
 
@@ -91,3 +91,25 @@ one after the other, **cap 20 minutes** (not 60), six trials per arm, local imag
 - survival is censored at 1200 s, so the factorial's 60-minute numbers (29 of 60 and 15 of 60 deaths) are **not comparable**; the factorial reference is dropped, and `a3_base` is the only baseline;
 - n = 6 per arm: the readings are directional, a log-rank p near 0.05 is not a pass, and falsification criterion 4 is read on the direction and the size of the difference, not on p alone;
 - the pilot can fail to separate the arms because 20 minutes is short, which is not evidence for or against the hypotheses.
+
+## 9. Cluster campaign results (2026-11-25)
+
+CCAD, image `sha-7cb8310`, 48 trials (4 arms x 12 trials, seeds 10900-10911, 60-minute cap, 5 creatures per trial, so 60 creatures per arm), submitted 11:07, collected 17:00-18:30, HF `p117_kalman/`. Report: [`docs/reports/p117_kalman_report.md`](../reports/p117_kalman_report.md).
+
+| | `a3_base` | `a3_kal` | `a3_all` | `a5_base` |
+|---|---|---|---|---|
+| deaths at 60 min (of 60) | 20 | **13** | 28 | 16 |
+| observed time (s) | 3029 | 3258 | 2851 | 3240 |
+| d(H) over life | 1.83 | 1.39 | 1.65 | 1.40 |
+| EATs per minute | 18.6 | 25.8 | 27.6 | 19.6 |
+| RED+GREEN EATs per minute | 9.2 | 11.8 | 12.1 | 9.9 |
+
+- **`a3_kal` (APPROACH credit + Kalman operant) against `a3_base`:** 13 against 20 deaths (log-rank p = 0.14, Fisher p = 0.22), d(H) lower in 10 of 12 seeds (mean -0.45), feeding higher in 12 of 12 seeds (+7.2 EATs per minute, +2.7 RED+GREEN). **Against `a5_base`:** 13 against 16 deaths (p = 0.56), d(H) equal (-0.02), feeding higher in 12 of 12 seeds (+6.2, +2.0). So **A3 with the Kalman cell is on par with the fixed order for survival and regulation and clearly ahead of it in feeding; it is not shown to be better than A5, and its advantage over the control in deaths is not statistically established.**
+- **`a3_all` (+ whole-draw stop rule) is worse than `a3_kal`:** 28 against 13 deaths (Fisher p = 0.007, log-rank p = 0.004), d(H) +0.26 (7 of 12 seeds worse), and worse than `a5_base` (28 against 16, p = 0.018) and, not significantly, than the control (28 against 20, p = 0.16-0.19). The pilot (20 minutes) had shown no difference between these two arms; the window was too short to see it, which I believe but did not verify. Why feeding stays high while deaths rise is **not established**: the food share of EATs falls (0.445 against 0.461 for `a3_kal` and 0.495 for A5), which fits more non-food eating, but death causes were not analysed.
+- **Mechanism.** Share of the operant's decisions that execute EAT: 1.8% (`a3_base`), 5.3% (`a3_kal`), 6.3% (`a3_all`), 0.8% (`a5_base`); the operant decides 39%, 46%, 49% and 37% of decisions. With the whole-draw rule the episodic controller executes EAT in 0.0% of its decisions (1.1% in the control, 0.6% in `a3_kal`): all eating comes from the operant. The operant reaches decisiveness 0.8 in 5-7% of decisions in every arm, so the stop rule never became the lever the plan hoped for.
+- **The control varies between runs.** `a3_base` has 20 deaths here and had 29 of 60 in the factorial (same seeds and cell, older image); `a5_base` has 16 here against 15. The A3 control moved by 9 deaths between runs with the same configuration, so differences of that size between arms should not be read as effects.
+
+**Against the stop rule of section 2b** ("`a3_all` or `a3_kal` has fewer deaths than `a3_base` and no more than `a5_base`"): `a3_kal` meets it in direction (13 < 20, 13 <= 16) but without statistical support in either comparison; `a3_all` fails it. **Against hypotheses:** (1) not tested separately (the `a3_mc` arm was dropped); (2) `a3_kal` fewer deaths than the control: directional only; (3) `a3_all` no more deaths than `a5_base` and fewer than `a3_base`: **falsified**; (4) overall falsification of `a3_all` against the control: **it occurred** (28 against 20), while `a3_kal` is the arm that works.
+
+**What this supports:** the Kalman operant cell (with the APPROACH credit fix) brings arbitration to the level of the fixed order in this world and makes the creature eat clearly more food; the whole-draw stop rule should not be adopted (it did harm at 60 minutes). It does not show arbitration beating the fixed order, and the survival gain over the control is within the run-to-run variation seen in the control.
+

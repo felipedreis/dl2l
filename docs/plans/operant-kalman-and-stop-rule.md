@@ -191,3 +191,8 @@ Two changes to the plan, both from this replay and both frozen: **tau2 = 1e-4** 
 ## Result of the local pilot (2026-11-25)
 
 `experiments/p117_kalman_local.yml` (4 arms x 6 trials, 20-minute cap): deaths 7 (control), 3 (+ APPROACH credit), 2 (+ Kalman operant), 2 (+ whole-draw rule) of 30 creatures; EATs per minute 17.2, 18.2, 24.6, 27.0. The Kalman cell is the change that moves feeding; the whole-draw stop rule adds nothing measurable. Details and caveats: `docs/experiments/p117_kalman_recipe.md`, section 7.
+
+## Result of the cluster campaign (2026-11-25)
+
+`experiments/p117_kalman.yml` (CCAD, 4 arms x 12 trials, 60-minute cap, 60 creatures per arm): deaths 20 (control), 13 (+ APPROACH credit + Kalman operant), 28 (+ whole-draw stop rule), 16 (A5 control). The Kalman cell brings A3 to the level of A5 and feeds clearly more; **the whole-draw stop rule is worse (28 against 13 deaths, p = 0.004) and should not be adopted**; the survival gain of the Kalman cell over the control is not statistically established and the control itself moved by 9 deaths against the factorial. Details: `docs/experiments/p117_kalman_recipe.md`, section 9.
+
