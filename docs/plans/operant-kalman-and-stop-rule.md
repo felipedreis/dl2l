@@ -172,3 +172,18 @@ is far from 1 (then its SE is not honest and the arbiter's choice of driver mean
 2. Abstaining candidates in the draw: the option-2 pseudo-candidate (recommended). This also defines A2 with the Kalman
    cell, where the operant alone abstains on every APPROACH, WANDER and SLEEP candidate.
 3. Confirm the three settings with today's behaviour as default.
+
+
+## Results of the offline replay (2026-11-25)
+
+`analysis/diagnostics/kalman_operant_replay.py` over the 12 `a3_L0T0` trials of p117_factorial (36,931 one-step predictions on varying cells; cells whose outcomes are all equal, e.g. gray apples at 0, left out as in the ladder analysis):
+
+| setting | mean z | var z | band [0.8, 1.25] |
+|---|---|---|---|
+| tau2 = 8e-4 (plan) | +0.003 | 0.712 | below: SE too wide |
+| tau2 = 3e-4 | +0.007 | 0.761 | below |
+| tau2 = 1.5e-4 | +0.012 | 0.793 | just below |
+| **tau2 = 1e-4 (frozen)** | +0.015 | 0.810 | **pass** |
+| tau2 = 1e-5 | +0.037 | 0.876 | pass |
+
+Two changes to the plan, both from this replay and both frozen: **tau2 = 1e-4** (not 8e-4; steady-state gain about 0.1, not 0.25: the calibration criterion picks the slower cell, and these data are stationary, so it is an upper bound on how slow the cell should be), and a **floor of 16 prior variances (0.16, SE 0.4) under the pooled prior's variance** (not 1): with the floor at one variance the first outcome on a new object scored z variance 8.0 (mean -0.68; EAT is +0.3 on an apple and -0.7 on a cactus, and the few cells seen so far understate that); at 16 it is 1.3 (mean -0.18, n = 240). The same on `a5_L0T0` (tau2 2e-4: 0.81; pooled 1.27). The per-decision candidate counts of the new stop rule cannot be measured from this data (only the best and the runner-up are stored); theta stays 0.8 as `arbiterTheta`.

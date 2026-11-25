@@ -112,12 +112,12 @@ class TableSchemasTest {
                 "source", "n_tied_at_max", "chosen_action", "chosen_object_type", "chosen_q", "chosen_se",
                 "chosen_sigma", "best_q", "best_se", "best_sigma", "runnerup_q", "runnerup_se", "runnerup_sigma",
                 "executed_action", "executed_object_type", "executed_source", "executed_q", "executed_se",
-                "executed_sigma", "operant_conf", "operant_q", "operant_se", "operant_sigma", "episodic_conf",
-                "episodic_q", "episodic_se", "episodic_sigma", "planner_conf", "planner_q", "planner_se",
-                "planner_sigma", "novelty_bonus"));
+                "executed_sigma", "operant_conf", "operant_q", "operant_se", "operant_sigma", "operant_basis",
+                "episodic_conf", "episodic_q", "episodic_se", "episodic_sigma", "episodic_basis", "planner_conf",
+                "planner_q", "planner_se", "planner_sigma", "planner_basis", "novelty_bonus"));
         // Operant table (A2), per outcome.
         t.put("operant_update_state", List.of("creature_key", "seq", "time_ms", "cycle", "object_type", "action",
-                "sample", "n", "q", "se", "sigma"));
+                "sample", "n", "q", "se", "sigma", "q_prior", "se_prior", "basis_prior"));
         // Issue #111: the episodic engram; the key is k_00..k_14.
         List<String> engram = new java.util.ArrayList<>(List.of("creature_key", "seq", "time_ms", "episode_id", "drive",
                 "close_type", "step_cycle", "steps_to_outcome", "action", "object_type", "h_hunger", "h_sleep", "h_pain",

@@ -66,6 +66,8 @@ public class ArbitrationDecisionState implements PersistenceState {
     private final double[] controllerQ = unset();
     private final double[] controllerSe = unset();
     private final double[] controllerSigma = unset();
+    /** Per controller, the {@link Estimate.Basis} of the estimate of the executed candidate; null when the controller was not consulted. */
+    private final String[] controllerBasis = new String[Arbiter.ControllerType.values().length];
 
     public ArbitrationDecisionState() { }
 
@@ -127,6 +129,7 @@ public class ArbitrationDecisionState implements PersistenceState {
             s.controllerQ[type.ordinal()] = e.q();
             s.controllerSe[type.ordinal()] = e.se();
             s.controllerSigma[type.ordinal()] = e.sigma();
+            s.controllerBasis[type.ordinal()] = e.basis().name();
         });
         return s;
     }
@@ -178,4 +181,5 @@ public class ArbitrationDecisionState implements PersistenceState {
     public double getControllerQ(Arbiter.ControllerType c) { return controllerQ[c.ordinal()]; }
     public double getControllerSe(Arbiter.ControllerType c) { return controllerSe[c.ordinal()]; }
     public double getControllerSigma(Arbiter.ControllerType c) { return controllerSigma[c.ordinal()]; }
+    public String getControllerBasis(Arbiter.ControllerType c) { return controllerBasis[c.ordinal()]; }
 }

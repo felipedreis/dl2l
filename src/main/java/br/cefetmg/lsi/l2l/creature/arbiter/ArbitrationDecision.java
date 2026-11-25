@@ -69,9 +69,10 @@ public record ArbitrationDecision(int candidateCount,
      * How the chosen action was picked. {@code SINGLE}: one candidate, nothing to choose among.
      * {@code EPSILON}: the uniform floor. {@code GREEDY}: the chosen candidate's Q equals the highest Q, so the
      * draw was as good as the best (possibly one of several tied; #105). {@code THOMPSON}: the draw picked a
-     * candidate with a lower Q than the highest.
+     * candidate with a lower Q than the highest. {@code ABSTAIN_UNIFORM}: the controller abstained on the chosen candidate and the draw
+     * picked its pseudo-candidate "something else", then one of the abstained candidates uniformly (or it had no opinion at all).
      */
-    public enum ExplorationSource { SINGLE, GREEDY, THOMPSON, EPSILON }
+    public enum ExplorationSource { SINGLE, GREEDY, THOMPSON, EPSILON, ABSTAIN_UNIFORM }
 
     public ArbitrationDecision {
         if (consultations == null || decidingController == null || mostExpensiveAffordable == null

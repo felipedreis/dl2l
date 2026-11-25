@@ -81,6 +81,39 @@ class ValuationOperantTest {
         assertEquals(1.0, r.getSigma(), TOL);
     }
 
+    /** The Kalman cell behind the arbiter: the sample is the drive reduction, not a valence (docs/plans/operant-kalman-and-stop-rule.md). */
+    private static LearningSettings kalmanSettings() {
+        return new LearningSettings(false, false, List.of(), false, ExpectancyMode.DISCRETE,
+                false, false, false, false, true, false, true, LearningSettings.ActionSelectorMode.ARBITER,
+                2.0, 0.5, true, LearningSettings.ActionTendencySet.CAMPOS, false, false, 0.5, true,
+                LearningSettings.OperantKind.KALMAN, LearningSettings.ArbiterStopRule.TOP_TWO, true,
+                LearningSettings.DEFAULT_ARBITER_THETA);
+    }
+
+    @Test
+    void underTheKalmanCellTheSampleIsTheDriveReductionAndTheRowCarriesWhatTheCellPredicted() {
+        TestingHarness h = TestingHarness.builder().learningSettings(kalmanSettings()).build();
+        deliver(h, outcome(FruitType.RED_APPLE, ActionType.EAT, -0.3));   // the drive fell by 0.3
+        deliver(h, outcome(FruitType.RED_APPLE, ActionType.EAT, 0.1));    // the drive rose by 0.1
+
+        List<OperantUpdateState> rows = h.bdSink().ofType(OperantUpdateState.class);
+        assertEquals(2, rows.size());
+        assertEquals(0.3, rows.get(0).getSample(), TOL, "a fall of the drive is a positive sample in drive units, not +1");
+        assertEquals(-0.1, rows.get(1).getSample(), TOL);
+        assertEquals("ABSTAIN", rows.get(0).getBasisPrior(), "the cell had no opinion before its first outcome");
+        assertTrue(Double.isNaN(rows.get(0).getQPrior()));
+        assertEquals("OBSERVED", rows.get(1).getBasisPrior());
+        assertEquals(rows.get(0).getQ(), rows.get(1).getQPrior(), TOL, "the second outcome was predicted by the first row's cell");
+        assertEquals(0.3, rows.get(0).getQ(), TOL);
+    }
+
+    @Test
+    void underTheKalmanCellTheLegacyValenceIsGone() {
+        TestingHarness h = TestingHarness.builder().learningSettings(kalmanSettings()).build();
+        deliver(h, outcome(FruitType.RED_APPLE, ActionType.EAT, -1.5));
+        assertEquals(1.5, h.bdSink().ofType(OperantUpdateState.class).get(0).getSample(), TOL);
+    }
+
     @Test
     void withLearningSwitchedOffTheTableStaysAtThePrior() {
         LearningSettings frozen = new LearningSettings(false, false, List.of(), false, ExpectancyMode.DISCRETE,

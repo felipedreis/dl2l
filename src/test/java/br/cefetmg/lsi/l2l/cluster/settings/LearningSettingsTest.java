@@ -420,4 +420,62 @@ public class LearningSettingsTest {
         assertTrue(a.isSeedGenerated());
         assertNotEquals(a.getSeed(), b.getSeed());
     }
+
+    // ---- Kalman operant, whole-draw stop rule, APPROACH credit, theta (docs/plans/operant-kalman-and-stop-rule.md) ----
+
+    private static LearningSettings variant(LearningSettings.ActionSelectorMode selector, boolean operantEstimator,
+                                            LearningSettings.OperantKind kind, LearningSettings.ArbiterStopRule rule,
+                                            boolean zeroes, double theta) {
+        return new LearningSettings(false, false, List.of(), false, ExpectancyMode.DISCRETE, false, false, false, false, true,
+                false, operantEstimator, selector, 2.0, 0.5, true, LearningSettings.ActionTendencySet.CAMPOS, false, false, 0.5,
+                true, kind, rule, zeroes, theta);
+    }
+
+    @Test
+    void the_new_arbiter_settings_default_to_todays_behaviour() {
+        LearningSettings s = new LearningSettings(false, false, List.of(), false, ExpectancyMode.DISCRETE, false, false, false, false,
+                true, false, false);
+        assertEquals(LearningSettings.OperantKind.WELFORD, s.getOperantKind());
+        assertEquals(LearningSettings.ArbiterStopRule.TOP_TWO, s.getArbiterStopRule());
+        assertTrue(s.isTimeoutZeroesApproach());
+        assertEquals(0.8, s.getArbiterTheta(), 0.0);
+    }
+
+    @Test
+    void the_kalman_cell_and_the_whole_draw_rule_need_the_arbiter() {
+        assertThrows(IllegalArgumentException.class, () -> variant(LearningSettings.ActionSelectorMode.FILTER_BASED, true,
+                LearningSettings.OperantKind.KALMAN, LearningSettings.ArbiterStopRule.TOP_TWO, true, 0.8));
+        assertThrows(IllegalArgumentException.class, () -> variant(LearningSettings.ActionSelectorMode.FILTER_BASED, true,
+                LearningSettings.OperantKind.WELFORD, LearningSettings.ArbiterStopRule.WHOLE_DRAW, true, 0.8));
+        LearningSettings ok = variant(LearningSettings.ActionSelectorMode.ARBITER, true, LearningSettings.OperantKind.KALMAN,
+                LearningSettings.ArbiterStopRule.WHOLE_DRAW, false, 0.7);
+        assertEquals(LearningSettings.OperantKind.KALMAN, ok.getOperantKind());
+        assertEquals(LearningSettings.ArbiterStopRule.WHOLE_DRAW, ok.getArbiterStopRule());
+        assertFalse(ok.isTimeoutZeroesApproach());
+        assertEquals(0.7, ok.getArbiterTheta(), 0.0);
+    }
+
+    @Test
+    void theta_must_be_in_the_arbiters_range() {
+        assertThrows(IllegalArgumentException.class, () -> variant(LearningSettings.ActionSelectorMode.ARBITER, true,
+                LearningSettings.OperantKind.WELFORD, LearningSettings.ArbiterStopRule.TOP_TWO, true, 0.4));
+        assertThrows(IllegalArgumentException.class, () -> variant(LearningSettings.ActionSelectorMode.ARBITER, true,
+                LearningSettings.OperantKind.WELFORD, LearningSettings.ArbiterStopRule.TOP_TWO, true, 1.1));
+    }
+
+    @Test
+    void the_new_keys_are_read_from_the_simulation_config_and_absent_keys_keep_the_defaults() {
+        String hocon = "simulation.learningSettings { operantEstimator = KALMAN, arbiterStopRule = WHOLE_DRAW, "
+                + "timeoutZeroesApproach = false, arbiterTheta = 0.6 }";
+        com.typesafe.config.Config base = com.typesafe.config.ConfigFactory.parseFile(new java.io.File("simulations/arbiter_a3.conf")).resolve();
+        LearningSettings read = new Simulation(com.typesafe.config.ConfigFactory.parseString(hocon).withFallback(base).resolve())
+                .getLearningSettings();
+        assertEquals(LearningSettings.OperantKind.KALMAN, read.getOperantKind());
+        assertEquals(LearningSettings.ArbiterStopRule.WHOLE_DRAW, read.getArbiterStopRule());
+        assertFalse(read.isTimeoutZeroesApproach());
+        assertEquals(0.6, read.getArbiterTheta(), 0.0);
+        LearningSettings plain = new Simulation(base).getLearningSettings();
+        assertEquals(LearningSettings.OperantKind.WELFORD, plain.getOperantKind());
+        assertTrue(plain.isTimeoutZeroesApproach());
+    }
 }

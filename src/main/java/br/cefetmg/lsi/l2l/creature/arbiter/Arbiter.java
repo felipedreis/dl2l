@@ -36,10 +36,21 @@ import java.util.Random;
  * when its estimates carry an effective neighbour count of at least {@link #FIXED_ORDER_MIN_N_EFF} for every
  * candidate; one that has no such count (the operant table) always does.
  *
+ * <p><b>Abstention and the stop rule (docs/plans/operant-kalman-and-stop-rule.md).</b> A controller may abstain on a candidate
+ * ({@link Estimate#abstain()}): it has no number for it. The candidates it abstains on enter that controller's
+ * decisiveness and draw as ONE pseudo-candidate "something else" with {@code Q = 0} (no drive reduction claimed) and the SE of the
+ * best candidate it does have an opinion on; if that pseudo-candidate wins the draw, one abstained candidate is picked uniformly
+ * ({@link ArbitrationDecision.ExplorationSource#ABSTAIN_UNIFORM}). No abstainer gets a draw of its own. A controller that abstains on
+ * every candidate has decisiveness 0, so any dearer consulted controller decides; alone, the pick is uniform. With
+ * {@link StopRule#WHOLE_DRAW} decisiveness is the probability that the best candidate wins the actual draw (same distributions as
+ * the draw, including tau and novelty; computed by deterministic quadrature, no random numbers); {@link StopRule#TOP_TWO} is the
+ * paper's two-best formula.
+ *
  * <p>Random draws, in order: one {@code nextDouble()} per decision with two or more candidates; then one
  * {@code nextInt(n)} if the floor fired, else one {@code nextGaussian()} per candidate in candidate order,
- * drawn even when an SE is zero, so the stream's consumption depends only on the number of candidates. A
- * single candidate draws nothing.
+ * drawn even when an SE is zero, so the stream's consumption depends only on the number of candidates (with abstention: on the number of
+ * candidates with an opinion, plus one for the pseudo-candidate, plus one {@code nextInt} if the pseudo-candidate wins; with no
+ * opinion at all, one {@code nextInt(n)}). A single candidate draws nothing.
  *
  * <p>Not thread-safe. Owned by the actor that decides, like the {@link Random} it holds.
  */
@@ -65,6 +76,12 @@ public final class Arbiter {
 
     /** How the deciding controller is chosen. {@code ARBITRATION}: by decisiveness. {@code FIXED_ORDER}: by position (#116). */
     public enum Mode { ARBITRATION, FIXED_ORDER }
+
+    /**
+     * How decisiveness is measured. {@code TOP_TWO}: {@code Phi((Q1 - Q2) / sqrt(SE1^2 + SE2^2))} over the two best candidates (the
+     * paper's rule, the default). {@code WHOLE_DRAW}: the probability that the best candidate wins the draw over all candidates.
+     */
+    public enum StopRule { TOP_TWO, WHOLE_DRAW }
 
     /** Effective neighbours a controller needs for every candidate to count as having evidence in {@link Mode#FIXED_ORDER}. */
     public static final double FIXED_ORDER_MIN_N_EFF = 3.0;
@@ -131,6 +148,7 @@ public final class Arbiter {
     private final Params params;
     private final Random random;
     private final Mode mode;
+    private final StopRule stopRule;
 
     /** {@link Mode#ARBITRATION}. */
     public Arbiter(List<Controller> cheapestFirst, Params params, Random random) {
@@ -145,10 +163,18 @@ public final class Arbiter {
      * @throws IllegalArgumentException if the list is empty or holds a null, or a parameter is null
      */
     public Arbiter(List<Controller> cheapestFirst, Params params, Random random, Mode mode) {
-        if (mode == null) {
-            throw new IllegalArgumentException("mode must not be null");
+        this(cheapestFirst, params, random, mode, StopRule.TOP_TWO);
+    }
+
+    /**
+     * @param stopRule how decisiveness is measured
+     */
+    public Arbiter(List<Controller> cheapestFirst, Params params, Random random, Mode mode, StopRule stopRule) {
+        if (mode == null || stopRule == null) {
+            throw new IllegalArgumentException("mode and stopRule must not be null");
         }
         this.mode = mode;
+        this.stopRule = stopRule;
         if (cheapestFirst == null || cheapestFirst.isEmpty()) {
             throw new IllegalArgumentException("at least one controller is required");
         }
@@ -205,7 +231,7 @@ public final class Arbiter {
         List<ArbitrationDecision.Consultation> consultations = new ArrayList<>();
         List<Estimate> deciding = null;
         ControllerType decidingType = null;
-        double bestConf = 0.0;
+        double bestConf = -1.0;
         for (int i = 0; i < controllers.size(); i++) {
             Controller c = controllers.get(i);
             if (i > 0 && budget < c.minEfficiency()) {
@@ -213,7 +239,7 @@ public final class Arbiter {
             }
             List<Estimate> est = c.estimator().estimate(cands, h.clone(), focalDrive);
             checkShape(c.type(), est, n);
-            double conf = decisiveness(est);
+            double conf = confidence(est);
             consultations.add(new ArbitrationDecision.Consultation(c.type(), conf, est));
             if (mode == Mode.FIXED_ORDER) {
                 // Every affordable controller is consulted; the rule below picks the one that decides.
@@ -243,40 +269,181 @@ public final class Arbiter {
                     ArbitrationDecision.ExplorationSource.SINGLE, novelty(deciding.get(0)));
         }
 
-        double maxQ = deciding.get(argmaxQ(deciding)).q();
-        int nTiedAtMax = 0;
-        for (Estimate e : deciding) {
-            if (e.q() == maxQ) {
-                nTiedAtMax++;
-            }
-        }
-
+        // What the draw runs over: the candidates the deciding controller has an opinion on, plus one pseudo-candidate
+        // standing for all it abstains on (none when it abstains on nothing).
+        DrawView view = DrawView.of(deciding);
         int chosenIndex;
         ArbitrationDecision.ExplorationSource source;
-        if (random.nextDouble() < params.epsilon()) {
+        Estimate best;
+        Estimate runnerUp;
+        int nTiedAtMax;
+        if (view.trained.isEmpty()) {
+            // No opinion at all: the floor and the uniform pick both draw one nextInt(n) after the usual nextDouble.
+            boolean floor = random.nextDouble() < params.epsilon();
             chosenIndex = random.nextInt(n);
-            source = ArbitrationDecision.ExplorationSource.EPSILON;
+            source = floor ? ArbitrationDecision.ExplorationSource.EPSILON
+                    : ArbitrationDecision.ExplorationSource.ABSTAIN_UNIFORM;
+            best = deciding.get(0);
+            runnerUp = null;
+            nTiedAtMax = n;
         } else {
-            chosenIndex = 0;
-            double bestDraw = Double.NEGATIVE_INFINITY;
-            for (int i = 0; i < n; i++) {
-                Estimate e = deciding.get(i);
-                double draw = e.q() + novelty(e) + params.tau() * e.se() * random.nextGaussian();
-                if (draw > bestDraw) {
-                    bestDraw = draw;
-                    chosenIndex = i;
+            List<Estimate> trainedEstimates = new ArrayList<>();
+            for (int idx : view.trained) {
+                trainedEstimates.add(deciding.get(idx));
+            }
+            int bestPos = argmaxQ(trainedEstimates);
+            best = trainedEstimates.get(bestPos);
+            runnerUp = trainedEstimates.size() > 1 ? trainedEstimates.get(secondIndex(trainedEstimates)) : null;
+            double maxQ = best.q();
+            nTiedAtMax = 0;
+            for (Estimate e : trainedEstimates) {
+                if (e.q() == maxQ) {
+                    nTiedAtMax++;
                 }
             }
-            // Issue #105: greedy means "as good as the best", so a pick tied at the highest Q is GREEDY too.
-            // Comparing indices instead labelled every pick THOMPSON among equal candidates (all-untrained cells).
-            source = deciding.get(chosenIndex).q() == maxQ
-                    ? ArbitrationDecision.ExplorationSource.GREEDY
-                    : ArbitrationDecision.ExplorationSource.THOMPSON;
+            if (random.nextDouble() < params.epsilon()) {
+                chosenIndex = random.nextInt(n);
+                source = ArbitrationDecision.ExplorationSource.EPSILON;
+            } else {
+                int winner = 0;
+                double bestDraw = Double.NEGATIVE_INFINITY;
+                for (int i = 0; i < view.estimates.size(); i++) {
+                    Estimate e = view.estimates.get(i);
+                    double draw = e.q() + novelty(e) + params.tau() * e.se() * random.nextGaussian();
+                    if (draw > bestDraw) {
+                        bestDraw = draw;
+                        winner = i;
+                    }
+                }
+                if (view.map[winner] < 0) {
+                    chosenIndex = view.abstained.get(random.nextInt(view.abstained.size()));
+                    source = ArbitrationDecision.ExplorationSource.ABSTAIN_UNIFORM;
+                } else {
+                    chosenIndex = view.map[winner];
+                    // Issue #105: greedy means "as good as the best", so a pick tied at the highest Q is GREEDY too.
+                    source = deciding.get(chosenIndex).q() == maxQ
+                            ? ArbitrationDecision.ExplorationSource.GREEDY
+                            : ArbitrationDecision.ExplorationSource.THOMPSON;
+                }
+            }
         }
 
         return new ArbitrationDecision(n, cands, deciding, consultations, decidingType, affordable, chosenIndex,
-                cands.get(chosenIndex), deciding.get(chosenIndex), deciding.get(argmaxQ(deciding)),
-                deciding.get(secondIndex(deciding)), nTiedAtMax, source, novelty(deciding.get(chosenIndex)));
+                cands.get(chosenIndex), deciding.get(chosenIndex), best, runnerUp, nTiedAtMax, source,
+                novelty(deciding.get(chosenIndex)));
+    }
+
+    /**
+     * The candidates of one controller as the draw sees them: those it has an opinion on, in order, then one pseudo-candidate
+     * for all it abstains on (when it abstains on any).
+     */
+    private static final class DrawView {
+        /** Candidate indices with an opinion. */
+        final List<Integer> trained = new ArrayList<>();
+        /** Candidate indices the controller abstains on. */
+        final List<Integer> abstained = new ArrayList<>();
+        /** The view's estimates: trained, then the pseudo-candidate when there is one. */
+        final List<Estimate> estimates = new ArrayList<>();
+        /** Per view entry, the candidate index; -1 for the pseudo-candidate. */
+        int[] map;
+
+        static DrawView of(List<Estimate> est) {
+            DrawView v = new DrawView();
+            for (int i = 0; i < est.size(); i++) {
+                (est.get(i).abstains() ? v.abstained : v.trained).add(i);
+            }
+            int size = v.trained.size() + (v.abstained.isEmpty() || v.trained.isEmpty() ? 0 : 1);
+            v.map = new int[size];
+            int k = 0;
+            Estimate best = null;
+            for (int idx : v.trained) {
+                Estimate e = est.get(idx);
+                v.estimates.add(e);
+                v.map[k++] = idx;
+                if (best == null || e.q() > best.q()) {
+                    best = e;
+                }
+            }
+            if (!v.abstained.isEmpty() && best != null) {
+                v.estimates.add(new Estimate(0.0, best.se(), best.sigma()));
+                v.map[k] = -1;
+            }
+            return v;
+        }
+    }
+
+    /**
+     * Decisiveness of one controller's estimates under the stop rule. A controller that abstains on every candidate has 0;
+     * otherwise it is computed over the draw's view (the opinions plus the pseudo-candidate).
+     */
+    private double confidence(List<Estimate> estimates) {
+        DrawView view = DrawView.of(estimates);
+        if (view.trained.isEmpty()) {
+            return 0.0;
+        }
+        return stopRule == StopRule.WHOLE_DRAW ? wholeDrawDecisiveness(view.estimates) : decisiveness(view.estimates);
+    }
+
+    /** Standard-normal grid of {@link #wholeDrawDecisiveness}: 201 points on [-6, 6]. */
+    private static final int QUAD_POINTS = 201;
+    private static final double QUAD_LIMIT = 6.0;
+
+    /**
+     * The probability that the candidate with the highest mean draw ({@code q + novelty}) wins the actual draw
+     * ({@code q + novelty + tau * se * N(0,1)} per candidate): the integral over the best candidate's draw of the product, over the
+     * others, of the probability that they draw less. Deterministic quadrature on a fixed grid; consumes no random numbers. A
+     * candidate with zero spread is a point. One candidate gives 1. It can be below 0.5 (many close candidates).
+     */
+    double wholeDrawDecisiveness(List<Estimate> estimates) {
+        int m = estimates.size();
+        if (m < 2) {
+            return 1.0;
+        }
+        double[] mean = new double[m];
+        double[] sd = new double[m];
+        int b = 0;
+        for (int i = 0; i < m; i++) {
+            Estimate e = estimates.get(i);
+            mean[i] = e.q() + novelty(e);
+            sd[i] = params.tau() * e.se();
+            if (mean[i] > mean[b]) {
+                b = i;
+            }
+        }
+        if (sd[b] == 0.0) {
+            return prodAtPoint(mean, sd, b);
+        }
+        double dz = 2 * QUAD_LIMIT / (QUAD_POINTS - 1);
+        double total = 0.0;
+        double weightSum = 0.0;
+        for (int g = 0; g < QUAD_POINTS; g++) {
+            double z = -QUAD_LIMIT + g * dz;
+            double w = Math.exp(-0.5 * z * z);
+            double x = mean[b] + sd[b] * z;
+            double prod = 1.0;
+            for (int j = 0; j < m && prod > 0.0; j++) {
+                if (j == b) {
+                    continue;
+                }
+                prod *= sd[j] == 0.0 ? (x > mean[j] ? 1.0 : (x == mean[j] ? 0.5 : 0.0))
+                        : 0.5 * Erf.erfc(-(x - mean[j]) / sd[j] / Math.sqrt(2.0));
+            }
+            total += w * prod;
+            weightSum += w;
+        }
+        return total / weightSum;
+    }
+
+    /** The best candidate's draw is a point: the product over the others of P(their draw is below it). */
+    private static double prodAtPoint(double[] mean, double[] sd, int b) {
+        double prod = 1.0;
+        for (int j = 0; j < mean.length; j++) {
+            if (j != b) {
+                prod *= sd[j] == 0.0 ? (mean[b] > mean[j] ? 1.0 : (mean[b] == mean[j] ? 0.5 : 0.0))
+                        : 0.5 * Erf.erfc(-(mean[b] - mean[j]) / sd[j] / Math.sqrt(2.0));
+            }
+        }
+        return prod;
     }
 
     /**
@@ -303,6 +470,9 @@ public final class Arbiter {
     /** Evidence in {@link Mode#FIXED_ORDER}: every candidate backed by at least {@link #FIXED_ORDER_MIN_N_EFF} neighbours. */
     private static boolean hasEvidence(List<Estimate> estimates) {
         for (Estimate e : estimates) {
+            if (e.abstains()) {
+                continue; // it makes no claim, so it needs no neighbours
+            }
             if (!Double.isNaN(e.nEff()) && e.nEff() < FIXED_ORDER_MIN_N_EFF) {
                 return false;
             }

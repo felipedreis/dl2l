@@ -38,7 +38,7 @@ CELL_KEY = re.compile(r"^(a\d)_L([01])T([01])$")
 OPERANT_PRIOR = (0.0, 1.0, 1.0)   # (Q, SE, sigma) of an unseen operant cell (OperantEstimator)
 EARLY_LIFE = 0.2                  # recipe 5: the first 20% of a creature's life
 MIN_CELL_UPDATES = 30             # recipe 5: cells with fewer updates are not in the calibration statistic
-SOURCE_LABELS = ["SINGLE", "GREEDY", "THOMPSON", "EPSILON"]
+SOURCE_LABELS = ["SINGLE", "GREEDY", "THOMPSON", "EPSILON", "ABSTAIN_UNIFORM"]
 
 # (column, label, higher-is-what) — the per-creature measures that get paired comparisons
 CREATURE_METRICS = [
@@ -115,9 +115,17 @@ def operant_updates_z(u: pd.DataFrame) -> pd.DataFrame:
     u = u.sort_values(key + ["seq"], kind="stable").copy()
     g = u.groupby(key)
     prior_q, prior_se, prior_sigma = OPERANT_PRIOR
-    q0 = g["q"].shift(1).fillna(prior_q)
-    se0 = g["se"].shift(1).fillna(prior_se)
-    sigma0 = g["sigma"].shift(1).fillna(prior_sigma)
+    if "q_prior" in u.columns and u["q_prior"].notna().any():
+        # Kalman cell: the logged estimate just before the update already includes the drift between observations, so it is
+        # used as is. A first outcome of an abstaining cell has no prior (null) and gets no z. sigma is not logged before the
+        # update; the previous row's sigma stands in (it moves slowly), the first row's own.
+        q0 = u["q_prior"]
+        se0 = u["se_prior"]
+        sigma0 = g["sigma"].shift(1).fillna(u["sigma"])
+    else:
+        q0 = g["q"].shift(1).fillna(prior_q)
+        se0 = g["se"].shift(1).fillna(prior_se)
+        sigma0 = g["sigma"].shift(1).fillna(prior_sigma)
     u["z"] = (u["sample"] - q0) / np.sqrt(se0 ** 2 + sigma0 ** 2)
     return u
 
@@ -345,7 +353,7 @@ def paired_table(cr: pd.DataFrame) -> str:
     lines = ["| measure | contrast | per-seed differences | mean | SD (2 df) | 80% upper bound on SD |", "|---|---|---|---|---|---|"]
     for col, label in CREATURE_METRICS:
         tm = trial_means(cr, col)
-        for later, earlier in PAIRS + factorial_pairs(tm.columns):
+        for later, earlier in PAIRS + factorial_pairs(tm.columns) + kalman_pairs(tm.columns):
             r = paired_differences(tm, later, earlier)
             if r is None:
                 continue
@@ -374,6 +382,17 @@ def factorial_pairs(keys) -> list[tuple[str, str]]:
     return pairs
 
 
+# Kalman campaign (p117_kalman): A3 with the three changes added one at a time (docs/experiments/p117_kalman_recipe.md)
+KALMAN_ARMS = ["a3_base", "a3_mc", "a3_kal", "a3_all"]
+
+
+def kalman_pairs(keys) -> list[tuple[str, str]]:
+    """Contrasts of the p117_kalman arms, (later, earlier) as in PAIRS: each change on top of the one before it, then all three against the control."""
+    have = set(keys)
+    pairs = [("a3_mc", "a3_base"), ("a3_kal", "a3_mc"), ("a3_all", "a3_kal"), ("a3_all", "a3_base")]
+    return [(a, b) for a, b in pairs if a in have and b in have]
+
+
 def present_arms(cr: pd.DataFrame) -> list[str]:
     """The arms that have data in this experiment: the ladder arms in ladder order, then any other condition (the factorial's cells) in the
     order the spec lists them."""
@@ -396,7 +415,7 @@ def arm_table(cr: pd.DataFrame, cfg) -> str:
 
 def survival_text(cr: pd.DataFrame) -> str:
     out = []
-    for a, b in SURVIVAL_PAIRS + factorial_pairs(set(cr["condition"])):
+    for a, b in SURVIVAL_PAIRS + factorial_pairs(set(cr["condition"])) + kalman_pairs(set(cr["condition"])):
         r = survival_comparison(cr, a, b)
         if not r:
             continue

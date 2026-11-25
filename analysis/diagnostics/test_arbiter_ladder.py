@@ -74,6 +74,14 @@ class OperantCalibrationTest(unittest.TestCase):
         self.assertAlmostEqual(z[1], (-1.0 - 0.5) / math.sqrt(0.6 ** 2 + 1.0 ** 2))   # row 0 after its update
         self.assertAlmostEqual(z[2], (1.0 - 0.0) / math.sqrt(0.5 ** 2 + 0.9 ** 2))
 
+    def test_kalman_rows_are_scored_against_the_logged_prior_and_an_abstained_first_outcome_gets_no_z(self):
+        u = _updates([0.3, 0.1], q=[0.3, 0.2], se=[0.1, 0.07], sigma=[0.1, 0.1])
+        u["q_prior"] = [float("nan"), 0.3]
+        u["se_prior"] = [float("nan"), 0.105]
+        z = al.operant_updates_z(u)["z"].tolist()
+        self.assertTrue(math.isnan(z[0]))
+        self.assertAlmostEqual(z[1], (0.1 - 0.3) / math.sqrt(0.105 ** 2 + 0.1 ** 2))
+
     def test_cells_are_kept_apart_and_ordered_by_seq(self):
         a = _updates([1.0, 1.0], q=[0.5, 0.6], se=[0.5, 0.4], sigma=[1.0, 1.0], obj="RED_APPLE")
         b = _updates([-1.0, -1.0], q=[-0.5, -0.6], se=[0.5, 0.4], sigma=[1.0, 1.0], obj="GRAY_APPLE")

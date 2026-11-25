@@ -177,9 +177,11 @@ public class FullAppraisal extends CreatureComponent {
             }
             arbiterSelection = new ArbiterActionSelector(filterList, new Arbiter(
                     controllers,
-                    Arbiter.Params.defaults(),
+                    withTheta(Arbiter.Params.defaults(), learningSettings.getArbiterTheta()),
                     new Random(Seeds.derive(rootSeed, "creature", id.key, "arbiter")),
-                    learningSettings.isArbiterFixedOrder() ? Arbiter.Mode.FIXED_ORDER : Arbiter.Mode.ARBITRATION));
+                    learningSettings.isArbiterFixedOrder() ? Arbiter.Mode.FIXED_ORDER : Arbiter.Mode.ARBITRATION,
+                    learningSettings.getArbiterStopRule() == LearningSettings.ArbiterStopRule.WHOLE_DRAW
+                            ? Arbiter.StopRule.WHOLE_DRAW : Arbiter.StopRule.TOP_TWO));
             actionSelection = arbiterSelection;
             return;
         }
@@ -743,5 +745,10 @@ public class FullAppraisal extends CreatureComponent {
             new Action(restOrEscape, perception),
             new Action(ActionType.WANDER, perception)
         );
+    }
+
+    /** The paper's arbiter parameters with the configured theta (default 0.8, so every existing configuration is unchanged). */
+    private static Arbiter.Params withTheta(Arbiter.Params p, double theta) {
+        return new Arbiter.Params(theta, p.epsilon(), p.tau(), p.noveltyScale());
     }
 }

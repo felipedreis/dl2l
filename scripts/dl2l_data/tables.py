@@ -406,7 +406,8 @@ TABLES["run_info"] = (
 # operantEstimatorEnabled.
 TABLES["operant_updates"] = (
     """
-    SELECT creature_key, seq, time_ms, "cycle", object_type, action, sample, n, q, se, sigma
+    -- * on purpose: dumps from before the Kalman cell lack q_prior, se_prior and basis_prior and must still extract.
+    SELECT * EXCLUDE (id)
     FROM data.operant_update_state
     ORDER BY creature_key, seq
     """,

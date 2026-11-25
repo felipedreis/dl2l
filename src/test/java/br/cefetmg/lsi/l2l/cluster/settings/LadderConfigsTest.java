@@ -123,4 +123,40 @@ class LadderConfigsTest {
             assertEquals(x.isActionTendencyEnabled(), y.isActionTendencyEnabled());
         }
     }
+
+    @Test
+    void theKalmanCampaignAddsTheThreeChangesToTheFactorialControlOneAtATime() {
+        LearningSettings factorial = load("p117_fact_a3_L0T0.conf");
+        LearningSettings base = load("p117_kal_a3_base.conf");
+        LearningSettings mc = load("p117_kal_a3_mc.conf");
+        LearningSettings kal = load("p117_kal_a3_kal.conf");
+        LearningSettings all = load("p117_kal_a3_all.conf");
+        // The control is the factorial cell, with today's behaviour on every new switch.
+        for (LearningSettings s : new LearningSettings[] {factorial, base}) {
+            assertEquals(LearningSettings.OperantKind.WELFORD, s.getOperantKind());
+            assertEquals(LearningSettings.ArbiterStopRule.TOP_TWO, s.getArbiterStopRule());
+            assertTrue(s.isTimeoutZeroesApproach());
+            assertEquals(0.8, s.getArbiterTheta(), 0.0);
+            assertFalse(s.isActionTendencyEnabled());
+            assertFalse(s.isSleepHysteresisEnabled());
+            assertTrue(s.isEpisodicEstimatorEnabled());
+            assertFalse(s.isArbiterFixedOrder());
+        }
+        assertFalse(mc.isTimeoutZeroesApproach());
+        assertEquals(LearningSettings.OperantKind.WELFORD, mc.getOperantKind());
+        assertEquals(LearningSettings.ArbiterStopRule.TOP_TWO, mc.getArbiterStopRule());
+        assertFalse(kal.isTimeoutZeroesApproach());
+        assertEquals(LearningSettings.OperantKind.KALMAN, kal.getOperantKind());
+        assertEquals(LearningSettings.ArbiterStopRule.TOP_TWO, kal.getArbiterStopRule());
+        assertFalse(all.isTimeoutZeroesApproach());
+        assertEquals(LearningSettings.OperantKind.KALMAN, all.getOperantKind());
+        assertEquals(LearningSettings.ArbiterStopRule.WHOLE_DRAW, all.getArbiterStopRule());
+        for (LearningSettings s : new LearningSettings[] {mc, kal, all}) {
+            assertFalse(s.isActionTendencyEnabled());
+            assertFalse(s.isSleepHysteresisEnabled());
+            assertTrue(s.isEpisodicEstimatorEnabled());
+            assertFalse(s.isArbiterFixedOrder());
+            assertEquals(0.8, s.getArbiterTheta(), 0.0);
+        }
+    }
 }

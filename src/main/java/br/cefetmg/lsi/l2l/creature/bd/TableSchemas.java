@@ -400,21 +400,21 @@ public final class TableSchemas {
                                 col("n_tied_at_max", ColType.INT32, ArbitrationDecisionState::getNTiedAtMax),
                                 col("chosen_action", ColType.STRING, ArbitrationDecisionState::getChosenAction),
                                 col("chosen_object_type", ColType.STRING, ArbitrationDecisionState::getChosenObjectType),
-                                col("chosen_q", ColType.DOUBLE, ArbitrationDecisionState::getChosenQ),
-                                col("chosen_se", ColType.DOUBLE, ArbitrationDecisionState::getChosenSe),
-                                col("chosen_sigma", ColType.DOUBLE, ArbitrationDecisionState::getChosenSigma),
-                                col("best_q", ColType.DOUBLE, ArbitrationDecisionState::getBestQ),
-                                col("best_se", ColType.DOUBLE, ArbitrationDecisionState::getBestSe),
-                                col("best_sigma", ColType.DOUBLE, ArbitrationDecisionState::getBestSigma),
+                                col("chosen_q", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getChosenQ())),
+                                col("chosen_se", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getChosenSe())),
+                                col("chosen_sigma", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getChosenSigma())),
+                                col("best_q", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getBestQ())),
+                                col("best_se", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getBestSe())),
+                                col("best_sigma", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getBestSigma())),
                                 col("runnerup_q", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getRunnerUpQ())),
                                 col("runnerup_se", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getRunnerUpSe())),
                                 col("runnerup_sigma", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getRunnerUpSigma())),
                                 col("executed_action", ColType.STRING, ArbitrationDecisionState::getExecutedAction),
                                 col("executed_object_type", ColType.STRING, ArbitrationDecisionState::getExecutedObjectType),
                                 col("executed_source", ColType.STRING, ArbitrationDecisionState::getExecutedSource),
-                                col("executed_q", ColType.DOUBLE, ArbitrationDecisionState::getExecutedQ),
-                                col("executed_se", ColType.DOUBLE, ArbitrationDecisionState::getExecutedSe),
-                                col("executed_sigma", ColType.DOUBLE, ArbitrationDecisionState::getExecutedSigma)),
+                                col("executed_q", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getExecutedQ())),
+                                col("executed_se", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getExecutedSe())),
+                                col("executed_sigma", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getExecutedSigma()))),
                         controllerColumns(),
                         List.<Column<ArbitrationDecisionState>>of(
                                 col("novelty_bonus", ColType.DOUBLE, ArbitrationDecisionState::getNoveltyBonus)))));
@@ -431,7 +431,10 @@ public final class TableSchemas {
                 col("n", ColType.DOUBLE, OperantUpdateState::getN),
                 col("q", ColType.DOUBLE, OperantUpdateState::getQ),
                 col("se", ColType.DOUBLE, OperantUpdateState::getSe),
-                col("sigma", ColType.DOUBLE, OperantUpdateState::getSigma))));
+                col("sigma", ColType.DOUBLE, OperantUpdateState::getSigma),
+                col("q_prior", ColType.DOUBLE, (OperantUpdateState s) -> nanToNull(s.getQPrior())),
+                col("se_prior", ColType.DOUBLE, (OperantUpdateState s) -> nanToNull(s.getSePrior())),
+                col("basis_prior", ColType.STRING, OperantUpdateState::getBasisPrior))));
 
         // Issue #111: one row per episodic engram, written when its episode closes (A3/A5). The key k is
         // k_00..k_14 (EngramKeyEncoder: 7 one-hot types, distance ratio, sin, cos, contact, then 4 scaled drives).
@@ -475,13 +478,14 @@ public final class TableSchemas {
             cols.add(col(name + "_q", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getControllerQ(c))));
             cols.add(col(name + "_se", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getControllerSe(c))));
             cols.add(col(name + "_sigma", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getControllerSigma(c))));
+            cols.add(col(name + "_basis", ColType.STRING, (ArbitrationDecisionState s) -> s.getControllerBasis(c)));
         }
         return cols;
     }
 
     /** {@code NaN} is the in-memory "absent" of a double; the table stores it as a null (Arrow validity bit). */
     private static Object nanToNull(double v) {
-        return Double.isNaN(v) ? null : v;
+        return Double.isFinite(v) ? v : null;
     }
 
     @SafeVarargs

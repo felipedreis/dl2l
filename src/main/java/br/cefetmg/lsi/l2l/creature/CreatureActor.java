@@ -13,6 +13,7 @@ import br.cefetmg.lsi.l2l.creature.bd.CreatureState;
 import br.cefetmg.lsi.l2l.creature.bd.PersistenceExtension;
 import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
 import br.cefetmg.lsi.l2l.creature.arbiter.FocusTracker;
+import br.cefetmg.lsi.l2l.creature.arbiter.KalmanOperantEstimator;
 import br.cefetmg.lsi.l2l.creature.arbiter.OperantEstimator;
 import br.cefetmg.lsi.l2l.creature.arbiter.EngramKeyEncoder;
 import br.cefetmg.lsi.l2l.creature.arbiter.EpisodicEstimator;
@@ -163,10 +164,12 @@ public class CreatureActor implements Creature {
         // call, not shared through a reference (#104, Q1); the table ignores it.
         focalDriveInUse = effective.isFocalDriveEnabled();
         if (effective.isOperantEstimatorEnabled()) {
+            // WELFORD (default) or the Kalman cell (docs/plans/operant-kalman-and-stop-rule.md): both sit behind the same facade.
+            Creator<OperantStore> creator = effective.getOperantKind() == LearningSettings.OperantKind.KALMAN
+                    ? () -> new KalmanOperantEstimator()
+                    : () -> new OperantEstimator();
             operantStore = TypedActor.get(TypedActor.context())
-                    .typedActorOf(new TypedProps<>(OperantStore.class,
-                            (Creator<OperantEstimator>) () -> new OperantEstimator()),
-                            "operantEstimator");
+                    .typedActorOf(new TypedProps<>(OperantStore.class, creator), "operantEstimator");
         }
         // Episodic controller (A3/A5, #111-#116): same facade pattern, for the same reason (single writer Valuation,
         // reader FullAppraisal). The key lambda is the paper's 0.5 unless configured.

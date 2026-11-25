@@ -1,0 +1,12 @@
+# Smoke test of the p117_kalman switches (control and all three changes), one trial each, 3 minutes: not an experiment, no upload.
+name: p117_kalman_smoke
+trials: 1
+seeds: [10900]
+conditions:
+- {key: a3_base, simulation: simulations/p117_kal_smoke_a3_base.conf, label: 'A3 (control)', color: '#9e9ac8'}
+- {key: a3_all,  simulation: simulations/p117_kal_smoke_a3_all.conf,  label: 'A3 + all three', color: '#d73027'}
+image:
+  source: build
+data_dir: ml/data_p117_kalman_smoke
+extract: {format: parquet, backup: false, tables: all}
+upload: {enabled: false, prefix: p117_kalman_smoke}

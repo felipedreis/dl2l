@@ -195,12 +195,16 @@ public class Valuation extends CreatureComponent {
         if (!Double.isFinite(evaluation.arousalVariation) || evaluation.executedAction == null) {
             return; // record() rejects it, and a throw inside the facade would restart the actor and wipe the table
         }
-        double sample = evaluation.arousalVariation < 0 ? 1.0 : -1.0;
+        // Kalman cell: the sample is the drive reduction in the common unit (reward = -delta of the regulated drives), so it is
+        // comparable with the episodic controller's V(K | H); the Welford table keeps the legacy valence (+1 / -1).
+        double sample = learningSettings.getOperantKind() == LearningSettings.OperantKind.KALMAN
+                ? -evaluation.arousalVariation
+                : (evaluation.arousalVariation < 0 ? 1.0 : -1.0);
         try {
             OperantUpdate u = operantStore.record(evaluation.type, evaluation.executedAction, sample);
             persist(new OperantUpdateState(id.key, operantUpdateSeq++, System.currentTimeMillis(),
                     memorySystem.currentDecisionCycle(), evaluation.type.name(), evaluation.executedAction.name(),
-                    sample, u.n(), u.estimate().q(), u.estimate().se(), u.estimate().sigma()));
+                    sample, u.n(), u.estimate().q(), u.estimate().se(), u.estimate().sigma(), u.prior()));
         } catch (RuntimeException e) {
             logger.log(Level.WARNING, "Valuation[" + id + "]: operant update failed for " + evaluation, e);
         }
