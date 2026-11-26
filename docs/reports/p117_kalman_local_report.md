@@ -1,293 +1,89 @@
-# Report: local pilot of the Kalman operant cell, the whole-draw stop rule and the APPROACH credit in A3 (p117_kalman_local, 20 minutes)
+# Report: local pilot of the Kalman operant cell, the whole-draw stop rule and the APPROACH credit in A3
+
+Laptop pilot `p117_kalman_local`, 2026-11-25. Recipe: [`docs/experiments/p117_kalman_recipe.md`](../experiments/p117_kalman_recipe.md) (sections 7 and 8). The powered test is the cluster campaign: [`p117_kalman_report.md`](p117_kalman_report.md).
+
+**In short.** Adding the three changes one at a time, the Kalman operant cell is the step that moves the creature: it eats about 6.5 more times per minute, in all 6 seeds. The APPROACH credit alone changes little, and the whole-draw stop rule shows no effect in 20 minutes. Deaths fall from 7 of 30 to 2 of 30, but at n = 6 and a 20-minute cap that is a direction, not a result. The cluster run later showed the whole-draw rule to be harmful over a full hour, which this pilot was too short to see.
 
 ## Purpose
 
-A pilot of the `p117_kalman` campaign, run on the laptop because the cluster was not reachable: do the three changes of `docs/plans/operant-kalman-and-stop-rule.md` (APPROACH credit that survives a timeout, Kalman operant cell, whole-draw stop rule) move A3 in the plants world, added one at a time? It also served to debug the switches, the new columns and the analysis module before the cluster run. Recipe: `docs/experiments/p117_kalman_recipe.md` (sections 1-4 and 8). The powered test is the cluster run, reported in `p117_kalman_report.md`.
+To run the campaign's arms before cluster time was available, and to debug the new switches, the new data columns and the analysis end to end. The question is the campaign's: does each change move A3 in the plants world, and which one matters?
+
+## The experiment at a glance
+
+| arm | what changes against the arm above |
+|---|---|
+| A3 control | nothing (today's code) |
+| A3 + APPROACH credit | a timed-out episode keeps the credit of its approaches (`timeoutZeroesApproach = false`) |
+| A3 + Kalman operant | the operant table becomes a Kalman cell (`operantEstimator = KALMAN`) |
+| A3 + Kalman + whole-draw | the whole-draw stop rule (`arbiterStopRule = WHOLE_DRAW`) |
+
+Plants world with the sleep lock and the action tendency off, as in the campaign. **6 trials per arm, 5 creatures per trial (30 per arm), a 20-minute cap, seeds 10900-10905**, trials run one after the other on a laptop (image from commit `8ce28ec`, UI on). No A5 arm.
 
 ## Assumptions
 
-- Four arms in the plants world with the sleep lock and the action tendency off: `a3_base`, `a3_mc` (+ APPROACH credit), `a3_kal` (+ Kalman operant), `a3_all` (+ whole-draw stop rule). **6 trials per arm, seeds 10900-10905, 5 creatures per trial, cap 20 minutes** (not 60), trials run one after the other on a laptop, image built from commit `8ce28ec`, UI on.
-- The trial is the unit; the seed pairs the initial world only. Survival is censored at 1200 s, so the numbers of `p117_factorial` (60 minutes) are not comparable. With n = 6 the readings are directional; a log-rank p near 0.05 is not a pass.
-- Kalman constants (tau2 = 1e-4, pooled-variance floor 0.16) were chosen on a replay of `p117_factorial` data and frozen before the run.
-- Data caveat as in `p117_kalman_report.md` (fruit interactions only; survivors' EAT counts are lower bounds).
+- The trial is the unit; the seed pairs the initial world only. Death counts pool the 30 creatures of an arm.
+- Survival is censored at 20 minutes, a third of the campaign's window; the campaign's numbers are not comparable.
+- **n = 6 per arm: every reading is directional.** A p-value near 0.05 is not a pass.
+- The Kalman constants were chosen on a replay of `p117_factorial` data and frozen before the run. Fruit EATs only are recorded (no cactus or aloe).
 
 ## Hypothesis
 
-Recipe sections 3 and 4, with the 20-minute window of section 8: (1) `a3_mc` no worse than the control; (2) `a3_kal` fewer deaths than `a3_mc`; (3) `a3_all` fewer deaths than the control; (4) falsification: `a3_all` no better than the control. The cluster campaign, not this pilot, decides the stop rule.
+From the recipe, read on the 20-minute window: (1) the APPROACH credit is no worse than the control; (2) the Kalman cell has fewer deaths than the arm before it; (3) all three changes have fewer deaths than the control; (4) falsification: all three no better than the control.
 
 ## Results
-
-**Headline.** Deaths at 20 minutes (of 30 creatures per arm): control 7, + APPROACH credit 3, + Kalman operant 2, + whole-draw rule 2. EATs per minute 17.2, 18.2, 24.6, 27.0; d(H) over life 2.15, 1.50, 1.21, 1.27. All three changes against the control: 2 against 7 deaths (log-rank p = 0.060, Fisher p = 0.145); survival and d(H) better in 5 of 6 seeds, feeding in 6 of 6.
-
-### Effect of each change
-
-![Effect of each change](figures/p117_kalman_local/effects.png)
-
-Each row compares two arms; the dot is the estimate and the line its 95% interval. A filled dot means the interval excludes zero. Deaths are the difference in the share of creatures dead at the cap (creatures pooled); the other measures are the mean of the per-seed differences of trial means. The full per-creature numbers are in `figures/p117_kalman_local/creature_metrics.csv`.
 
 ### Survival
 
 ![Survival](figures/p117_kalman_local/survival_minutes.png)
 
-- A3_MC vs A3_BASE: deaths 3/30 vs 7/30 (Fisher p = 0.299); KM median beyond the cap vs beyond the cap; log-rank p = 0.1713
-- A3_KAL vs A3_MC: deaths 2/30 vs 3/30 (Fisher p = 1); KM median beyond the cap vs beyond the cap; log-rank p = 0.6212
-- A3_ALL vs A3_KAL: deaths 2/30 vs 2/30 (Fisher p = 1); KM median beyond the cap vs beyond the cap; log-rank p = 0.9725
-- A3_ALL vs A3_BASE: deaths 2/30 vs 7/30 (Fisher p = 0.145); KM median beyond the cap vs beyond the cap; log-rank p = 0.0599
-### Episodes (close types per arm)
+Seven control creatures die within 20 minutes, against 3, 2 and 2 in the other arms. All 14 deaths are starvation.
 
-Close-type mix per arm:
+### Effect of each change
 
-| condition | DEATH | PREEMPTED | REGULATED | TIMED_OUT |
-|---|---|---|---|---|
-| a3_all | 0.000 | 0.057 | 0.337 | 0.606 |
-| a3_base | 0.001 | 0.083 | 0.287 | 0.628 |
-| a3_kal | 0.000 | 0.065 | 0.352 | 0.583 |
-| a3_mc | 0.000 | 0.086 | 0.320 | 0.593 |
+![Effect of each change](figures/p117_kalman_local/effects.png)
 
-Steps per episode:
+Each row adds one change (the last row compares all three with the control). A filled dot means the 95% interval excludes zero.
 
-| condition | count | 50% | mean | max |
-|---|---|---|---|---|
-| a3_all | 5937.000 | 201.000 | 156.100 | 201.000 |
-| a3_base | 5331.000 | 201.000 | 160.700 | 201.000 |
-| a3_kal | 6088.000 | 201.000 | 153.400 | 201.000 |
-| a3_mc | 5988.000 | 201.000 | 155.100 | 201.000 |
-### Decision telemetry (operant and episodic controllers)
+- **The Kalman cell is the change that moves feeding**: +6.5 EATs per minute and +2.9 food EATs over the arm before it, with a lower drive deficit (-0.29). All three intervals exclude zero.
+- **The APPROACH credit alone** changes feeding by +0.9 EATs per minute and deaths by -13 points, neither established.
+- **The whole-draw rule** adds 2.3 EATs per minute, +0.5 food EATs (not established) and no change in deaths.
+- **All three against the control:** +9.7 EATs per minute, +3.8 food, d(H) -0.88 (all clear of zero); deaths -17 points, interval touching zero.
 
-**A3_BASE** (919,572 decisions). Source mix: {'SINGLE': 0.0, 'GREEDY': 0.4552, 'THOMPSON': 0.5149, 'EPSILON': 0.03, 'ABSTAIN_UNIFORM': 0.0}. Executed action not the chosen one: 0.00%. Informed share (late half, focused multi-candidate): 0.834. Deciding controller by life decile: {0: {'EPISODIC': 0.649, 'OPERANT': 0.351}, 1: {'EPISODIC': 0.669, 'OPERANT': 0.331}, 2: {'EPISODIC': 0.595, 'OPERANT': 0.405}, 3: {'EPISODIC': 0.557, 'OPERANT': 0.443}, 4: {'EPISODIC': 0.596, 'OPERANT': 0.404}, 5: {'EPISODIC': 0.588, 'OPERANT': 0.412}, 6: {'EPISODIC': 0.572, 'OPERANT': 0.428}, 7: {'EPISODIC': 0.63, 'OPERANT': 0.37}, 8: {'EPISODIC': 0.648, 'OPERANT': 0.352}, 9: {'EPISODIC': 0.594, 'OPERANT': 0.406}}.
+### What changes inside the arbiter
 
-Descriptive z by close type:
+![Who decides](figures/p117_kalman_local/decisions.png)
 
-| close_type | n | mean | variance | rms |
-|---|---|---|---|---|
-| DEATH | 668.000 | -1.597 | 72.011 | 8.629 |
-| PREEMPTED | 43555.000 | 0.015 | 0.401 | 0.633 |
-| REGULATED | 137073.000 | 0.082 | 0.347 | 0.595 |
-| TIMED_OUT | 675090.000 | -0.002 | 0.162 | 0.403 |
+The APPROACH credit changes nothing here: the two arms without the Kalman cell look identical. With the Kalman cell, episodic memory's share falls from about 60% to 53%. About 43% of all decisions become the operant's random picks among candidates it has no opinion on. The share of the operant's decisions that are EAT triples (1.8% to 5.4%), while episodic memory nearly stops eating (0.6%, and 0.0% with the whole-draw rule). This matches the campaign.
 
-Episodic calibration (decisions the episodic controller made, per closed episode): n = 556,627, mean z 0.036, variance 0.280 (an honest SE gives 0 and 1). Episodic share of decisions by life decile: [0.6489, 0.669, 0.5952, 0.5568, 0.5963, 0.5878, 0.5724, 0.6296, 0.6478, 0.5935]. Consulted the episodic controller in 0.644 of decisions, affordable in 0.693; mean novelty bonus 0.0189.
+### What they eat
 
-| close_type | n | mean | variance |
-|---|---|---|---|
-| DEATH | 87.000 | -10.108 | 468.800 |
-| PREEMPTED | 30455.000 | 0.043 | 0.467 |
-| REGULATED | 59153.000 | 0.222 | 0.403 |
-| TIMED_OUT | 466932.000 | 0.014 | 0.142 |
+![What they eat](figures/p117_kalman_local/eating.png)
 
-**A3_MC** (1,013,667 decisions). Source mix: {'SINGLE': 0.0, 'GREEDY': 0.4617, 'THOMPSON': 0.5084, 'EPSILON': 0.0298, 'ABSTAIN_UNIFORM': 0.0}. Executed action not the chosen one: 0.00%. Informed share (late half, focused multi-candidate): 0.820. Deciding controller by life decile: {0: {'EPISODIC': 0.653, 'OPERANT': 0.347}, 1: {'EPISODIC': 0.659, 'OPERANT': 0.341}, 2: {'EPISODIC': 0.646, 'OPERANT': 0.354}, 3: {'EPISODIC': 0.583, 'OPERANT': 0.417}, 4: {'EPISODIC': 0.503, 'OPERANT': 0.497}, 5: {'EPISODIC': 0.589, 'OPERANT': 0.411}, 6: {'EPISODIC': 0.615, 'OPERANT': 0.385}, 7: {'EPISODIC': 0.524, 'OPERANT': 0.476}, 8: {'EPISODIC': 0.603, 'OPERANT': 0.397}, 9: {'EPISODIC': 0.621, 'OPERANT': 0.379}}.
+The Kalman arms eat more food throughout the 20 minutes, but not more selectively: gray apples are 53-56% of the fruit eaten, against 52-53% without the Kalman cell.
 
-Descriptive z by close type:
+### How decisive the operant is
 
-| close_type | n | mean | variance | rms |
-|---|---|---|---|---|
-| DEATH | 205.000 | -4.908 | 165.816 | 13.751 |
-| PREEMPTED | 48049.000 | 0.025 | 0.376 | 0.614 |
-| REGULATED | 164802.000 | 0.081 | 0.354 | 0.600 |
-| TIMED_OUT | 715202.000 | -0.002 | 0.196 | 0.443 |
+![Decisiveness](figures/p117_kalman_local/decisiveness.png)
 
-Episodic calibration (decisions the episodic controller made, per closed episode): n = 603,123, mean z 0.043, variance 0.274 (an honest SE gives 0 and 1). Episodic share of decisions by life decile: [0.653, 0.6593, 0.6458, 0.5829, 0.5026, 0.5887, 0.615, 0.5238, 0.6026, 0.6206]. Consulted the episodic controller in 0.629 of decisions, affordable in 0.682; mean novelty bonus 0.0185.
+As in the campaign, the operant reaches the stopping threshold in only 6-8% of decisions in every arm. Without the Kalman cell the rest is mostly ties between untried cells (90%). With it, the rest is mostly "no opinion on any candidate" (85-89%).
 
-| close_type | n | mean | variance |
-|---|---|---|---|
-| DEATH | 102.000 | -9.408 | 293.304 |
-| PREEMPTED | 31837.000 | 0.066 | 0.425 |
-| REGULATED | 67995.000 | 0.232 | 0.419 |
-| TIMED_OUT | 503189.000 | 0.018 | 0.163 |
+### How focus episodes end, and calibration
 
-**A3_KAL** (1,059,242 decisions). Source mix: {'SINGLE': 0.0, 'GREEDY': 0.1817, 'THOMPSON': 0.3625, 'EPSILON': 0.0299, 'ABSTAIN_UNIFORM': 0.4259}. Executed action not the chosen one: 0.00%. Informed share (late half, focused multi-candidate): 0.676. Deciding controller by life decile: {0: {'EPISODIC': 0.65, 'OPERANT': 0.35}, 1: {'EPISODIC': 0.565, 'OPERANT': 0.435}, 2: {'EPISODIC': 0.543, 'OPERANT': 0.457}, 3: {'EPISODIC': 0.517, 'OPERANT': 0.483}, 4: {'EPISODIC': 0.538, 'OPERANT': 0.462}, 5: {'OPERANT': 0.528, 'EPISODIC': 0.472}, 6: {'OPERANT': 0.513, 'EPISODIC': 0.487}, 7: {'OPERANT': 0.536, 'EPISODIC': 0.464}, 8: {'EPISODIC': 0.565, 'OPERANT': 0.435}, 9: {'EPISODIC': 0.553, 'OPERANT': 0.447}}.
+![Episodes](figures/p117_kalman_local/episodes.png)
 
-Descriptive z by close type:
+![Calibration](figures/p117_kalman_local/calibration.png)
 
-| close_type | n | mean | variance | rms |
-|---|---|---|---|---|
-| DEATH | 7.000 | -11.392 | 265.967 | 18.915 |
-| PREEMPTED | 22671.000 | 0.129 | 0.595 | 0.782 |
-| REGULATED | 82422.000 | 0.212 | 0.538 | 0.764 |
-| TIMED_OUT | 482078.000 | 0.035 | 0.250 | 0.501 |
-
-Episodic calibration (decisions the episodic controller made, per closed episode): n = 563,160, mean z 0.091, variance 0.214 (an honest SE gives 0 and 1). Episodic share of decisions by life decile: [0.6503, 0.5648, 0.5433, 0.5165, 0.5382, 0.4722, 0.4869, 0.464, 0.5646, 0.5531]. Consulted the episodic controller in 0.539 of decisions, affordable in 0.598; mean novelty bonus 0.0168.
-
-| close_type | n | mean | variance |
-|---|---|---|---|
-| DEATH | 7.000 | -11.392 | 265.967 |
-| PREEMPTED | 21615.000 | 0.145 | 0.480 |
-| REGULATED | 75417.000 | 0.277 | 0.414 |
-| TIMED_OUT | 466121.000 | 0.059 | 0.157 |
-
-**A3_ALL** (1,046,346 decisions). Source mix: {'SINGLE': 0.0, 'GREEDY': 0.1913, 'THOMPSON': 0.3535, 'EPSILON': 0.0299, 'ABSTAIN_UNIFORM': 0.4252}. Executed action not the chosen one: 0.00%. Informed share (late half, focused multi-candidate): 0.689. Deciding controller by life decile: {0: {'EPISODIC': 0.647, 'OPERANT': 0.353}, 1: {'EPISODIC': 0.528, 'OPERANT': 0.472}, 2: {'EPISODIC': 0.571, 'OPERANT': 0.429}, 3: {'EPISODIC': 0.503, 'OPERANT': 0.497}, 4: {'OPERANT': 0.523, 'EPISODIC': 0.477}, 5: {'EPISODIC': 0.544, 'OPERANT': 0.456}, 6: {'EPISODIC': 0.506, 'OPERANT': 0.494}, 7: {'EPISODIC': 0.501, 'OPERANT': 0.499}, 8: {'EPISODIC': 0.521, 'OPERANT': 0.479}, 9: {'OPERANT': 0.501, 'EPISODIC': 0.499}}.
-
-Descriptive z by close type:
-
-| close_type | n | mean | variance | rms |
-|---|---|---|---|---|
-| DEATH | 97.000 | -5.771 | 193.135 | 14.982 |
-| PREEMPTED | 21499.000 | 0.110 | 0.540 | 0.743 |
-| REGULATED | 73707.000 | 0.214 | 0.576 | 0.788 |
-| TIMED_OUT | 486245.000 | 0.037 | 0.253 | 0.505 |
-
-Episodic calibration (decisions the episodic controller made, per closed episode): n = 550,953, mean z 0.089, variance 0.245 (an honest SE gives 0 and 1). Episodic share of decisions by life decile: [0.647, 0.5278, 0.5709, 0.5026, 0.4765, 0.5442, 0.5062, 0.5012, 0.5209, 0.4986]. Consulted the episodic controller in 0.551 of decisions, affordable in 0.609; mean novelty bonus 0.0166.
-
-| close_type | n | mean | variance |
-|---|---|---|---|
-| DEATH | 97.000 | -5.771 | 193.135 |
-| PREEMPTED | 20067.000 | 0.125 | 0.401 |
-| REGULATED | 66365.000 | 0.275 | 0.434 |
-| TIMED_OUT | 464424.000 | 0.062 | 0.158 |
-### Operant calibration (recipe 5)
-
-Per trial: variance of z per (object type, action) cell with enough updates and varying outcomes, weighted by update count; adoption range [0.8, 1.25] for A2 (mean over trials). `pooled_variance` is the unrestricted variance of all z, for comparison: constant cells drag it down.
-
-|  | statistic | pooled_variance | n_updates | cells | constant_cells |
-|---|---|---|---|---|---|
-| ('a3_base', 1) | 0.858 | 0.429 | 2108.000 | 3.000 | 2.000 |
-| ('a3_base', 2) | 1.452 | 0.680 | 2106.000 | 3.000 | 2.000 |
-| ('a3_base', 3) | 1.370 | 0.680 | 2532.000 | 3.000 | 2.000 |
-| ('a3_base', 4) | 0.734 | 0.368 | 2143.000 | 3.000 | 2.000 |
-| ('a3_base', 5) | 1.055 | 0.483 | 1833.000 | 3.000 | 2.000 |
-| ('a3_base', 6) | 0.913 | 0.438 | 1867.000 | 3.000 | 2.000 |
-| ('a3_mc', 1) | 1.259 | 0.617 | 2496.000 | 3.000 | 2.000 |
-| ('a3_mc', 2) | 1.180 | 0.567 | 2360.000 | 3.000 | 2.000 |
-| ('a3_mc', 3) | 1.344 | 0.589 | 1783.000 | 3.000 | 2.000 |
-| ('a3_mc', 4) | 1.161 | 0.600 | 2468.000 | 3.000 | 2.000 |
-| ('a3_mc', 5) | 1.260 | 0.609 | 2494.000 | 3.000 | 2.000 |
-| ('a3_mc', 6) | 1.048 | 0.520 | 2321.000 | 3.000 | 2.000 |
-| ('a3_kal', 1) | 0.864 | 0.486 | 3330.000 | 4.000 | 1.000 |
-| ('a3_kal', 2) | 0.691 | 0.376 | 3144.000 | 4.000 | 1.000 |
-| ('a3_kal', 3) | 0.767 | 0.431 | 3006.000 | 4.000 | 1.000 |
-| ('a3_kal', 4) | 0.787 | 0.431 | 3417.000 | 4.000 | 1.000 |
-| ('a3_kal', 5) | 0.901 | 0.498 | 3257.000 | 4.000 | 1.000 |
-| ('a3_kal', 6) | 0.912 | 0.512 | 3225.000 | 4.000 | 1.000 |
-| ('a3_all', 1) | 0.843 | 0.441 | 3513.000 | 4.000 | 1.000 |
-| ('a3_all', 2) | 0.914 | 0.493 | 3332.000 | 4.000 | 1.000 |
-| ('a3_all', 3) | 0.783 | 0.414 | 3216.000 | 4.000 | 1.000 |
-| ('a3_all', 4) | 0.878 | 0.468 | 3439.000 | 4.000 | 1.000 |
-| ('a3_all', 5) | 0.871 | 0.463 | 3265.000 | 4.000 | 1.000 |
-| ('a3_all', 6) | 0.930 | 0.489 | 3583.000 | 4.000 | 1.000 |
-
-**A3_BASE** cells (>= 30 updates, outcomes vary):
-
-|  | n | mean_z | variance | constant |
-|---|---|---|---|---|
-| ('ALOE', 'EAT') | 935 | 0.055 | 1.022 | False |
-| ('GREEN_APPLE', 'EAT') | 2556 | 0.090 | 1.333 | False |
-| ('RED_APPLE', 'EAT') | 2348 | 0.079 | 1.178 | False |
-
-Constant-outcome cells, left out:
-
-|  | n | mean_z | variance | constant |
-|---|---|---|---|---|
-| ('CACTUS', 'EAT') | 1376 | -0.220 | 0.007 | True |
-| ('GRAY_APPLE', 'EAT') | 5374 | -0.136 | 0.005 | True |
-
-**A3_MC** cells (>= 30 updates, outcomes vary):
-
-|  | n | mean_z | variance | constant |
-|---|---|---|---|---|
-| ('ALOE', 'EAT') | 1014 | 0.028 | 1.171 | False |
-| ('GREEN_APPLE', 'EAT') | 2865 | 0.076 | 1.334 | False |
-| ('RED_APPLE', 'EAT') | 2689 | 0.066 | 1.547 | False |
-
-Constant-outcome cells, left out:
-
-|  | n | mean_z | variance | constant |
-|---|---|---|---|---|
-| ('CACTUS', 'EAT') | 1295 | -0.227 | 0.007 | True |
-| ('GRAY_APPLE', 'EAT') | 6059 | -0.133 | 0.004 | True |
-
-**A3_KAL** cells (>= 30 updates, outcomes vary):
-
-|  | n | mean_z | variance | constant |
-|---|---|---|---|---|
-| ('ALOE', 'EAT') | 2772 | -0.005 | 0.617 | False |
-| ('CACTUS', 'EAT') | 507 | -0.064 | 0.010 | False |
-| ('GREEN_APPLE', 'EAT') | 3876 | 0.029 | 1.277 | False |
-| ('RED_APPLE', 'EAT') | 3602 | 0.020 | 0.962 | False |
-
-Constant-outcome cells, left out:
-
-|  | n | mean_z | variance | constant |
-|---|---|---|---|---|
-| ('GRAY_APPLE', 'EAT') | 8622 | -0.000 | 0.000 | True |
-
-**A3_ALL** cells (>= 30 updates, outcomes vary):
-
-|  | n | mean_z | variance | constant |
-|---|---|---|---|---|
-| ('ALOE', 'EAT') | 2873 | -0.006 | 0.749 | False |
-| ('CACTUS', 'EAT') | 272 | -0.111 | 0.014 | False |
-| ('GREEN_APPLE', 'EAT') | 3961 | 0.042 | 1.361 | False |
-| ('RED_APPLE', 'EAT') | 3678 | 0.002 | 1.032 | False |
-
-Constant-outcome cells, left out:
-
-|  | n | mean_z | variance | constant |
-|---|---|---|---|---|
-| ('GRAY_APPLE', 'EAT') | 9564 | 0.000 | 0.000 | True |
-### Paired differences by seed
-
-Differences of trial means, later arm minus earlier arm; SD has 2 degrees of freedom, so size on the 80% upper bound (2.12 x SD), not the point estimate.
-
-| measure | contrast | per-seed differences | mean | SD (2 df) | 80% upper bound on SD |
-|---|---|---|---|---|---|
-| d(H) over life | A3_MC - A3_BASE | [-0.7926, -0.8998, 0.8925, -1.3454, -0.3098, -1.4692] | -0.654 | 0.864 | n/a |
-| d(H) over life | A3_KAL - A3_MC | [-0.2511, -0.1081, -0.5403, -0.1935, -0.6496, 0.0312] | -0.285 | 0.260 | n/a |
-| d(H) over life | A3_ALL - A3_KAL | [0.0086, -0.1213, 0.2486, 0.2247, 0.3232, -0.316] | 0.061 | 0.249 | n/a |
-| d(H) over life | A3_ALL - A3_BASE | [-1.0351, -1.1293, 0.6008, -1.3143, -0.6362, -1.7541] | -0.878 | 0.811 | n/a |
-| d(H), first 180 s | A3_MC - A3_BASE | [-0.0673, -0.6977, -0.1478, -0.7922, -0.0487, -0.1842] | -0.323 | 0.332 | n/a |
-| d(H), first 180 s | A3_KAL - A3_MC | [-0.3539, -0.4184, -0.1984, -0.2062, -0.5093, -0.7646] | -0.408 | 0.212 | n/a |
-| d(H), first 180 s | A3_ALL - A3_KAL | [0.2661, 0.3345, 0.8303, -0.0524, 0.3393, 0.2134] | 0.322 | 0.288 | n/a |
-| d(H), first 180 s | A3_ALL - A3_BASE | [-0.1551, -0.7816, 0.4841, -1.0508, -0.2188, -0.7354] | -0.410 | 0.558 | n/a |
-| EATs per minute | A3_MC - A3_BASE | [2.9996, -0.0018, -2.2783, 1.2368, 4.4545, -0.9095] | 0.917 | 2.504 | n/a |
-| EATs per minute | A3_KAL - A3_MC | [7.7579, 5.1716, 6.5471, 6.4653, 3.878, 9.048] | 6.478 | 1.828 | n/a |
-| EATs per minute | A3_ALL - A3_KAL | [2.588, 2.5864, 2.5913, 1.291, 3.689, 1.2962] | 2.340 | 0.916 | n/a |
-| EATs per minute | A3_ALL - A3_BASE | [13.3455, 7.7562, 6.8601, 8.9931, 12.0215, 9.4348] | 9.735 | 2.493 | n/a |
-| RED+GREEN EATs per minute | A3_MC - A3_BASE | [0.8787, 0.6119, -1.9579, 0.9764, 1.9542, -0.0768] | 0.398 | 1.327 | n/a |
-| RED+GREEN EATs per minute | A3_KAL - A3_MC | [3.7476, 1.8787, 3.701, 2.1518, 1.838, 4.0258] | 2.890 | 1.035 | n/a |
-| RED+GREEN EATs per minute | A3_ALL - A3_KAL | [0.1929, 1.0608, 0.1872, 0.393, 1.261, -0.2476] | 0.475 | 0.575 | n/a |
-| RED+GREEN EATs per minute | A3_ALL - A3_BASE | [4.8192, 3.5515, 1.9303, 3.5213, 5.0532, 3.7013] | 3.763 | 1.118 | n/a |
-| D: life deciles with an EAT | A3_MC - A3_BASE | [0.8, 0.2, -0.6, -0.4, 1.6, -0.8] | 0.133 | 0.927 | n/a |
-| D: life deciles with an EAT | A3_KAL - A3_MC | [1.0, -0.2, 0.8, -0.2, -0.8, 0.4] | 0.167 | 0.686 | n/a |
-| D: life deciles with an EAT | A3_ALL - A3_KAL | [0.4, 0.2, 0.0, 0.4, 0.6, 0.0] | 0.267 | 0.242 | n/a |
-| D: life deciles with an EAT | A3_ALL - A3_BASE | [2.2, 0.2, 0.2, -0.2, 1.4, -0.4] | 0.567 | 1.015 | n/a |
-| observed time (s) | A3_MC - A3_BASE | [144.1778, 183.8252, -400.4206, 124.9316, 302.3694, 266.1584] | 103.507 | 256.324 | n/a |
-| observed time (s) | A3_KAL - A3_MC | [-0.0376, 0.01, 325.8828, -0.0262, 0.0422, -25.9146] | 49.993 | 135.555 | n/a |
-| observed time (s) | A3_ALL - A3_KAL | [-0.0974, -0.0188, -35.005, 0.0902, -76.6932, 25.8436] | -14.313 | 36.182 | n/a |
-| observed time (s) | A3_ALL - A3_BASE | [144.0428, 183.8164, -109.5428, 124.9956, 225.7184, 266.0874] | 139.186 | 132.420 | n/a |
-| died (share) | A3_MC - A3_BASE | [-0.2, -0.2, 0.6, -0.2, -0.4, -0.4] | -0.133 | 0.372 | n/a |
-| died (share) | A3_KAL - A3_MC | [0.0, 0.0, -0.4, 0.0, 0.0, 0.2] | -0.033 | 0.197 | n/a |
-| died (share) | A3_ALL - A3_KAL | [0.0, 0.0, 0.0, 0.0, 0.2, -0.2] | 0.000 | 0.126 | n/a |
-| died (share) | A3_ALL - A3_BASE | [-0.2, -0.2, 0.2, -0.2, -0.2, -0.4] | -0.167 | 0.197 | n/a |
-| focus transfers per 100 cycles (argmax approx.) | A3_MC - A3_BASE | [0.359, 0.1965, -0.4327, 0.2368, 0.3946, 0.4099] | 0.194 | 0.319 | n/a |
-| focus transfers per 100 cycles (argmax approx.) | A3_KAL - A3_MC | [-0.0145, -0.237, -0.0313, -0.0112, 0.0867, -0.161] | -0.061 | 0.117 | n/a |
-| focus transfers per 100 cycles (argmax approx.) | A3_ALL - A3_KAL | [0.0512, 0.0442, -0.1431, -0.2731, -0.1465, 0.0848] | -0.064 | 0.144 | n/a |
-| focus transfers per 100 cycles (argmax approx.) | A3_ALL - A3_BASE | [0.3957, 0.0037, -0.6071, -0.0475, 0.3348, 0.3336] | 0.069 | 0.380 | n/a |
-| focus opens per 100 cycles (argmax approx.) | A3_MC - A3_BASE | [0.0006, 0.0004, 0.0007, 0.0004, 0.0004, -0.0001] | 0.000 | 0.000 | n/a |
-| focus opens per 100 cycles (argmax approx.) | A3_KAL - A3_MC | [0.0005, -0.0002, -0.0002, -0.001, 0.0007, -0.0008] | -0.000 | 0.001 | n/a |
-| focus opens per 100 cycles (argmax approx.) | A3_ALL - A3_KAL | [-0.0011, 0.0002, 0.0006, 0.0005, -0.0005, 0.0001] | -0.000 | 0.001 | n/a |
-| focus opens per 100 cycles (argmax approx.) | A3_ALL - A3_BASE | [0.0, 0.0004, 0.0011, -0.0001, 0.0006, -0.0007] | 0.000 | 0.001 | n/a |
-| focus transfers per 100 cycles (tracker) | A3_MC - A3_BASE | [-0.0002, 0.0352, -0.0051, 0.0098, 0.0227, 0.0166] | 0.013 | 0.015 | n/a |
-| focus transfers per 100 cycles (tracker) | A3_KAL - A3_MC | [-0.0129, -0.0279, -0.0307, -0.0229, -0.0202, -0.0344] | -0.025 | 0.008 | n/a |
-| focus transfers per 100 cycles (tracker) | A3_ALL - A3_KAL | [-0.0056, -0.0296, -0.0339, -0.0017, -0.0054, 0.0065] | -0.012 | 0.016 | n/a |
-| focus transfers per 100 cycles (tracker) | A3_ALL - A3_BASE | [-0.0186, -0.0224, -0.0697, -0.0148, -0.0029, -0.0113] | -0.023 | 0.024 | n/a |
-| focus opens per 100 cycles (tracker) | A3_MC - A3_BASE | [0.0098, 0.0053, -0.0004, -0.0005, 0.0073, 0.0115] | 0.006 | 0.005 | n/a |
-| focus opens per 100 cycles (tracker) | A3_KAL - A3_MC | [0.0072, -0.0029, 0.0118, 0.0151, 0.0248, 0.0125] | 0.011 | 0.009 | n/a |
-| focus opens per 100 cycles (tracker) | A3_ALL - A3_KAL | [-0.0027, 0.0124, 0.0072, 0.0008, -0.0146, 0.0014] | 0.001 | 0.009 | n/a |
-| focus opens per 100 cycles (tracker) | A3_ALL - A3_BASE | [0.0142, 0.0148, 0.0186, 0.0155, 0.0174, 0.0254] | 0.018 | 0.004 | n/a |
-| focused share of cycles (tracker) | A3_MC - A3_BASE | [-0.0235, -0.0267, 0.0262, -0.035, -0.0148, -0.0486] | -0.020 | 0.026 | n/a |
-| focused share of cycles (tracker) | A3_KAL - A3_MC | [-0.0518, -0.0139, -0.0557, -0.0249, -0.0426, -0.032] | -0.037 | 0.016 | n/a |
-| focused share of cycles (tracker) | A3_ALL - A3_KAL | [-0.0005, -0.0214, 0.0264, 0.014, 0.0095, -0.0019] | 0.004 | 0.016 | n/a |
-| focused share of cycles (tracker) | A3_ALL - A3_BASE | [-0.0758, -0.062, -0.0031, -0.046, -0.0478, -0.0825] | -0.053 | 0.028 | n/a |
-| episodes per creature | A3_MC - A3_BASE | [26.8, 41.0, -69.8, 23.2, 57.2, 53.0] | 21.900 | 46.931 | n/a |
-| episodes per creature | A3_KAL - A3_MC | [-3.0, -11.4, 48.6, -3.0, 2.0, -13.2] | 3.333 | 22.898 | n/a |
-| episodes per creature | A3_ALL - A3_KAL | [-2.4, -3.8, -12.8, 0.4, -18.8, 7.2] | -5.033 | 9.354 | n/a |
-| episodes per creature | A3_ALL - A3_BASE | [21.4, 25.8, -34.0, 20.6, 40.4, 47.0] | 20.200 | 28.625 | n/a |
-| food share of EATs, first 20% of life (A3 criterion) | A3_MC - A3_BASE | [-0.04, 0.0206, -0.094, -0.0197, -0.085, 0.0467] | -0.029 | 0.056 | n/a |
-| food share of EATs, first 20% of life (A3 criterion) | A3_KAL - A3_MC | [0.0164, -0.0195, 0.0892, 0.0024, 0.0004, 0.0362] | 0.021 | 0.038 | n/a |
-| food share of EATs, first 20% of life (A3 criterion) | A3_ALL - A3_KAL | [-0.0403, 0.0301, -0.0266, -0.0301, -0.0014, -0.0706] | -0.023 | 0.034 | n/a |
-| food share of EATs, first 20% of life (A3 criterion) | A3_ALL - A3_BASE | [-0.0639, 0.0312, -0.0314, -0.0474, -0.0861, 0.0123] | -0.031 | 0.045 | n/a |
+Most focus episodes time out (58-63%), so the APPROACH credit fix reaches most of what episodic memory learns from; that it still changes little suggests the lost credit was not what limited A3. The Kalman cell's uncertainty is honest on average and slightly cautious (0.83 and 0.88); the Welford table sits between 1.06 and 1.21.
 
 ## Analysis
 
-- **The Kalman cell is the change that moves feeding** (`a3_kal` against `a3_mc`: +6.5 EATs per minute and +2.9 RED+GREEN, 6 of 6 seeds); the share of the operant's decisions that execute EAT goes from 1.8% to 5.4%. The APPROACH credit alone moves little (+0.9 EATs per minute, mixed seeds; 7 to 3 deaths, p = 0.17). The whole-draw rule showed no measurable effect (2 and 2 deaths).
-- **What this pilot could not see:** the whole-draw rule. The cluster campaign (60 minutes, 12 trials) found it harmful (28 against 13 deaths, p = 0.004); deaths are spread over the hour, so a 20-minute window sees about a third of them. Read this pilot as a debugging run that pointed in the right direction for the Kalman cell and was wrong, by omission, about the stop rule.
-- **Not established:** survival differences (n = 6, log-rank p 0.06-0.62), selectivity of the extra eating (food share of EATs 0.445 against 0.476), and anything about A5 (not run). Full discussion and the verdict against the stop rule: `p117_kalman_report.md`, Analysis.
+The pilot did its job. Every switch, column and figure works end to end on real runs, and it pointed at the right change: the Kalman cell is what makes the creature eat more food, through an operant that eats where the old table wandered. Its readings on survival were directional (7 deaths against 2), and the cluster campaign confirmed them only in direction (20 against 13 of 60).
+
+What the pilot got wrong is the whole-draw stop rule. It showed no difference over 20 minutes, while the campaign found it harmful over an hour (28 against 13 deaths of 60). Deaths are spread over the whole hour, half of them after minute 30, so a 20-minute window sees only the first third of them. The lesson for the next pilot is that a survival effect needs the full window, even when feeding effects show up early.
+
+Hypotheses on this window: (1) held; (2) not shown (2 against 3 deaths), although its feeding effect is clear; (3) held in direction (2 against 7); (4) did not occur.
+
+## Where the numbers come from
+
+- Data: HF `felipedreis/dl2l-experiments`, prefix `p117_kalman_local/`; locally `ml/data_p117_kalman_local/`.
+- Figures: `analysis/diagnostics/p117_kalman_aggregates.py p117_kalman_local` and `analysis/diagnostics/p117_kalman_figures.py p117_kalman_local`; per-creature measures in `figures/p117_kalman_local/creature_metrics.csv`.
