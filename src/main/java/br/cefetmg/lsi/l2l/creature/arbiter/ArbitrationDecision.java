@@ -29,6 +29,8 @@ import java.util.List;
  *                           Q; {@code null} when there is one candidate
  * @param nTiedAtMax         how many candidates have exactly the highest Q; 1 when the best is unique (#105)
  * @param source             how the action was picked
+ * @param noveltyBonus       the bonus the Thompson draw added to the chosen candidate, {@code noveltyScale / sqrt(1 +
+ *                           n_eff)}; 0 when the deciding controller gives no neighbour count (#114)
  */
 public record ArbitrationDecision(int candidateCount,
                                   List<Action> candidates,
@@ -42,7 +44,8 @@ public record ArbitrationDecision(int candidateCount,
                                   Estimate bestEstimate,
                                   Estimate runnerUpEstimate,
                                   int nTiedAtMax,
-                                  ExplorationSource source) {
+                                  ExplorationSource source,
+                                  double noveltyBonus) {
 
     /**
      * One controller's answer to the stopping rule.
@@ -66,9 +69,10 @@ public record ArbitrationDecision(int candidateCount,
      * How the chosen action was picked. {@code SINGLE}: one candidate, nothing to choose among.
      * {@code EPSILON}: the uniform floor. {@code GREEDY}: the chosen candidate's Q equals the highest Q, so the
      * draw was as good as the best (possibly one of several tied; #105). {@code THOMPSON}: the draw picked a
-     * candidate with a lower Q than the highest.
+     * candidate with a lower Q than the highest. {@code ABSTAIN_UNIFORM}: the controller abstained on the chosen candidate and the draw
+     * picked its pseudo-candidate "something else", then one of the abstained candidates uniformly (or it had no opinion at all).
      */
-    public enum ExplorationSource { SINGLE, GREEDY, THOMPSON, EPSILON }
+    public enum ExplorationSource { SINGLE, GREEDY, THOMPSON, EPSILON, ABSTAIN_UNIFORM }
 
     public ArbitrationDecision {
         if (consultations == null || decidingController == null || mostExpensiveAffordable == null

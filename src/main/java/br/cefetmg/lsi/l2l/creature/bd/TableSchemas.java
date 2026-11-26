@@ -2,6 +2,7 @@ package br.cefetmg.lsi.l2l.creature.bd;
 
 import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.arbiter.Arbiter;
+import br.cefetmg.lsi.l2l.creature.arbiter.EngramKeyEncoder;
 import br.cefetmg.lsi.l2l.world.WorldObjectType;
 
 import java.util.ArrayList;
@@ -399,22 +400,24 @@ public final class TableSchemas {
                                 col("n_tied_at_max", ColType.INT32, ArbitrationDecisionState::getNTiedAtMax),
                                 col("chosen_action", ColType.STRING, ArbitrationDecisionState::getChosenAction),
                                 col("chosen_object_type", ColType.STRING, ArbitrationDecisionState::getChosenObjectType),
-                                col("chosen_q", ColType.DOUBLE, ArbitrationDecisionState::getChosenQ),
-                                col("chosen_se", ColType.DOUBLE, ArbitrationDecisionState::getChosenSe),
-                                col("chosen_sigma", ColType.DOUBLE, ArbitrationDecisionState::getChosenSigma),
-                                col("best_q", ColType.DOUBLE, ArbitrationDecisionState::getBestQ),
-                                col("best_se", ColType.DOUBLE, ArbitrationDecisionState::getBestSe),
-                                col("best_sigma", ColType.DOUBLE, ArbitrationDecisionState::getBestSigma),
+                                col("chosen_q", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getChosenQ())),
+                                col("chosen_se", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getChosenSe())),
+                                col("chosen_sigma", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getChosenSigma())),
+                                col("best_q", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getBestQ())),
+                                col("best_se", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getBestSe())),
+                                col("best_sigma", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getBestSigma())),
                                 col("runnerup_q", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getRunnerUpQ())),
                                 col("runnerup_se", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getRunnerUpSe())),
                                 col("runnerup_sigma", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getRunnerUpSigma())),
                                 col("executed_action", ColType.STRING, ArbitrationDecisionState::getExecutedAction),
                                 col("executed_object_type", ColType.STRING, ArbitrationDecisionState::getExecutedObjectType),
                                 col("executed_source", ColType.STRING, ArbitrationDecisionState::getExecutedSource),
-                                col("executed_q", ColType.DOUBLE, ArbitrationDecisionState::getExecutedQ),
-                                col("executed_se", ColType.DOUBLE, ArbitrationDecisionState::getExecutedSe),
-                                col("executed_sigma", ColType.DOUBLE, ArbitrationDecisionState::getExecutedSigma)),
-                        controllerColumns())));
+                                col("executed_q", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getExecutedQ())),
+                                col("executed_se", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getExecutedSe())),
+                                col("executed_sigma", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getExecutedSigma()))),
+                        controllerColumns(),
+                        List.<Column<ArbitrationDecisionState>>of(
+                                col("novelty_bonus", ColType.DOUBLE, ArbitrationDecisionState::getNoveltyBonus)))));
 
         // Operant table (A2): one row per update of a (object type, action) cell.
         all.add(table("operant_update_state", OperantUpdateState.class, OperantUpdateState::getId, List.of(
@@ -428,7 +431,40 @@ public final class TableSchemas {
                 col("n", ColType.DOUBLE, OperantUpdateState::getN),
                 col("q", ColType.DOUBLE, OperantUpdateState::getQ),
                 col("se", ColType.DOUBLE, OperantUpdateState::getSe),
-                col("sigma", ColType.DOUBLE, OperantUpdateState::getSigma))));
+                col("sigma", ColType.DOUBLE, OperantUpdateState::getSigma),
+                col("q_prior", ColType.DOUBLE, (OperantUpdateState s) -> nanToNull(s.getQPrior())),
+                col("se_prior", ColType.DOUBLE, (OperantUpdateState s) -> nanToNull(s.getSePrior())),
+                col("basis_prior", ColType.STRING, OperantUpdateState::getBasisPrior))));
+
+        // Issue #111: one row per episodic engram, written when its episode closes (A3/A5). The key k is
+        // k_00..k_14 (EngramKeyEncoder: 7 one-hot types, distance ratio, sin, cos, contact, then 4 scaled drives).
+        List<Column<EpisodicEngramState>> engramBase = List.of(
+                col("creature_key", ColType.INT64, EpisodicEngramState::getCreatureKey),
+                col("seq", ColType.INT64, EpisodicEngramState::getSeq),
+                col("time_ms", ColType.INT64, EpisodicEngramState::getTimeMs),
+                col("episode_id", ColType.INT64, EpisodicEngramState::getEpisodeId),
+                col("drive", ColType.STRING, EpisodicEngramState::getDrive),
+                col("close_type", ColType.STRING, EpisodicEngramState::getCloseType),
+                col("step_cycle", ColType.INT64, EpisodicEngramState::getStepCycle),
+                col("steps_to_outcome", ColType.INT64, EpisodicEngramState::getStepsToOutcome),
+                col("action", ColType.STRING, EpisodicEngramState::getAction),
+                col("object_type", ColType.STRING, EpisodicEngramState::getObjectType),
+                col("h_hunger", ColType.DOUBLE, (EpisodicEngramState e) -> e.getH(0)),
+                col("h_sleep", ColType.DOUBLE, (EpisodicEngramState e) -> e.getH(1)),
+                col("h_pain", ColType.DOUBLE, (EpisodicEngramState e) -> e.getH(2)),
+                col("h_tedium", ColType.DOUBLE, (EpisodicEngramState e) -> e.getH(3)),
+                col("g_hunger", ColType.DOUBLE, (EpisodicEngramState e) -> e.getG(0)),
+                col("g_sleep", ColType.DOUBLE, (EpisodicEngramState e) -> e.getG(1)),
+                col("g_pain", ColType.DOUBLE, (EpisodicEngramState e) -> e.getG(2)),
+                col("g_tedium", ColType.DOUBLE, (EpisodicEngramState e) -> e.getG(3)),
+                col("bootstrap_term", ColType.DOUBLE, EpisodicEngramState::getBootstrapTerm));
+        List<Column<EpisodicEngramState>> engramKey = new ArrayList<>();
+        for (int i = 0; i < EngramKeyEncoder.KEY_DIM; i++) {
+            final int at = i;
+            engramKey.add(col(String.format("k_%02d", i), ColType.DOUBLE, (EpisodicEngramState e) -> e.getK(at)));
+        }
+        all.add(table("episodic_engram", EpisodicEngramState.class, EpisodicEngramState::getId,
+                concat(engramBase, engramKey)));
 
         return List.copyOf(all);
     }
@@ -442,13 +478,14 @@ public final class TableSchemas {
             cols.add(col(name + "_q", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getControllerQ(c))));
             cols.add(col(name + "_se", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getControllerSe(c))));
             cols.add(col(name + "_sigma", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getControllerSigma(c))));
+            cols.add(col(name + "_basis", ColType.STRING, (ArbitrationDecisionState s) -> s.getControllerBasis(c)));
         }
         return cols;
     }
 
     /** {@code NaN} is the in-memory "absent" of a double; the table stores it as a null (Arrow validity bit). */
     private static Object nanToNull(double v) {
-        return Double.isNaN(v) ? null : v;
+        return Double.isFinite(v) ? v : null;
     }
 
     @SafeVarargs

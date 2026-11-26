@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class EstimateTest {
@@ -81,5 +83,34 @@ class EstimateTest {
         assertThrows(IllegalArgumentException.class, () -> e.withSeScaled(-0.5));
         assertThrows(IllegalArgumentException.class, () -> e.withSeScaled(Double.NaN));
         assertThrows(IllegalArgumentException.class, () -> e.withSeScaled(Double.POSITIVE_INFINITY));
+    }
+
+    // ---- Basis and abstention (docs/plans/operant-kalman-and-stop-rule.md) ----
+
+    @Test
+    void anEstimateIsObservedByDefaultAndAbstainIsTheOnlyNonFiniteOne() {
+        assertEquals(Estimate.Basis.OBSERVED, new Estimate(0.1, 0.2, 0.3).basis());
+        assertEquals(Estimate.Basis.OBSERVED, new Estimate(0.1, 0.2, 0.3, 4.0).basis());
+        Estimate a = Estimate.abstain();
+        assertTrue(a.abstains());
+        assertTrue(Double.isNaN(a.q()) && Double.isNaN(a.sigma()) && a.se() == Double.POSITIVE_INFINITY);
+        assertThrows(IllegalArgumentException.class, () -> new Estimate(Double.NaN, 0.2, 0.3));
+        assertThrows(IllegalArgumentException.class, () -> new Estimate(0.1, Double.POSITIVE_INFINITY, 0.3));
+    }
+
+    @Test
+    void anAbstainingEstimateCannotBeBuiltWithNumbers() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new Estimate(0.1, 0.2, 0.3, Double.NaN, Estimate.Basis.ABSTAIN));
+        assertThrows(IllegalArgumentException.class,
+                () -> new Estimate(0.1, 0.2, 0.3, Double.NaN, null));
+    }
+
+    @Test
+    void scalingAnAbstainingEstimateReturnsItUnchangedAndAPooledOneKeepsItsBasis() {
+        assertSame(Estimate.abstain(), Estimate.abstain().withSeScaled(3.0));
+        Estimate pooled = new Estimate(0.1, 0.2, 0.3, Double.NaN, Estimate.Basis.POOLED_PRIOR);
+        assertEquals(Estimate.Basis.POOLED_PRIOR, pooled.withSeScaled(2.0).basis());
+        assertEquals(0.4, pooled.withSeScaled(2.0).se(), 1e-12);
     }
 }

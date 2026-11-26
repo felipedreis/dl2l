@@ -5,10 +5,16 @@ import br.cefetmg.lsi.l2l.common.SequentialId;
 import br.cefetmg.lsi.l2l.creature.CreatureDied;
 import br.cefetmg.lsi.l2l.creature.arbiter.ClosedEpisodes;
 import br.cefetmg.lsi.l2l.creature.arbiter.ClosedStep;
+import br.cefetmg.lsi.l2l.creature.arbiter.EngramKeyEncoder;
+import br.cefetmg.lsi.l2l.creature.arbiter.EngramWriter;
+import br.cefetmg.lsi.l2l.creature.arbiter.EpisodicEngram;
+import br.cefetmg.lsi.l2l.creature.arbiter.EpisodicStore;
+import br.cefetmg.lsi.l2l.creature.arbiter.HomeostaticValue;
 import br.cefetmg.lsi.l2l.creature.arbiter.OperantUpdate;
 import br.cefetmg.lsi.l2l.creature.arbiter.OperantStore;
 import br.cefetmg.lsi.l2l.creature.bd.ActionProbabilityState;
 import br.cefetmg.lsi.l2l.creature.bd.EpisodeReturnState;
+import br.cefetmg.lsi.l2l.creature.bd.EpisodicEngramState;
 import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
@@ -68,6 +74,14 @@ public class Valuation extends CreatureComponent {
      */
     private OperantStore operantStore;
 
+    /**
+     * A3/A5: the episodic store and the sink that writes closed episodes into it as engrams (#111), or null unless
+     * episodicEstimatorEnabled. Orders {@link EpisodicEngramState} rows within a creature with {@link #engramSeq}.
+     */
+    private EpisodicStore episodicStore;
+    private EngramWriter engramWriter;
+    private long engramSeq = 0;
+
     public Valuation(SequentialId id, LearningSettings learningSettings) {
         super(id);
         this.learningSettings = learningSettings;
@@ -80,6 +94,11 @@ public class Valuation extends CreatureComponent {
         expectancy = creature.expectancy();
         memorySystem = creature.memory();
         operantStore = creature.operantStore();
+        episodicStore = creature.episodicStore();
+        if (episodicStore != null) {
+            engramWriter = new EngramWriter(new EngramKeyEncoder(learningSettings.getEpisodicKeyLambda()),
+                    HomeostaticValue.defaults(), this::storeEngrams);
+        }
     }
 
     @Override
@@ -136,6 +155,20 @@ public class Valuation extends CreatureComponent {
             return;
         }
         persistEpisodeReturns(steps);
+        if (engramWriter != null) {
+            engramWriter.onClosed(steps);
+        }
+    }
+
+    /** The {@link EngramWriter}'s consumer: into the episodic store (async through the facade), then the table. */
+    private void storeEngrams(List<EpisodicEngram> engrams) {
+        episodicStore.add(engrams);
+        long now = System.currentTimeMillis();
+        PersistenceState[] rows = new PersistenceState[engrams.size()];
+        for (int i = 0; i < rows.length; i++) {
+            rows[i] = new EpisodicEngramState(id.key, engramSeq++, now, engrams.get(i));
+        }
+        persist(rows);
     }
 
     /**
@@ -162,12 +195,16 @@ public class Valuation extends CreatureComponent {
         if (!Double.isFinite(evaluation.arousalVariation) || evaluation.executedAction == null) {
             return; // record() rejects it, and a throw inside the facade would restart the actor and wipe the table
         }
-        double sample = evaluation.arousalVariation < 0 ? 1.0 : -1.0;
+        // Kalman cell: the sample is the drive reduction in the common unit (reward = -delta of the regulated drives), so it is
+        // comparable with the episodic controller's V(K | H); the Welford table keeps the legacy valence (+1 / -1).
+        double sample = learningSettings.getOperantKind() == LearningSettings.OperantKind.KALMAN
+                ? -evaluation.arousalVariation
+                : (evaluation.arousalVariation < 0 ? 1.0 : -1.0);
         try {
             OperantUpdate u = operantStore.record(evaluation.type, evaluation.executedAction, sample);
             persist(new OperantUpdateState(id.key, operantUpdateSeq++, System.currentTimeMillis(),
                     memorySystem.currentDecisionCycle(), evaluation.type.name(), evaluation.executedAction.name(),
-                    sample, u.n(), u.estimate().q(), u.estimate().se(), u.estimate().sigma()));
+                    sample, u.n(), u.estimate().q(), u.estimate().se(), u.estimate().sigma(), u.prior()));
         } catch (RuntimeException e) {
             logger.log(Level.WARNING, "Valuation[" + id + "]: operant update failed for " + evaluation, e);
         }

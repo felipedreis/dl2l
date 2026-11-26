@@ -97,6 +97,9 @@ public final class EpisodeBuffer {
     private final Deque<Pending> pending = new ArrayDeque<>();
     private Segment open;
     private long nextEpisodeId = 0;
+    /** True zeroes the return of APPROACH steps of a timed-out episode (today); false keeps every return. */
+    private final boolean timeoutZeroesApproach;
+
     /** Latest cycle seen on a decision or an outcome; anchors the pre-roll of {@link #outcomes}. */
     private int latestCycle = Integer.MIN_VALUE;
 
@@ -108,6 +111,15 @@ public final class EpisodeBuffer {
      *                                  {@code settleCycles} is below 1
      */
     public EpisodeBuffer(HomeostaticValue value, double gamma, int settleCycles) {
+        this(value, gamma, settleCycles, true);
+    }
+
+    /**
+     * @param timeoutZeroesApproach true (the paper's original rule) zeroes the return of the APPROACH steps of a timed-out
+     *                              episode; false keeps every step's Monte Carlo return whatever its action type
+     */
+    public EpisodeBuffer(HomeostaticValue value, double gamma, int settleCycles, boolean timeoutZeroesApproach) {
+        this.timeoutZeroesApproach = timeoutZeroesApproach;
         if (value == null) {
             throw new IllegalArgumentException("value must not be null");
         }
@@ -298,7 +310,7 @@ public final class EpisodeBuffer {
         List<ClosedStep> out = new ArrayList<>(seg.steps.size());
         for (int i = 0; i < seg.steps.size(); i++) {
             Step s = seg.steps.get(i);
-            boolean zeroed = closeType == ClosedStep.CloseType.TIMED_OUT
+            boolean zeroed = timeoutZeroesApproach && closeType == ClosedStep.CloseType.TIMED_OUT
                     && s.action.type == ActionType.APPROACH;
             double[] g = zeroed ? new double[dim] : returns[i];
             double v = zeroed ? 0 : value.value(g, s.h);

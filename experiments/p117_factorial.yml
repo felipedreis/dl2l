@@ -1,0 +1,22 @@
+# A3 and A5 in the plants world, crossed with the two hand-built priors under the arbiter: sleep hysteresis lock (L1 = on, L0 = off) and
+# innate action tendency lists (T1 = on, T0 = off): docs/experiments/p117_factorial_recipe.md. 12 trials per arm, seeds disjoint from the pilots and the
+# ladder campaign (10800-10815), 60-minute cap. Run on CCAD; pass the image on the command line,
+#   -e dl2l_image=ghcr.io/felipedreis/dl2l:sha-<commit>
+name: p117_factorial
+trials: 12
+seeds: [10900, 10901, 10902, 10903, 10904, 10905, 10906, 10907, 10908, 10909, 10910, 10911]
+conditions:
+- {key: a3_L1T1, simulation: simulations/p117_fact_a3_L1T1.conf, label: 'A3 lock on, tendency on', color: '#1b7837'}
+- {key: a3_L1T0, simulation: simulations/p117_fact_a3_L1T0.conf, label: 'A3 lock on, tendency off', color: '#5aae61'}
+- {key: a3_L0T1, simulation: simulations/p117_fact_a3_L0T1.conf, label: 'A3 lock off, tendency on', color: '#a6dba0'}
+- {key: a3_L0T0, simulation: simulations/p117_fact_a3_L0T0.conf, label: 'A3 lock off, tendency off', color: '#d9f0d3'}
+- {key: a5_L1T1, simulation: simulations/p117_fact_a5_L1T1.conf, label: 'A5 lock on, tendency on', color: '#762a83'}
+- {key: a5_L1T0, simulation: simulations/p117_fact_a5_L1T0.conf, label: 'A5 lock on, tendency off', color: '#9970ab'}
+- {key: a5_L0T1, simulation: simulations/p117_fact_a5_L0T1.conf, label: 'A5 lock off, tendency on', color: '#c2a5cf'}
+- {key: a5_L0T0, simulation: simulations/p117_fact_a5_L0T0.conf, label: 'A5 lock off, tendency off', color: '#e7d4e8'}
+image:
+  source: registry
+data_dir: ml/data_p117_factorial
+extract: {format: parquet, backup: false, tables: all}
+upload: {enabled: true, prefix: p117_factorial}
+analysis: {module: arbiter_ladder}

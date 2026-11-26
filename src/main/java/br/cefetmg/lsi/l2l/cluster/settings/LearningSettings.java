@@ -1,5 +1,6 @@
 package br.cefetmg.lsi.l2l.cluster.settings;
 
+import br.cefetmg.lsi.l2l.creature.arbiter.EngramKeyEncoder;
 import br.cefetmg.lsi.l2l.creature.arbiter.FocusTracker;
 import br.cefetmg.lsi.l2l.common.Constants;
 import br.cefetmg.lsi.l2l.creature.bd.ActionSelectionType;
@@ -95,6 +96,33 @@ public class LearningSettings implements Serializable {
     // --- Operant learning switch (p107 untrained-table control) — default ON. Off: the operant table answers the
     // arbiter but is never updated, so it stays at its prior (docs/experiments/p107_operant_recipe.md).
     private final boolean operantLearningEnabled;
+
+    // --- Episodic controller (A3/A5, issues #111-#116) — default-off; needs the arbiter and the focus tracker ---
+    private final boolean episodicEstimatorEnabled;
+    private final boolean arbiterFixedOrder;
+    private final double episodicKeyLambda;
+
+    // --- Sleep hysteresis gate (FullAppraisal.enforceHysteresisGate) — default ON; off is an experimental control ---
+    private final boolean sleepHysteresisEnabled;
+
+    // --- Operant Kalman cell, whole-draw stop rule, APPROACH credit (docs/plans/operant-kalman-and-stop-rule.md).
+    // Every default is today's behaviour, so the registered A2/A3/A5 arms reproduce unchanged. ---
+    private final OperantKind operantKind;
+    private final ArbiterStopRule arbiterStopRule;
+    private final boolean timeoutZeroesApproach;
+    private final double arbiterTheta;
+
+    /** Which learner backs the operant table: the decayed Welford cells (default) or the Kalman cell (plan, section 1). */
+    public enum OperantKind { WELFORD, KALMAN }
+
+    /**
+     * How the arbiter measures the confidence that stops the consultation: {@code TOP_TWO} compares the two best
+     * candidates (default); {@code WHOLE_DRAW} is the probability that the best candidate wins the actual draw (plan, section 2).
+     */
+    public enum ArbiterStopRule { TOP_TWO, WHOLE_DRAW }
+
+    /** The paper's theta (section 4.5): the decisiveness at which a controller stops the consultation. */
+    public static final double DEFAULT_ARBITER_THETA = 0.8;
 
     /**
      * Which mechanism chooses the action (issue #104). {@code FILTER_BASED} is the legacy filter chain;
@@ -295,7 +323,7 @@ public class LearningSettings implements Serializable {
                 operantLearningEnabled, ActionTendencySet.CAMPOS);
     }
 
-    /** @param actionTendencySet the tendency sets of {@link #getActionTendencies()}; null means {@code CAMPOS} */
+    /** The configuration before the episodic controller (A3/A5): both flags off, key lambda 0.5. */
     public LearningSettings(boolean circadianEnabled,
                             boolean consolidationEnabled,
                             List<ActionSelectionType> enabledFilters,
@@ -313,6 +341,132 @@ public class LearningSettings implements Serializable {
                             double focusThetaOff,
                             boolean operantLearningEnabled,
                             ActionTendencySet actionTendencySet) {
+        this(circadianEnabled, consolidationEnabled, enabledFilters, expectancyEnabled, expectancyMode,
+                neuromodulationEnabled, actionTendencyEnabled, orexinEnabled, endocrineEnabled, tickGatedCognition,
+                focalDriveEnabled, operantEstimatorEnabled, actionSelector, focusThetaOn, focusThetaOff,
+                operantLearningEnabled, actionTendencySet, false, false, EngramKeyEncoder.DEFAULT_LAMBDA);
+    }
+
+    /** Sleep hysteresis on, as before the switch existed. */
+    public LearningSettings(boolean circadianEnabled,
+                            boolean consolidationEnabled,
+                            List<ActionSelectionType> enabledFilters,
+                            boolean expectancyEnabled,
+                            ExpectancyMode expectancyMode,
+                            boolean neuromodulationEnabled,
+                            boolean actionTendencyEnabled,
+                            boolean orexinEnabled,
+                            boolean endocrineEnabled,
+                            boolean tickGatedCognition,
+                            boolean focalDriveEnabled,
+                            boolean operantEstimatorEnabled,
+                            ActionSelectorMode actionSelector,
+                            double focusThetaOn,
+                            double focusThetaOff,
+                            boolean operantLearningEnabled,
+                            ActionTendencySet actionTendencySet,
+                            boolean episodicEstimatorEnabled,
+                            boolean arbiterFixedOrder,
+                            double episodicKeyLambda) {
+        this(circadianEnabled, consolidationEnabled, enabledFilters, expectancyEnabled, expectancyMode,
+                neuromodulationEnabled, actionTendencyEnabled, orexinEnabled, endocrineEnabled, tickGatedCognition,
+                focalDriveEnabled, operantEstimatorEnabled, actionSelector, focusThetaOn, focusThetaOff,
+                operantLearningEnabled, actionTendencySet, episodicEstimatorEnabled, arbiterFixedOrder,
+                episodicKeyLambda, true);
+    }
+
+    /**
+     * @param sleepHysteresisEnabled false disables the anti-micro-nap gate that holds a sleeping creature in SLEEP for
+     *                               {@code MIN_SLEEP_TICKS} cycles (an experimental control; default true)
+     */
+    public LearningSettings(boolean circadianEnabled,
+                            boolean consolidationEnabled,
+                            List<ActionSelectionType> enabledFilters,
+                            boolean expectancyEnabled,
+                            ExpectancyMode expectancyMode,
+                            boolean neuromodulationEnabled,
+                            boolean actionTendencyEnabled,
+                            boolean orexinEnabled,
+                            boolean endocrineEnabled,
+                            boolean tickGatedCognition,
+                            boolean focalDriveEnabled,
+                            boolean operantEstimatorEnabled,
+                            ActionSelectorMode actionSelector,
+                            double focusThetaOn,
+                            double focusThetaOff,
+                            boolean operantLearningEnabled,
+                            ActionTendencySet actionTendencySet,
+                            boolean episodicEstimatorEnabled,
+                            boolean arbiterFixedOrder,
+                            double episodicKeyLambda,
+                            boolean sleepHysteresisEnabled) {
+        this(circadianEnabled, consolidationEnabled, enabledFilters, expectancyEnabled, expectancyMode,
+                neuromodulationEnabled, actionTendencyEnabled, orexinEnabled, endocrineEnabled, tickGatedCognition,
+                focalDriveEnabled, operantEstimatorEnabled, actionSelector, focusThetaOn, focusThetaOff,
+                operantLearningEnabled, actionTendencySet, episodicEstimatorEnabled, arbiterFixedOrder,
+                episodicKeyLambda, sleepHysteresisEnabled, OperantKind.WELFORD, ArbiterStopRule.TOP_TWO, true,
+                DEFAULT_ARBITER_THETA);
+    }
+
+    /**
+     * @param operantKind           the operant learner; {@code KALMAN} needs the operant estimator and the arbiter
+     * @param arbiterStopRule       how decisiveness is measured
+     * @param timeoutZeroesApproach true (today) zeroes the return of APPROACH steps of a timed-out episode; false keeps every return
+     * @param arbiterTheta          decisiveness at which a controller stops the consultation, in [0.5, 1]
+     */
+    public LearningSettings(boolean circadianEnabled,
+                            boolean consolidationEnabled,
+                            List<ActionSelectionType> enabledFilters,
+                            boolean expectancyEnabled,
+                            ExpectancyMode expectancyMode,
+                            boolean neuromodulationEnabled,
+                            boolean actionTendencyEnabled,
+                            boolean orexinEnabled,
+                            boolean endocrineEnabled,
+                            boolean tickGatedCognition,
+                            boolean focalDriveEnabled,
+                            boolean operantEstimatorEnabled,
+                            ActionSelectorMode actionSelector,
+                            double focusThetaOn,
+                            double focusThetaOff,
+                            boolean operantLearningEnabled,
+                            ActionTendencySet actionTendencySet,
+                            boolean episodicEstimatorEnabled,
+                            boolean arbiterFixedOrder,
+                            double episodicKeyLambda,
+                            boolean sleepHysteresisEnabled,
+                            OperantKind operantKind,
+                            ArbiterStopRule arbiterStopRule,
+                            boolean timeoutZeroesApproach,
+                            double arbiterTheta) {
+        this.operantKind = operantKind == null ? OperantKind.WELFORD : operantKind;
+        this.arbiterStopRule = arbiterStopRule == null ? ArbiterStopRule.TOP_TWO : arbiterStopRule;
+        this.timeoutZeroesApproach = timeoutZeroesApproach;
+        if (!(arbiterTheta >= 0.5 && arbiterTheta <= 1.0)) {
+            throw new IllegalArgumentException("arbiterTheta must be in [0.5, 1]: " + arbiterTheta);
+        }
+        this.arbiterTheta = arbiterTheta;
+        if (this.operantKind == OperantKind.KALMAN
+                && !(operantEstimatorEnabled && actionSelector == ActionSelectorMode.ARBITER)) {
+            throw new IllegalArgumentException("operantEstimator = KALMAN requires operantEstimatorEnabled and actionSelector = ARBITER");
+        }
+        if (this.arbiterStopRule == ArbiterStopRule.WHOLE_DRAW && actionSelector != ActionSelectorMode.ARBITER) {
+            throw new IllegalArgumentException("arbiterStopRule = WHOLE_DRAW requires actionSelector = ARBITER");
+        }
+        this.sleepHysteresisEnabled = sleepHysteresisEnabled;
+        if (episodicEstimatorEnabled && !(actionSelector == ActionSelectorMode.ARBITER && focalDriveEnabled)) {
+            throw new IllegalArgumentException(
+                    "episodicEstimatorEnabled requires actionSelector = ARBITER and focalDriveEnabled");
+        }
+        if (arbiterFixedOrder && !episodicEstimatorEnabled) {
+            throw new IllegalArgumentException("arbiterFixedOrder requires episodicEstimatorEnabled");
+        }
+        if (!Double.isFinite(episodicKeyLambda) || episodicKeyLambda < 0) {
+            throw new IllegalArgumentException("episodicKeyLambda must be finite and non-negative: " + episodicKeyLambda);
+        }
+        this.episodicEstimatorEnabled = episodicEstimatorEnabled;
+        this.arbiterFixedOrder = arbiterFixedOrder;
+        this.episodicKeyLambda = episodicKeyLambda;
         this.actionTendencySet = actionTendencySet == null ? ActionTendencySet.CAMPOS : actionTendencySet;
         this.operantLearningEnabled = operantLearningEnabled;
         if (!(focusThetaOff >= 0 && focusThetaOff < focusThetaOn)) {
@@ -413,6 +567,46 @@ public class LearningSettings implements Serializable {
     /** False only in the untrained-table control: the operant table is read but never updated. Default true. */
     public boolean isOperantLearningEnabled() {
         return operantLearningEnabled;
+    }
+
+    /** The operant learner: {@code WELFORD} unless configured. */
+    public OperantKind getOperantKind() {
+        return operantKind;
+    }
+
+    /** How the arbiter measures decisiveness: {@code TOP_TWO} unless configured. */
+    public ArbiterStopRule getArbiterStopRule() {
+        return arbiterStopRule;
+    }
+
+    /** True (today) zeroes the return of APPROACH steps of a timed-out episode; false keeps every step's return. */
+    public boolean isTimeoutZeroesApproach() {
+        return timeoutZeroesApproach;
+    }
+
+    /** The decisiveness at which a controller stops the consultation ({@link #DEFAULT_ARBITER_THETA} unless configured). */
+    public double getArbiterTheta() {
+        return arbiterTheta;
+    }
+
+    /** Whether a sleeping creature is held in SLEEP for {@code MIN_SLEEP_TICKS} cycles (true unless configured off). */
+    public boolean isSleepHysteresisEnabled() {
+        return sleepHysteresisEnabled;
+    }
+
+    /** A3: the episodic controller is wired into the arbiter, and closed episodes are written as engrams. */
+    public boolean isEpisodicEstimatorEnabled() {
+        return episodicEstimatorEnabled;
+    }
+
+    /** A5: the arbiter decides by position (episodic with evidence, else operant), not by decisiveness. */
+    public boolean isArbiterFixedOrder() {
+        return arbiterFixedOrder;
+    }
+
+    /** Weight of the internal-state block of the engram key (0.5, the paper's value, unless configured). */
+    public double getEpisodicKeyLambda() {
+        return episodicKeyLambda;
     }
 
     public boolean isOperantEstimatorEnabled() {

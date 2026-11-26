@@ -40,6 +40,9 @@ public class MemorySystemActor implements MemorySystem {
 
     private static final Logger LOGGER = Logger.getLogger(MemorySystemActor.class.getName());
 
+    /** Set by {@link #enableEpisodes}; true is the paper's original timeout rule. */
+    private boolean timeoutZeroesApproach = true;
+
     /** Issue #110: null until {@link #enableEpisodes}. Single writer: this actor. */
     private EpisodeBuffer episodes;
     private ComponentRef valuation;
@@ -133,12 +136,19 @@ public class MemorySystemActor implements MemorySystem {
 
     @Override
     public void enableEpisodes(ComponentRef valuation) {
+        enableEpisodes(valuation, true);
+    }
+
+    @Override
+    public void enableEpisodes(ComponentRef valuation, boolean timeoutZeroesApproach) {
         this.valuation = valuation;
+        this.timeoutZeroesApproach = timeoutZeroesApproach;
         this.episodes = newEpisodeBuffer();
     }
 
     private EpisodeBuffer newEpisodeBuffer() {
-        EpisodeBuffer buffer = new EpisodeBuffer(HomeostaticValue.defaults());
+        EpisodeBuffer buffer = new EpisodeBuffer(HomeostaticValue.defaults(), EpisodeBuffer.DEFAULT_GAMMA,
+                EpisodeBuffer.DEFAULT_SETTLE_CYCLES, timeoutZeroesApproach);
         buffer.addSink(written::addAll);
         return buffer;
     }

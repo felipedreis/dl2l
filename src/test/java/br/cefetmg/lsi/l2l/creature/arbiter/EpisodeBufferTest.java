@@ -251,6 +251,33 @@ class EpisodeBufferTest {
         }
     }
 
+    // 3b. With the zeroing switched off (docs/plans/operant-kalman-and-stop-rule.md, section 3) every step keeps its Monte Carlo return.
+    @Test
+    void timedOutEpisodeKeepsEveryReturnWhenZeroingIsOff() {
+        EpisodeBuffer b = new EpisodeBuffer(zeroSetPoint(), GAMMA, 1, false);
+        Collector c = new Collector();
+        b.addSink(c);
+
+        b.onFocus(new FocusEvent.Opened(3, HUNGER));
+        decide(b, 3, ActionType.APPROACH, HUNGRY, HUNGER, Double.NaN);
+        decide(b, 4, ActionType.EAT, HUNGRY, HUNGER, Double.NaN);
+        decide(b, 5, ActionType.APPROACH, HUNGRY, HUNGER, Double.NaN);
+        b.onOutcome(4, RELIEF);
+        b.onFocus(new FocusEvent.Closed(6, HUNGER, FocusEvent.Outcome.TIMED_OUT));
+        decide(b, 6, null, NO_K, null, Double.NaN);
+        decide(b, 7, null, NO_K, null, Double.NaN);
+
+        List<ClosedStep> steps = c.calls.get(0);
+        ClosedStep approach = at(steps, 3);
+        ClosedStep eat = at(steps, 4);
+        ClosedStep lateApproach = at(steps, 5);
+        // The approach at 3 precedes the relief at 4 by one cycle: G_3 = gamma * G_4 = gamma * (-1, 0, 0, 0). The one at 5 follows it: 0.
+        assertArrayEquals(new double[] {-GAMMA, 0, 0, 0}, approach.g(), TOL);
+        assertEquals(GAMMA, approach.value(), TOL);
+        assertArrayEquals(new double[] {-1, 0, 0, 0}, eat.g(), TOL);
+        assertEquals(0, lateApproach.value(), TOL);
+    }
+
     // 4. Death: the lethal deviation is the last outcome; open and held segments are written at once.
     @Test
     void deathWritesTheOpenSegmentWithTheLethalDeviationAsItsLastOutcome() {

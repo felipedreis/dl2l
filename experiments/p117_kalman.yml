@@ -1,0 +1,18 @@
+# The changes of docs/plans/operant-kalman-and-stop-rule.md added to A3 (revised 2026-11-25 after the local pilot: no a3_mc arm, an A5 control added), in the plants world with the sleep lock and the action tendency
+# both off (the only cell of p117_factorial where the controllers could be told apart and A3 was not floor-limited): docs/experiments/p117_kalman_recipe.md.
+# 12 trials per arm, the seeds of p117_factorial (10900-10911), 60-minute cap. Run on CCAD; pass the image on the command line,
+#   -e dl2l_image=ghcr.io/felipedreis/dl2l:sha-<commit>
+name: p117_kalman
+trials: 12
+seeds: [10900, 10901, 10902, 10903, 10904, 10905, 10906, 10907, 10908, 10909, 10910, 10911]
+conditions:
+- {key: a3_base, simulation: simulations/p117_kal_a3_base.conf, label: 'A3 (control)', color: '#2a78d6'}
+- {key: a3_kal,  simulation: simulations/p117_kal_a3_kal.conf,  label: 'A3 + APPROACH credit + Kalman operant', color: '#eb6834'}
+- {key: a3_all,  simulation: simulations/p117_kal_a3_all.conf,  label: 'A3 + all three (+ whole-draw stop rule)', color: '#1baf7a'}
+- {key: a5_base, simulation: simulations/p117_kal_a5_base.conf, label: 'A5 (fixed order, control)', color: '#eda100'}
+image:
+  source: registry
+data_dir: ml/data_p117_kalman
+extract: {format: parquet, backup: false, tables: all}
+upload: {enabled: true, prefix: p117_kalman}
+analysis: {module: arbiter_ladder}

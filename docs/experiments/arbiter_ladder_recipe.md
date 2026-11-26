@@ -49,13 +49,17 @@ so the proposal is to fix 0.4 / 0.15 for every arm that has a tracker (A1, A2, A
 | Operant sample | +1 if the reinforced drive fell, -1 otherwise; same events as the legacy table; fruit and plant targets only | review D2, D3 (Mapa 2009, `BBCSValuation`) |
 | Focus tracker δ, θcrit, Tmax, resume window, h* | 0.3, 4.0, 200 cycles, 10 cycles, 0.18 | `FocusTracker.Params.defaults()`; paper Fig. 2 |
 | Discount γ | 2^(-1/5) ≈ 0.87 | paper §4.2 (eligibility half-life of 5 cycles) |
-| Episodic: neighbours m, kernel width b, bias L, novelty | 10, median neighbour distance, 0.5, 0.1 / (1 + n_eff) | paper §4.3-4.5, #113 |
-| Efficiency budget: operant / episodic / world model | e ≥ 0, ≥ 0.3, ≥ 0.7 | paper §4.5, #114 |
+| Episodic: neighbours m, kernel width b, bias L, novelty | 10, median neighbour distance, 0.5, 0.1 / sqrt(1 + n_eff) | paper §4.3-4.5, #113 |
+| Efficiency budget: operant / episodic / world model | e ≥ 0, ≥ 0.3, ≥ 0.7, with e = the creature's normalised behavioural efficiency E(arousal)/10 | paper §4.5, #114 |
+| Episodic key, store | λ = 0.5, fixed population statistics (`EngramKeyEncoder`), 2000 engrams per action (FIFO) | paper §4.3; `docs/plans/issue-112-engram-key-encoder.md`, `issue-111-episodic-engram.md` |
+| A5 evidence rule | episodic decides when affordable and every candidate has n_eff ≥ 3; operant otherwise | #116 |
 | d(H) set point | 0.18 per drive (hunger, sleep, pain, tedium) | `HomeostaticValue.defaults()` |
 
 **Calibration [R].** Proposed: the SE rescale of §4.4 is **off** in A2, A3 and A5; calibration is *measured* (§5) and the rescale is evaluated as a
 separate step after A3 / A5. Reason: it changes the controllers' error bars, so it is a mechanism of its own, and A2's adoption criterion asks
 whether the uncorrected operant SE is honest.
+
+**Correction (2026-11-11, during implementation).** Revision 1 wrote the novelty bonus as 0.1 / (1 + n_eff), copying the text extract of the paper; the rendered PDF (§4.5) has the square root, 0.1 / sqrt(1 + n_eff), as issue #114 says. The table above is corrected. The implementation also adds, as a deliberate departure to be reported, a prior blend in the episodic σ (σ0 = 0.1, one meal's worth of value; the operant's σ0 = 1 is on the valence scale and made the episodic controller never decisive in an offline replay on the pilot's episodes, `docs/plans/issue-113-episodic-estimator.md`) so that a single neighbour gives a wide SE; and the median-distance bandwidth keeps n_eff high for distant neighbours (distance acts through β), so the paper's "one close, nine far gives n_eff ≈ 1" does not hold (`docs/plans/issue-113-episodic-estimator.md`).
 
 ## 5. Outcomes
 

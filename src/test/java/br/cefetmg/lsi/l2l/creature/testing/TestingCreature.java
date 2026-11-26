@@ -15,6 +15,11 @@ import br.cefetmg.lsi.l2l.creature.conditioning.expectancy.ExpectancyPredictors;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystem;
 import br.cefetmg.lsi.l2l.creature.memory.MemorySystemActor;
 
+import br.cefetmg.lsi.l2l.creature.arbiter.EngramKeyEncoder;
+import br.cefetmg.lsi.l2l.creature.arbiter.EpisodicEstimator;
+import br.cefetmg.lsi.l2l.creature.arbiter.EpisodicStore;
+import br.cefetmg.lsi.l2l.creature.arbiter.HomeostaticValue;
+import br.cefetmg.lsi.l2l.creature.arbiter.KalmanOperantEstimator;
 import br.cefetmg.lsi.l2l.creature.arbiter.OperantEstimator;
 import br.cefetmg.lsi.l2l.creature.arbiter.OperantStore;
 
@@ -45,6 +50,7 @@ public final class TestingCreature implements Creature {
 
     /** Issue #110: in-process operant estimator (no facade in the harness); null unless enabled. */
     private OperantStore operantStore;
+    private EpisodicStore episodicStore;
 
     private Point position;
     private boolean alive;
@@ -89,7 +95,12 @@ public final class TestingCreature implements Creature {
         olfactoryFieldRadius = Constants.MIN_OLFACTORY_FIELD_RADIUS;
 
         if (learningSettings.isOperantEstimatorEnabled()) {
-            operantStore = new OperantEstimator();
+            operantStore = learningSettings.getOperantKind() == LearningSettings.OperantKind.KALMAN
+                    ? new KalmanOperantEstimator() : new OperantEstimator();
+        }
+        if (learningSettings.isEpisodicEstimatorEnabled()) {
+            episodicStore = new EpisodicEstimator(new EngramKeyEncoder(learningSettings.getEpisodicKeyLambda()),
+                    HomeostaticValue.defaults());
         }
 
         // Instantiate every component and its dispatcher.
@@ -200,6 +211,8 @@ public final class TestingCreature implements Creature {
 
     @Override
     public OperantStore operantStore() { return operantStore; }
+    @Override
+    public EpisodicStore episodicStore() { return episodicStore; }
 
     @Override
     public ComponentRef memoryConsolidator() { return memoryConsolidator; }

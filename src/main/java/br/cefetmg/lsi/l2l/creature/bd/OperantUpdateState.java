@@ -22,8 +22,24 @@ public class OperantUpdateState implements PersistenceState {
     private double q;
     private double se;
     private double sigma;
+    /** The cell's estimate just before the update (what it predicted for this sample); NaN / null when not reported or abstaining. */
+    private double qPrior = Double.NaN;
+    private double sePrior = Double.NaN;
+    private String basisPrior;
 
     public OperantUpdateState() { }
+
+    /** With the cell's estimate just before the update, so calibration needs no reconstruction of the drift. */
+    public OperantUpdateState(long creatureKey, long seq, long timeMs, long cycle, String objectType,
+                              String action, double sample, double n, double q, double se, double sigma,
+                              br.cefetmg.lsi.l2l.creature.arbiter.Estimate prior) {
+        this(creatureKey, seq, timeMs, cycle, objectType, action, sample, n, q, se, sigma);
+        if (prior != null) {
+            this.basisPrior = prior.basis().name();
+            this.qPrior = prior.q();
+            this.sePrior = Double.isFinite(prior.se()) ? prior.se() : Double.NaN;
+        }
+    }
 
     public OperantUpdateState(long creatureKey, long seq, long timeMs, long cycle, String objectType,
                               String action, double sample, double n, double q, double se, double sigma) {
@@ -52,4 +68,7 @@ public class OperantUpdateState implements PersistenceState {
     public double getQ() { return q; }
     public double getSe() { return se; }
     public double getSigma() { return sigma; }
+    public double getQPrior() { return qPrior; }
+    public double getSePrior() { return sePrior; }
+    public String getBasisPrior() { return basisPrior; }
 }

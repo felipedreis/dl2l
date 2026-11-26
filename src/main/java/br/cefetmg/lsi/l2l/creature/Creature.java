@@ -1,5 +1,6 @@
 package br.cefetmg.lsi.l2l.creature;
 
+import br.cefetmg.lsi.l2l.creature.arbiter.EpisodicStore;
 import br.cefetmg.lsi.l2l.creature.arbiter.OperantStore;
 import br.cefetmg.lsi.l2l.common.Point;
 import br.cefetmg.lsi.l2l.creature.components.EmotionalSystem;
@@ -50,6 +51,11 @@ public interface Creature {
 
     /// Learning operant table fed per outcome by Valuation; null unless operantEstimatorEnabled
     OperantStore operantStore();
+
+    /** The episodic controller's store (A3/A5), or null unless {@code episodicEstimatorEnabled}. */
+    default EpisodicStore episodicStore() {
+        return null;
+    }
 
     /// Symbolic reward-expectancy predictor (baseline for the dopaminergic RPE)
     ExpectancyPredictor expectancy();

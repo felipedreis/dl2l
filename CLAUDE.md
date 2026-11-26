@@ -117,6 +117,7 @@ cd ansible
 ansible-playbook -i inventories/local run-experiment.yml -e experiment=<name>   # this Mac
 ansible-playbook -i inventories/pi    run-experiment.yml -e experiment=<name>   # Pi cluster
 ansible-playbook -i inventories/ccad  run-experiment.yml -e experiment=<name>   # CCAD (see below — submit/rescue)
+ansible-playbook -i inventories/ccad  ccad-status.yml    -e experiment=<name>   # CCAD progress: SLURM state per array task + DONE sentinels (read-only; use this, not rescue, to check progress)
 ```
 
 An experiment is one file, `experiments/<name>.yml` — conditions (each mapping to a

@@ -169,10 +169,19 @@ public class FullAppraisal extends CreatureComponent {
             if (learningSettings.isFilterEnabled(ActionSelectionType.TARGET_DISTANCE)) {
                 filterList.add(new TargetDistanceFilter());
             }
+            // Controllers cheapest first. A3 adds the episodic one (#113); A5 is A3 with the positional rule (#116).
+            List<Arbiter.Controller> controllers = new ArrayList<>();
+            controllers.add(new Arbiter.Controller(Arbiter.ControllerType.OPERANT, creature.operantStore()));
+            if (learningSettings.isEpisodicEstimatorEnabled()) {
+                controllers.add(new Arbiter.Controller(Arbiter.ControllerType.EPISODIC, creature.episodicStore()));
+            }
             arbiterSelection = new ArbiterActionSelector(filterList, new Arbiter(
-                    List.of(new Arbiter.Controller(Arbiter.ControllerType.OPERANT, creature.operantStore())),
-                    Arbiter.Params.defaults(),
-                    new Random(Seeds.derive(rootSeed, "creature", id.key, "arbiter"))));
+                    controllers,
+                    withTheta(Arbiter.Params.defaults(), learningSettings.getArbiterTheta()),
+                    new Random(Seeds.derive(rootSeed, "creature", id.key, "arbiter")),
+                    learningSettings.isArbiterFixedOrder() ? Arbiter.Mode.FIXED_ORDER : Arbiter.Mode.ARBITRATION,
+                    learningSettings.getArbiterStopRule() == LearningSettings.ArbiterStopRule.WHOLE_DRAW
+                            ? Arbiter.StopRule.WHOLE_DRAW : Arbiter.StopRule.TOP_TWO));
             actionSelection = arbiterSelection;
             return;
         }
@@ -399,12 +408,19 @@ public class FullAppraisal extends CreatureComponent {
      * the motor command correctly reflects the enforced SLEEP posture (speed=0, focus=0).
      */
     private Action enforceHysteresisGate(Action action, double behaviouralEfficiency) {
-        if (sleepEpisode.isActive()
-                && action.type != ActionType.SLEEP
-                && sleepEpisode.dwellTicks < Constants.MIN_SLEEP_TICKS) {
+        if (action.type != ActionType.SLEEP
+                && holdsSleep(learningSettings.isSleepHysteresisEnabled(), sleepEpisode.isActive(), sleepEpisode.dwellTicks)) {
             return new Action(ActionType.SLEEP, action.perception);
         }
         return action;
+    }
+
+    /**
+     * Whether the anti-micro-nap gate holds a creature in SLEEP: the switch is on, a sleep episode is active and it has not yet
+     * lasted {@link Constants#MIN_SLEEP_TICKS} cycles. Pure, so the switch and the boundary are testable without a creature.
+     */
+    static boolean holdsSleep(boolean hysteresisEnabled, boolean episodeActive, int dwellTicks) {
+        return hysteresisEnabled && episodeActive && dwellTicks < Constants.MIN_SLEEP_TICKS;
     }
 
     /**
@@ -696,7 +712,7 @@ public class FullAppraisal extends CreatureComponent {
      * can jump straight over once the creature is fast, so EAT stopped being a candidate
      * (issue #96). Anything inside mouth radius plus the object's own radius counts as contact.
      */
-    static double contactDistance(WorldObjectType type) {
+    public static double contactDistance(WorldObjectType type) {
         double objectRadius = 0;
         if (type instanceof FruitType fruit) {
             objectRadius = fruit.radius;
@@ -729,5 +745,10 @@ public class FullAppraisal extends CreatureComponent {
             new Action(restOrEscape, perception),
             new Action(ActionType.WANDER, perception)
         );
+    }
+
+    /** The paper's arbiter parameters with the configured theta (default 0.8, so every existing configuration is unchanged). */
+    private static Arbiter.Params withTheta(Arbiter.Params p, double theta) {
+        return new Arbiter.Params(theta, p.epsilon(), p.tau(), p.noveltyScale());
     }
 }
