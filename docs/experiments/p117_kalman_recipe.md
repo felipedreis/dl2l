@@ -100,7 +100,7 @@ CCAD, image `sha-7cb8310`, 48 trials (4 arms x 12 trials, seeds 10900-10911, 60-
 |---|---|---|---|---|
 | deaths at 60 min (of 60) | 20 | **13** | 28 | 16 |
 | observed time (s) | 3029 | 3258 | 2851 | 3240 |
-| d(H) over life | 1.83 | 1.39 | 1.65 | 1.40 |
+| d(H) over life | 1.83 | 1.38 | 1.65 | 1.40 |
 | EATs per minute | 18.6 | 25.8 | 27.6 | 19.6 |
 | RED+GREEN EATs per minute | 9.2 | 11.8 | 12.1 | 9.9 |
 

@@ -19,24 +19,12 @@ Recipe sections 3 and 4, with the 20-minute window of section 8: (1) `a3_mc` no 
 
 **Headline.** Deaths at 20 minutes (of 30 creatures per arm): control 7, + APPROACH credit 3, + Kalman operant 2, + whole-draw rule 2. EATs per minute 17.2, 18.2, 24.6, 27.0; d(H) over life 2.15, 1.50, 1.21, 1.27. All three changes against the control: 2 against 7 deaths (log-rank p = 0.060, Fisher p = 0.145); survival and d(H) better in 5 of 6 seeds, feeding in 6 of 6.
 
-### Per-arm measures (creature mean, then trial means)
+### Per-arm comparison
 
-| measure | A3 + all three (+ whole-draw stop rule) | A3 (control) | A3 + APPROACH credit + Kalman operant | A3 + APPROACH credit |
-|---|---|---|---|---|
-| d(H) over life | 1.271 (trials 1.043, 1.147, 1.765, 1.158, 1.541, 0.974) | 2.149 (trials 2.078, 2.276, 1.164, 2.472, 2.177, 2.729) | 1.210 (trials 1.034, 1.268, 1.516, 0.933, 1.217, 1.290) | 1.495 (trials 1.285, 1.376, 2.056, 1.127, 1.867, 1.259) |
-| d(H), first 180 s | 1.421 (trials 1.373, 1.351, 2.253, 0.983, 1.455, 1.109) | 1.830 (trials 1.528, 2.133, 1.769, 2.034, 1.674, 1.844) | 1.099 (trials 1.107, 1.016, 1.423, 1.036, 1.116, 0.896) | 1.507 (trials 1.461, 1.435, 1.621, 1.242, 1.625, 1.660) |
-| EATs per minute | 26.970 (trials 28.446, 25.859, 26.255, 27.151, 26.961, 27.151) | 17.235 (trials 15.100, 18.103, 19.394, 18.158, 14.939, 17.716) | 24.630 (trials 25.858, 23.273, 23.663, 25.860, 23.272, 25.855) | 18.152 (trials 18.100, 18.101, 17.116, 19.395, 19.394, 16.807) |
-| RED+GREEN EATs per minute | 11.951 (trials 12.516, 11.566, 11.335, 12.161, 12.149, 11.980) | 8.188 (trials 7.697, 8.014, 9.404, 8.640, 7.096, 8.278) | 11.477 (trials 12.323, 10.505, 11.147, 11.768, 10.888, 12.227) | 8.586 (trials 8.575, 8.626, 7.446, 9.617, 9.050, 8.201) |
-| D: life deciles with an EAT | 9.567 (trials 10.000, 9.400, 9.400, 9.600, 9.600, 9.400) | 9.000 (trials 7.800, 9.200, 9.200, 9.800, 8.200, 9.800) | 9.300 (trials 9.600, 9.200, 9.400, 9.200, 9.000, 9.400) | 9.133 (trials 8.600, 9.400, 8.600, 9.400, 9.800, 9.000) |
-| observed time (s) | 1156.956 (trials 1187.943, 1187.981, 1078.423, 1188.018, 1111.357, 1188.011) | 1017.769 (trials 1043.900, 1004.165, 1187.966, 1063.022, 885.639, 921.924) | 1171.269 (trials 1188.040, 1188.000, 1113.428, 1187.928, 1188.051, 1162.168) | 1121.276 (trials 1188.078, 1187.990, 787.545, 1187.954, 1188.008, 1188.082) |
-| died (share) | 0.067 (trials 0.000, 0.000, 0.200, 0.000, 0.200, 0.000) | 0.233 (trials 0.200, 0.200, 0.000, 0.200, 0.400, 0.400) | 0.067 (trials 0.000, 0.000, 0.200, 0.000, 0.000, 0.200) | 0.100 (trials 0.000, 0.000, 0.600, 0.000, 0.000, 0.000) |
-| focus transfers per 100 cycles (argmax approx.) | 0.956 (trials 1.179, 0.943, 0.623, 1.008, 0.879, 1.103) | 0.887 (trials 0.783, 0.939, 1.230, 1.055, 0.544, 0.769) | 1.020 (trials 1.128, 0.898, 0.766, 1.281, 1.026, 1.018) | 1.081 (trials 1.142, 1.135, 0.798, 1.292, 0.939, 1.179) |
-| focus opens per 100 cycles (argmax approx.) | 0.002 (trials 0.001, 0.002, 0.002, 0.002, 0.002, 0.001) | 0.001 (trials 0.001, 0.001, 0.001, 0.002, 0.001, 0.002) | 0.002 (trials 0.002, 0.001, 0.002, 0.001, 0.002, 0.001) | 0.002 (trials 0.002, 0.002, 0.002, 0.003, 0.001, 0.002) |
-| focus transfers per 100 cycles (tracker) | 0.063 (trials 0.065, 0.054, 0.042, 0.070, 0.060, 0.088) | 0.086 (trials 0.084, 0.076, 0.111, 0.085, 0.063, 0.100) | 0.075 (trials 0.071, 0.083, 0.075, 0.072, 0.066, 0.082) | 0.100 (trials 0.084, 0.111, 0.106, 0.094, 0.086, 0.116) |
-| focus opens per 100 cycles (tracker) | 0.508 (trials 0.502, 0.510, 0.509, 0.513, 0.503, 0.512) | 0.490 (trials 0.488, 0.495, 0.491, 0.497, 0.486, 0.486) | 0.507 (trials 0.505, 0.497, 0.502, 0.512, 0.518, 0.510) | 0.496 (trials 0.498, 0.500, 0.490, 0.497, 0.493, 0.498) |
-| focused share of cycles (tracker) | 0.888 (trials 0.869, 0.880, 0.913, 0.894, 0.894, 0.876) | 0.941 (trials 0.945, 0.942, 0.916, 0.940, 0.942, 0.958) | 0.883 (trials 0.869, 0.901, 0.887, 0.880, 0.884, 0.878) | 0.920 (trials 0.921, 0.915, 0.943, 0.905, 0.927, 0.910) |
-| episodes per creature | 197.900 (trials 202.000, 200.800, 178.600, 207.000, 188.000, 211.000) | 177.700 (trials 180.600, 175.000, 212.600, 186.400, 147.600, 164.000) | 202.933 (trials 204.400, 204.600, 191.400, 206.600, 206.800, 203.800) | 199.600 (trials 207.400, 216.000, 142.800, 209.600, 204.800, 217.000) |
-| food share of EATs, first 20% of life (A3 criterion) | 0.445 (trials 0.449, 0.475, 0.438, 0.431, 0.452, 0.424) | 0.476 (trials 0.513, 0.444, 0.469, 0.478, 0.538, 0.412) | 0.468 (trials 0.489, 0.445, 0.464, 0.461, 0.453, 0.495) | 0.447 (trials 0.473, 0.465, 0.375, 0.458, 0.453, 0.458) |
+![Per-arm comparison](figures/p117_kalman_local/arms.png)
+
+One dot per trial, the line and the number above it the arm mean. The full per-arm table (all measures, creature means and trial means) is `figures/p117_kalman_local/creature_metrics.csv`, one row per creature.
+
 ### Drive deficit
 
 ![Drive deficit](figures/p117_kalman_local/deficit.png)

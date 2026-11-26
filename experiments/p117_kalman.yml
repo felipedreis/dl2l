@@ -6,10 +6,10 @@ name: p117_kalman
 trials: 12
 seeds: [10900, 10901, 10902, 10903, 10904, 10905, 10906, 10907, 10908, 10909, 10910, 10911]
 conditions:
-- {key: a3_base, simulation: simulations/p117_kal_a3_base.conf, label: 'A3 (control)', color: '#9e9ac8'}
-- {key: a3_kal,  simulation: simulations/p117_kal_a3_kal.conf,  label: 'A3 + APPROACH credit + Kalman operant', color: '#1b7837'}
-- {key: a3_all,  simulation: simulations/p117_kal_a3_all.conf,  label: 'A3 + all three (+ whole-draw stop rule)', color: '#d73027'}
-- {key: a5_base, simulation: simulations/p117_kal_a5_base.conf, label: 'A5 (fixed order, control)', color: '#762a83'}
+- {key: a3_base, simulation: simulations/p117_kal_a3_base.conf, label: 'A3 (control)', color: '#2a78d6'}
+- {key: a3_kal,  simulation: simulations/p117_kal_a3_kal.conf,  label: 'A3 + APPROACH credit + Kalman operant', color: '#eb6834'}
+- {key: a3_all,  simulation: simulations/p117_kal_a3_all.conf,  label: 'A3 + all three (+ whole-draw stop rule)', color: '#1baf7a'}
+- {key: a5_base, simulation: simulations/p117_kal_a5_base.conf, label: 'A5 (fixed order, control)', color: '#eda100'}
 image:
   source: registry
 data_dir: ml/data_p117_kalman
