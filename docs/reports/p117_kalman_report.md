@@ -38,20 +38,15 @@ Written before the run (recipe sections 2b and 4):
 
 The tables and figures below are the generated ones (per-arm creature means with trial means in brackets, survival curves, calibration, paired differences by seed).
 
-### Per-arm comparison
+### Effect of each change
 
-![Per-arm comparison](figures/p117_kalman/arms.png)
+![Effect of each change](figures/p117_kalman/effects.png)
 
-One dot per trial, the line and the number above it the arm mean. The full per-arm table (all measures, creature means and trial means) is `figures/p117_kalman/creature_metrics.csv`, one row per creature.
+Each row compares two arms; the dot is the estimate and the line its 95% interval. A filled dot means the interval excludes zero. Deaths are the difference in the share of creatures dead at the cap (creatures pooled); the other measures are the mean of the per-seed differences of trial means. The full per-creature numbers are in `figures/p117_kalman/creature_metrics.csv`.
 
-### Drive deficit
-
-![Drive deficit](figures/p117_kalman/deficit.png)
-
-Per creature (dots) and per trial (diamonds).
 ### Survival
 
-![Survival](figures/p117_kalman/survival.png)
+![Survival](figures/p117_kalman/survival_minutes.png)
 
 - A3_ALL vs A3_KAL: deaths 28/60 vs 13/60 (Fisher p = 0.00668); KM median beyond the cap vs beyond the cap; log-rank p = 0.0041
 - A3_ALL vs A3_BASE: deaths 28/60 vs 20/60 (Fisher p = 0.192); KM median beyond the cap vs beyond the cap; log-rank p = 0.1627
@@ -59,11 +54,6 @@ Per creature (dots) and per trial (diamonds).
 - A3_ALL vs A5_BASE: deaths 28/60 vs 16/60 (Fisher p = 0.0366); KM median beyond the cap vs beyond the cap; log-rank p = 0.0178
 - A3_KAL vs A5_BASE: deaths 13/60 vs 16/60 (Fisher p = 0.67); KM median beyond the cap vs beyond the cap; log-rank p = 0.5577
 - A3_BASE vs A5_BASE: deaths 20/60 vs 16/60 (Fisher p = 0.55); KM median beyond the cap vs beyond the cap; log-rank p = 0.3696
-### Feeding and focus
-
-![Feeding and focus](figures/p117_kalman/feeding_and_focus.png)
-
-EATs per minute, life deciles with an EAT, and the argmax-approximated focus transfers per 100 cycles.
 ### Episodes (close types per arm)
 
 Close-type mix per arm:

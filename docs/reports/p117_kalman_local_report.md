@@ -19,30 +19,20 @@ Recipe sections 3 and 4, with the 20-minute window of section 8: (1) `a3_mc` no 
 
 **Headline.** Deaths at 20 minutes (of 30 creatures per arm): control 7, + APPROACH credit 3, + Kalman operant 2, + whole-draw rule 2. EATs per minute 17.2, 18.2, 24.6, 27.0; d(H) over life 2.15, 1.50, 1.21, 1.27. All three changes against the control: 2 against 7 deaths (log-rank p = 0.060, Fisher p = 0.145); survival and d(H) better in 5 of 6 seeds, feeding in 6 of 6.
 
-### Per-arm comparison
+### Effect of each change
 
-![Per-arm comparison](figures/p117_kalman_local/arms.png)
+![Effect of each change](figures/p117_kalman_local/effects.png)
 
-One dot per trial, the line and the number above it the arm mean. The full per-arm table (all measures, creature means and trial means) is `figures/p117_kalman_local/creature_metrics.csv`, one row per creature.
+Each row compares two arms; the dot is the estimate and the line its 95% interval. A filled dot means the interval excludes zero. Deaths are the difference in the share of creatures dead at the cap (creatures pooled); the other measures are the mean of the per-seed differences of trial means. The full per-creature numbers are in `figures/p117_kalman_local/creature_metrics.csv`.
 
-### Drive deficit
-
-![Drive deficit](figures/p117_kalman_local/deficit.png)
-
-Per creature (dots) and per trial (diamonds).
 ### Survival
 
-![Survival](figures/p117_kalman_local/survival.png)
+![Survival](figures/p117_kalman_local/survival_minutes.png)
 
 - A3_MC vs A3_BASE: deaths 3/30 vs 7/30 (Fisher p = 0.299); KM median beyond the cap vs beyond the cap; log-rank p = 0.1713
 - A3_KAL vs A3_MC: deaths 2/30 vs 3/30 (Fisher p = 1); KM median beyond the cap vs beyond the cap; log-rank p = 0.6212
 - A3_ALL vs A3_KAL: deaths 2/30 vs 2/30 (Fisher p = 1); KM median beyond the cap vs beyond the cap; log-rank p = 0.9725
 - A3_ALL vs A3_BASE: deaths 2/30 vs 7/30 (Fisher p = 0.145); KM median beyond the cap vs beyond the cap; log-rank p = 0.0599
-### Feeding and focus
-
-![Feeding and focus](figures/p117_kalman_local/feeding_and_focus.png)
-
-EATs per minute, life deciles with an EAT, and the argmax-approximated focus transfers per 100 cycles.
 ### Episodes (close types per arm)
 
 Close-type mix per arm:
