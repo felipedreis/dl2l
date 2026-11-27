@@ -174,7 +174,9 @@ public class Simulation {
                 !ls.hasPath("timeoutZeroesApproach") || ls.getBoolean("timeoutZeroesApproach"),
                 ls.hasPath("arbiterTheta") ? ls.getDouble("arbiterTheta") : LearningSettings.DEFAULT_ARBITER_THETA,
                 // Plan A.3: per-cycle transition rows (decision_steps, decision_percepts, cycle_outcomes). Default off.
-                ls.hasPath("transitionLoggingEnabled") && ls.getBoolean("transitionLoggingEnabled"));
+                ls.hasPath("transitionLoggingEnabled") && ls.getBoolean("transitionLoggingEnabled"),
+                // Exploration floor of the arbiter; default = the paper's 0.03. The JEPA collection run raises it.
+                ls.hasPath("arbiterEpsilon") ? ls.getDouble("arbiterEpsilon") : LearningSettings.DEFAULT_ARBITER_EPSILON);
     }
 
     public Long getNumHolders() {

@@ -180,7 +180,7 @@ public class FullAppraisal extends CreatureComponent {
             }
             arbiterSelection = new ArbiterActionSelector(filterList, new Arbiter(
                     controllers,
-                    withTheta(Arbiter.Params.defaults(), learningSettings.getArbiterTheta()),
+                    withThetaEpsilon(Arbiter.Params.defaults(), learningSettings.getArbiterTheta(), learningSettings.getArbiterEpsilon()),
                     new Random(Seeds.derive(rootSeed, "creature", id.key, "arbiter")),
                     learningSettings.isArbiterFixedOrder() ? Arbiter.Mode.FIXED_ORDER : Arbiter.Mode.ARBITRATION,
                     learningSettings.getArbiterStopRule() == LearningSettings.ArbiterStopRule.WHOLE_DRAW
@@ -777,7 +777,7 @@ public class FullAppraisal extends CreatureComponent {
     }
 
     /** The paper's arbiter parameters with the configured theta (default 0.8, so every existing configuration is unchanged). */
-    private static Arbiter.Params withTheta(Arbiter.Params p, double theta) {
-        return new Arbiter.Params(theta, p.epsilon(), p.tau(), p.noveltyScale());
+    private static Arbiter.Params withThetaEpsilon(Arbiter.Params p, double theta, double epsilon) {
+        return new Arbiter.Params(theta, epsilon, p.tau(), p.noveltyScale());
     }
 }

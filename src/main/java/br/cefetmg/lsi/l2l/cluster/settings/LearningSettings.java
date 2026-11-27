@@ -114,6 +114,7 @@ public class LearningSettings implements Serializable {
     private final ArbiterStopRule arbiterStopRule;
     private final boolean timeoutZeroesApproach;
     private final double arbiterTheta;
+    private final double arbiterEpsilon;
 
     /** Which learner backs the operant table: the decayed Welford cells (default) or the Kalman cell (plan, section 1). */
     public enum OperantKind { WELFORD, KALMAN }
@@ -126,6 +127,9 @@ public class LearningSettings implements Serializable {
 
     /** The paper's theta (section 4.5): the decisiveness at which a controller stops the consultation. */
     public static final double DEFAULT_ARBITER_THETA = 0.8;
+
+    /** The paper's epsilon (section 4.5): the probability that the arbiter picks a candidate uniformly (the exploration floor). */
+    public static final double DEFAULT_ARBITER_EPSILON = 0.03;
 
     /**
      * Which mechanism chooses the action (issue #104). {@code FILTER_BASED} is the legacy filter chain;
@@ -443,6 +447,49 @@ public class LearningSettings implements Serializable {
                             boolean timeoutZeroesApproach,
                             double arbiterTheta,
                             boolean transitionLoggingEnabled) {
+        this(circadianEnabled, consolidationEnabled, enabledFilters, expectancyEnabled, expectancyMode,
+                neuromodulationEnabled, actionTendencyEnabled, orexinEnabled, endocrineEnabled, tickGatedCognition,
+                focalDriveEnabled, operantEstimatorEnabled, actionSelector, focusThetaOn, focusThetaOff,
+                operantLearningEnabled, actionTendencySet, episodicEstimatorEnabled, arbiterFixedOrder,
+                episodicKeyLambda, sleepHysteresisEnabled, operantKind, arbiterStopRule, timeoutZeroesApproach,
+                arbiterTheta, transitionLoggingEnabled, DEFAULT_ARBITER_EPSILON);
+    }
+
+    /**
+     * @param arbiterEpsilon probability that the arbiter picks a candidate uniformly (exploration floor), in [0, 1]
+     *                       ({@link #DEFAULT_ARBITER_EPSILON} unless configured; the JEPA collection run raises it)
+     */
+    public LearningSettings(boolean circadianEnabled,
+                            boolean consolidationEnabled,
+                            List<ActionSelectionType> enabledFilters,
+                            boolean expectancyEnabled,
+                            ExpectancyMode expectancyMode,
+                            boolean neuromodulationEnabled,
+                            boolean actionTendencyEnabled,
+                            boolean orexinEnabled,
+                            boolean endocrineEnabled,
+                            boolean tickGatedCognition,
+                            boolean focalDriveEnabled,
+                            boolean operantEstimatorEnabled,
+                            ActionSelectorMode actionSelector,
+                            double focusThetaOn,
+                            double focusThetaOff,
+                            boolean operantLearningEnabled,
+                            ActionTendencySet actionTendencySet,
+                            boolean episodicEstimatorEnabled,
+                            boolean arbiterFixedOrder,
+                            double episodicKeyLambda,
+                            boolean sleepHysteresisEnabled,
+                            OperantKind operantKind,
+                            ArbiterStopRule arbiterStopRule,
+                            boolean timeoutZeroesApproach,
+                            double arbiterTheta,
+                            boolean transitionLoggingEnabled,
+                            double arbiterEpsilon) {
+        if (!(arbiterEpsilon >= 0.0 && arbiterEpsilon <= 1.0)) {
+            throw new IllegalArgumentException("arbiterEpsilon must be in [0, 1]: " + arbiterEpsilon);
+        }
+        this.arbiterEpsilon = arbiterEpsilon;
         this.operantKind = operantKind == null ? OperantKind.WELFORD : operantKind;
         this.arbiterStopRule = arbiterStopRule == null ? ArbiterStopRule.TOP_TWO : arbiterStopRule;
         this.timeoutZeroesApproach = timeoutZeroesApproach;
@@ -629,6 +676,11 @@ public class LearningSettings implements Serializable {
     /** The decisiveness at which a controller stops the consultation ({@link #DEFAULT_ARBITER_THETA} unless configured). */
     public double getArbiterTheta() {
         return arbiterTheta;
+    }
+
+    /** The probability that the arbiter picks a candidate uniformly ({@link #DEFAULT_ARBITER_EPSILON} unless configured). */
+    public double getArbiterEpsilon() {
+        return arbiterEpsilon;
     }
 
     /** Whether a sleeping creature is held in SLEEP for {@code MIN_SLEEP_TICKS} cycles (true unless configured off). */

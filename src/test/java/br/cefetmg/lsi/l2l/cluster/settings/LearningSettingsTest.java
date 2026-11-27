@@ -464,6 +464,34 @@ public class LearningSettingsTest {
     }
 
     @Test
+    void the_exploration_floor_defaults_to_the_papers_value_is_read_from_config_and_is_range_checked() {
+        com.typesafe.config.Config base = com.typesafe.config.ConfigFactory.parseFile(new java.io.File("simulations/arbiter_a3.conf")).resolve();
+        assertEquals(0.03, new Simulation(base).getLearningSettings().getArbiterEpsilon(), 0.0);
+        String hocon = "simulation.learningSettings { arbiterEpsilon = 0.15 }";
+        LearningSettings read = new Simulation(com.typesafe.config.ConfigFactory.parseString(hocon).withFallback(base).resolve())
+                .getLearningSettings();
+        assertEquals(0.15, read.getArbiterEpsilon(), 0.0);
+        for (String bad : new String[] {"-0.1", "1.5"}) {
+            com.typesafe.config.Config c = com.typesafe.config.ConfigFactory
+                    .parseString("simulation.learningSettings { arbiterEpsilon = " + bad + " }").withFallback(base).resolve();
+            assertThrows(IllegalArgumentException.class, () -> new Simulation(c).getLearningSettings());
+        }
+    }
+
+    @Test
+    void the_collection_pilot_config_is_a3_kal_with_exploration_and_the_transition_log() {
+        com.typesafe.config.Config c = com.typesafe.config.ConfigFactory
+                .parseFile(new java.io.File("simulations/a6_collect_pilot.conf")).resolve();
+        LearningSettings s = new Simulation(c).getLearningSettings();
+        assertEquals(LearningSettings.OperantKind.KALMAN, s.getOperantKind());
+        assertTrue(s.isEpisodicEstimatorEnabled());
+        assertTrue(s.isTransitionLoggingEnabled());
+        assertEquals(0.15, s.getArbiterEpsilon(), 0.0);
+        assertFalse(s.isActionTendencyEnabled());
+        assertFalse(s.isSleepHysteresisEnabled());
+    }
+
+    @Test
     void the_new_keys_are_read_from_the_simulation_config_and_absent_keys_keep_the_defaults() {
         String hocon = "simulation.learningSettings { operantEstimator = KALMAN, arbiterStopRule = WHOLE_DRAW, "
                 + "timeoutZeroesApproach = false, arbiterTheta = 0.6 }";
