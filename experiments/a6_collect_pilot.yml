@@ -1,0 +1,12 @@
+# Pilot of the JEPA collection run (docs/experiments/a6_collect_pilot_recipe.md, epic #139, plan docs/plans/jepa-planner-species-model.md):
+# 2 trials of a3_kal with exploration 0.15 and the transition log on, 20-minute cap, seeds disjoint from the p117 campaigns (10900-10911).
+name: a6_collect_pilot
+trials: 2
+seeds: [20000, 20001]
+conditions:
+- {key: a3_kal_explore, simulation: simulations/a6_collect_pilot.conf, label: 'a3_kal, exploration 0.15, transition log', color: '#eb6834'}
+image:
+  source: build
+data_dir: ml/data_a6_collect_pilot
+extract: {format: parquet, backup: false, tables: all}
+upload: {enabled: true, prefix: a6_collect_pilot}
