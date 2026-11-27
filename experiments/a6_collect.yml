@@ -1,0 +1,16 @@
+# JEPA collection run (docs/experiments/a6_collect_recipe.md, epic #139, plan docs/plans/jepa-planner-species-model.md, stage 1):
+# a3_kal with exploration 0.15 and the transition log on, in three food densities, 8 seeds each, 60-minute cap. Seeds 20000-20007 are shared by the
+# three densities and split BY SEED for the world model: train 20000-20005, validation 20006, offline test 20007. Run on CCAD:
+#   -e dl2l_image=ghcr.io/felipedreis/dl2l:preview-a6-planner
+name: a6_collect
+trials: 8
+seeds: [20000, 20001, 20002, 20003, 20004, 20005, 20006, 20007]
+conditions:
+- {key: dense,  simulation: simulations/a6_collect_dense.conf,  label: 'apples x1 (500)',   color: '#2a78d6'}
+- {key: mid,    simulation: simulations/a6_collect_mid.conf,    label: 'apples x0.5 (250)',  color: '#eda100'}
+- {key: sparse, simulation: simulations/a6_collect_sparse.conf, label: 'apples x0.25 (125)', color: '#eb6834'}
+image:
+  source: registry
+data_dir: ml/data_a6_collect
+extract: {format: parquet, backup: false, tables: all}
+upload: {enabled: true, prefix: a6_collect}

@@ -492,6 +492,20 @@ public class LearningSettingsTest {
     }
 
     @Test
+    void the_collection_run_densities_share_a3_kal_exploration_and_the_log_and_differ_only_in_the_apples() {
+        for (String level : new String[] {"dense", "mid", "sparse"}) {
+            com.typesafe.config.Config c = com.typesafe.config.ConfigFactory
+                    .parseFile(new java.io.File("simulations/a6_collect_" + level + ".conf")).resolve();
+            LearningSettings s = new Simulation(c).getLearningSettings();
+            assertEquals(LearningSettings.OperantKind.KALMAN, s.getOperantKind(), level);
+            assertTrue(s.isTransitionLoggingEnabled(), level);
+            assertEquals(0.15, s.getArbiterEpsilon(), 0.0, level);
+            assertFalse(s.isActionTendencyEnabled(), level);
+            assertEquals(60, c.getInt("simulation.maxRuntimeMinutes"), level);
+        }
+    }
+
+    @Test
     void the_new_keys_are_read_from_the_simulation_config_and_absent_keys_keep_the_defaults() {
         String hocon = "simulation.learningSettings { operantEstimator = KALMAN, arbiterStopRule = WHOLE_DRAW, "
                 + "timeoutZeroesApproach = false, arbiterTheta = 0.6 }";
