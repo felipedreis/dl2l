@@ -18,8 +18,7 @@ Three food densities (the pilot's C4 failed: 2.3% of decisions at hunger >= 4, 3
 | `mid` | 50 + 50 + 150 | half |
 | `sparse` | 25 + 25 + 75 | a quarter |
 
-Cactus and aloe (140 each) are unchanged. **8 seeds, 20000-20007, the same in each density: 24 trials, 120 creatures.** The seeds are disjoint from the p117 campaigns (10900-10911) and from the pilot's
-use only in that the pilot's two (20000-20001) are re-run at 60 minutes with the transition log; the pilot data is not pooled.
+Cactus and aloe (140 each) are unchanged. **8 seeds, 20000-20007, the same in each density: 24 trials, 120 creatures.** The seeds are disjoint from the p117 campaigns (10900-10911). The pilot used 20000-20001 at 20 minutes; they are re-run here at 60 minutes, and the pilot data is not pooled.
 
 **Split by whole seed, across all densities at once:** train 20000-20005 (18 trials), validation 20006 (3), offline test 20007 (3). A held-out seed is held out in every density, so no world of the validation or test set was seen in training.
 The stage-3 campaign uses other seeds again. No test manipulation (hazard, held-out object type, devaluation) is in this world.
@@ -38,5 +37,5 @@ If D2 fails in the pooled train data, a fourth, sparser density is added and run
 validation seed picks the checkpoint and the SE calibration constants, and the offline test seed is used once, in #135.
 
 ## 5. Cost
-24 trials x 60 minutes on CCAD, about one window (the Kalman campaign ran 48 trials in about 11 h at 10 concurrent trials, so about 5-6 h here). Volume from the pilot: about 20 MB of new tables per
-trial-hour per 5 creatures, well below the quota problem of earlier runs.
+24 trials x 60 minutes on CCAD, about one window (the Kalman campaign ran 48 trials in about 11 h at 10 concurrent trials, so about 5-6 h here). Volume from the pilot: about 30 MB of new tables per
+trial-hour (5 creatures; the pilot's three new tables were 19 MB for two 20-minute trials), well below the quota problem of earlier runs.
