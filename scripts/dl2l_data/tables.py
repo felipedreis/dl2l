@@ -428,6 +428,40 @@ TABLES["episodic_engrams"] = (
     None,
 )
 
+# Plan A.3 (JEPA transition log): one row per decision cycle, every decision: the executed action and target, the four
+# drive levels at decision time (h_*) and the focal drive. Empty/absent unless transitionLoggingEnabled.
+TABLES["decision_steps"] = (
+    """
+    SELECT creature_key, cycle, action, object_type, target_key, target_sequential,
+           h_hunger, h_sleep, h_pain, h_tedium, focal_drive
+    FROM data.decision_steps
+    ORDER BY creature_key, cycle
+    """,
+    None,
+)
+
+# Plan A.3: one row per attributed per-act drive outcome K, stamped with the decision cycle (BASELINE drift excluded).
+# Empty/absent unless transitionLoggingEnabled.
+TABLES["cycle_outcomes"] = (
+    """
+    SELECT creature_key, cycle, d_hunger, d_sleep, d_pain, d_tedium
+    FROM data.cycle_outcomes
+    ORDER BY creature_key, cycle
+    """,
+    None,
+)
+
+# Plan A.3: one row per perception of a decision cycle's candidate set, at its rank in that set. Same cycle as that
+# cycle's arbitration_decisions row. Empty/absent unless transitionLoggingEnabled.
+TABLES["decision_percepts"] = (
+    """
+    SELECT creature_key, cycle, rank, object_key, object_sequential, object_type, distance, angle, contact
+    FROM data.decision_percepts
+    ORDER BY creature_key, cycle, rank
+    """,
+    None,
+)
+
 # Tables written before pg_dump/manifest bookkeeping, in the order exp_extract.py
 # originally wrote them (a couple of analyses key off this ordering in logs).
 TABLE_ORDER = [
@@ -436,6 +470,7 @@ TABLE_ORDER = [
     "endocrine", "expectancy", "engrams", "consolidation_episodes",
     "consolidation_batches", "memory_traces", "conditioning", "memory_decisions",
     "episode_returns", "arbitration_decisions", "run_info", "operant_updates", "episodic_engrams",
+    "decision_steps", "cycle_outcomes", "decision_percepts",
 ]
 
 assert set(TABLE_ORDER) == set(TABLES)

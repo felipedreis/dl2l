@@ -58,6 +58,9 @@ OPTIONAL_RAW = {
     "arbitration_decisions": "arbitration_decision_state",     # issue #105
     "operant_updates": "operant_update_state",                 # operant per-outcome (A2)
     "episodic_engrams": "episodic_engram",                     # issue #111 (A3/A5)
+    "decision_steps": "decision_steps",                        # plan A.3 (transitionLoggingEnabled)
+    "cycle_outcomes": "cycle_outcomes",                        # plan A.3 (transitionLoggingEnabled)
+    "decision_percepts": "decision_percepts",                  # plan A.3 (transitionLoggingEnabled)
 }
 
 

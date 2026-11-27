@@ -141,6 +141,13 @@ class ArbitrationDecisionRoundTripTest {
 
         assertEquals(thompson.chosen().getTarget().name(), cols.get("chosen_object_type").get(0));
 
+        // Plan A.3: the rows are built without the drive levels (h null, NaN in memory), so h_* is null; the executed
+        // target is the fixture apple's id, the same on all three rows.
+        assertEquals(List.of(1L, 1L, 1L), cols.get("executed_target_key"));
+        for (String h : List.of("h_hunger", "h_sleep", "h_pain", "h_tedium")) {
+            assertTrue(cols.get(h).stream().allMatch(v -> v == null), h + " is null when not supplied");
+        }
+
         for (Map.Entry<String, List<Object>> col : cols.entrySet()) {
             for (Object v : col.getValue()) {
                 assertFalse(v instanceof Double d && d.isNaN(), "no NaN in column " + col.getKey());

@@ -149,13 +149,15 @@ public class CreatureActor implements Creature {
                 .typedActorOf(new TypedProps<>(OperantConditioning.class, OperantConditioningActor::new),
                         "operantConditioning");
 
-        memory = TypedActor.get(TypedActor.context())
-                .typedActorOf(new TypedProps<>(MemorySystem.class,
-                        (Creator<MemorySystemActor>) () -> new MemorySystemActor(id, metricsExt)), "memorySystem");
-
         // Resolve effective settings: per-creature override if provided, else global.
         SimulationSettingsExtension.Impl ext = SimulationSettingsExtension.of(context.system());
         final LearningSettings effective = (learningSettings != null) ? learningSettings : ext.learningSettings();
+
+        // Plan A.3: the BDActor ref for cycle_outcomes, only with transition logging on (null otherwise).
+        final ComponentRef transitionSink = effective.isTransitionLoggingEnabled() ? bd() : null;
+        memory = TypedActor.get(TypedActor.context())
+                .typedActorOf(new TypedProps<>(MemorySystem.class,
+                        (Creator<MemorySystemActor>) () -> new MemorySystemActor(id, metricsExt, transitionSink)), "memorySystem");
         // Register under this creature's key so components can find it via learningSettings(id.key).
         ext.configure(id.key, effective);
 

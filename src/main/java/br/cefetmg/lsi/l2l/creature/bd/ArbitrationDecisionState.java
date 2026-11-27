@@ -5,6 +5,7 @@ import br.cefetmg.lsi.l2l.creature.arbiter.ArbitrationDecision;
 import br.cefetmg.lsi.l2l.creature.arbiter.Estimate;
 import br.cefetmg.lsi.l2l.creature.arbiter.ExecutedEstimate;
 import br.cefetmg.lsi.l2l.creature.common.Action;
+import br.cefetmg.lsi.l2l.creature.common.Perception;
 
 import java.util.Arrays;
 import java.util.UUID;
@@ -62,6 +63,11 @@ public class ArbitrationDecisionState implements PersistenceState {
     private double executedSe;
     private double executedSigma;
 
+    /** Plan A.3: the drive levels at decision time in {@code FocusTracker.DRIVES} order; NaN when not supplied. */
+    private final double[] h = nans(4);
+    /** Plan A.3: the executed action's target key; null when the action has no perception id. */
+    private Long executedTargetKey;
+
     private final double[] conf = unset();
     private final double[] controllerQ = unset();
     private final double[] controllerSe = unset();
@@ -83,8 +89,21 @@ public class ArbitrationDecisionState implements PersistenceState {
      */
     public static ArbitrationDecisionState of(long creatureKey, long seq, long timeMs, long cycle, String focalDrive,
                                               double efficiency, ArbitrationDecision d, ExecutedEstimate x) {
+        return of(creatureKey, seq, timeMs, cycle, focalDrive, efficiency, d, x, null);
+    }
+
+    /**
+     * As {@link #of(long, long, long, long, String, double, ArbitrationDecision, ExecutedEstimate)}, plus the drive
+     * levels at decision time ({@code h}, four entries in {@code FocusTracker.DRIVES} order, or null for none).
+     */
+    public static ArbitrationDecisionState of(long creatureKey, long seq, long timeMs, long cycle, String focalDrive,
+                                              double efficiency, ArbitrationDecision d, ExecutedEstimate x,
+                                              double[] h) {
         if (d == null || x == null) {
             throw new IllegalArgumentException("decision and executed estimate must not be null");
+        }
+        if (h != null && h.length != 4) {
+            throw new IllegalArgumentException("h must have four drive levels");
         }
         ArbitrationDecisionState s = new ArbitrationDecisionState();
         s.creatureKey = creatureKey;
@@ -121,6 +140,12 @@ public class ArbitrationDecisionState implements PersistenceState {
         s.executedQ = x.deciding().q();
         s.executedSe = x.deciding().se();
         s.executedSigma = x.deciding().sigma();
+        Perception executedPerception = x.action().perception;
+        s.executedTargetKey = executedPerception != null && executedPerception.id != null
+                ? executedPerception.id.key : null;
+        if (h != null) {
+            System.arraycopy(h, 0, s.h, 0, h.length);
+        }
 
         for (ArbitrationDecision.Consultation c : d.consultations()) {
             s.conf[c.controller().ordinal()] = c.conf();
@@ -135,7 +160,11 @@ public class ArbitrationDecisionState implements PersistenceState {
     }
 
     private static double[] unset() {
-        double[] a = new double[Arbiter.ControllerType.values().length];
+        return nans(Arbiter.ControllerType.values().length);
+    }
+
+    private static double[] nans(int n) {
+        double[] a = new double[n];
         Arrays.fill(a, Double.NaN);
         return a;
     }
@@ -176,6 +205,8 @@ public class ArbitrationDecisionState implements PersistenceState {
     public double getExecutedQ() { return executedQ; }
     public double getExecutedSe() { return executedSe; }
     public double getExecutedSigma() { return executedSigma; }
+    public Long getExecutedTargetKey() { return executedTargetKey; }
+    public double getH(int i) { return h[i]; }
 
     public double getConf(Arbiter.ControllerType c) { return conf[c.ordinal()]; }
     public double getControllerQ(Arbiter.ControllerType c) { return controllerQ[c.ordinal()]; }

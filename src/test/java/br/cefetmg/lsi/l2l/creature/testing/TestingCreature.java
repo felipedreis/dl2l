@@ -45,7 +45,7 @@ public final class TestingCreature implements Creature {
 
     private final EmotionalSystem emotionalSystem = new EmotionalSystemActor();
     private final OperantConditioning operantConditioning = new OperantConditioningActor();
-    private final MemorySystem memory = new MemorySystemActor();
+    private final MemorySystem memory;
     private final ExpectancyPredictor expectancy;
 
     /** Issue #110: in-process operant estimator (no facade in the harness); null unless enabled. */
@@ -84,6 +84,9 @@ public final class TestingCreature implements Creature {
         this.worldBoundaries = worldBoundaries;
         this.learningSettings = learningSettings;
         this.expectancy = ExpectancyPredictors.forMode(learningSettings.getExpectancyMode());
+        // Plan A.3: with transition logging on, the memory system writes cycle_outcomes to the same bd sink.
+        this.memory = learningSettings.isTransitionLoggingEnabled()
+                ? new MemorySystemActor(id, null, bd) : new MemorySystemActor();
     }
 
     @Override

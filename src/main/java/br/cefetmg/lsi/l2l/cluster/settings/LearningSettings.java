@@ -102,6 +102,9 @@ public class LearningSettings implements Serializable {
     private final boolean arbiterFixedOrder;
     private final double episodicKeyLambda;
 
+    // --- Per-cycle transition log (docs/plans/jepa-planner-details.md A.3) — default-off; needs the focus tracker ---
+    private final boolean transitionLoggingEnabled;
+
     // --- Sleep hysteresis gate (FullAppraisal.enforceHysteresisGate) — default ON; off is an experimental control ---
     private final boolean sleepHysteresisEnabled;
 
@@ -438,7 +441,8 @@ public class LearningSettings implements Serializable {
                             OperantKind operantKind,
                             ArbiterStopRule arbiterStopRule,
                             boolean timeoutZeroesApproach,
-                            double arbiterTheta) {
+                            double arbiterTheta,
+                            boolean transitionLoggingEnabled) {
         this.operantKind = operantKind == null ? OperantKind.WELFORD : operantKind;
         this.arbiterStopRule = arbiterStopRule == null ? ArbiterStopRule.TOP_TWO : arbiterStopRule;
         this.timeoutZeroesApproach = timeoutZeroesApproach;
@@ -461,6 +465,10 @@ public class LearningSettings implements Serializable {
         if (arbiterFixedOrder && !episodicEstimatorEnabled) {
             throw new IllegalArgumentException("arbiterFixedOrder requires episodicEstimatorEnabled");
         }
+        if (transitionLoggingEnabled && !focalDriveEnabled) {
+            throw new IllegalArgumentException("transitionLoggingEnabled requires focalDriveEnabled");
+        }
+        this.transitionLoggingEnabled = transitionLoggingEnabled;
         if (!Double.isFinite(episodicKeyLambda) || episodicKeyLambda < 0) {
             throw new IllegalArgumentException("episodicKeyLambda must be finite and non-negative: " + episodicKeyLambda);
         }
@@ -503,6 +511,40 @@ public class LearningSettings implements Serializable {
         this.tickGatedCognition     = tickGatedCognition;
         this.focalDriveEnabled      = focalDriveEnabled;
         this.operantEstimatorEnabled = operantEstimatorEnabled;
+    }
+
+    /** The 25-argument form, with the transition log off. Kept so existing callers and tests are unchanged. */
+    public LearningSettings(boolean circadianEnabled,
+                            boolean consolidationEnabled,
+                            List<ActionSelectionType> enabledFilters,
+                            boolean expectancyEnabled,
+                            ExpectancyMode expectancyMode,
+                            boolean neuromodulationEnabled,
+                            boolean actionTendencyEnabled,
+                            boolean orexinEnabled,
+                            boolean endocrineEnabled,
+                            boolean tickGatedCognition,
+                            boolean focalDriveEnabled,
+                            boolean operantEstimatorEnabled,
+                            ActionSelectorMode actionSelector,
+                            double focusThetaOn,
+                            double focusThetaOff,
+                            boolean operantLearningEnabled,
+                            ActionTendencySet actionTendencySet,
+                            boolean episodicEstimatorEnabled,
+                            boolean arbiterFixedOrder,
+                            double episodicKeyLambda,
+                            boolean sleepHysteresisEnabled,
+                            OperantKind operantKind,
+                            ArbiterStopRule arbiterStopRule,
+                            boolean timeoutZeroesApproach,
+                            double arbiterTheta) {
+        this(circadianEnabled, consolidationEnabled, enabledFilters, expectancyEnabled, expectancyMode,
+                neuromodulationEnabled, actionTendencyEnabled, orexinEnabled, endocrineEnabled, tickGatedCognition,
+                focalDriveEnabled, operantEstimatorEnabled, actionSelector, focusThetaOn, focusThetaOff,
+                operantLearningEnabled, actionTendencySet, episodicEstimatorEnabled, arbiterFixedOrder,
+                episodicKeyLambda, sleepHysteresisEnabled, operantKind, arbiterStopRule, timeoutZeroesApproach,
+                arbiterTheta, false);
     }
 
     /** Urgency at which a drive opens an episode (default 2.0). Only read when {@link #isFocalDriveEnabled()}. */
@@ -597,6 +639,11 @@ public class LearningSettings implements Serializable {
     /** A3: the episodic controller is wired into the arbiter, and closed episodes are written as engrams. */
     public boolean isEpisodicEstimatorEnabled() {
         return episodicEstimatorEnabled;
+    }
+
+    /** Plan A.3: per-cycle rows for decision_steps, decision_percepts and cycle_outcomes. Default off; needs the focal drive. */
+    public boolean isTransitionLoggingEnabled() {
+        return transitionLoggingEnabled;
     }
 
     /** A5: the arbiter decides by position (episodic with evidence, else operant), not by decisiveness. */

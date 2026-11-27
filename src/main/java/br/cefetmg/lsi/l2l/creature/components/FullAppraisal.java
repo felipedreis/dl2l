@@ -29,7 +29,10 @@ import br.cefetmg.lsi.l2l.creature.bd.ArbitrationDecisionState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusState;
 import br.cefetmg.lsi.l2l.creature.bd.ChangeStimulusStateBuilder;
 import br.cefetmg.lsi.l2l.creature.bd.ChosenActionState;
+import br.cefetmg.lsi.l2l.creature.bd.DecisionPerceptState;
+import br.cefetmg.lsi.l2l.creature.bd.DecisionStepState;
 import br.cefetmg.lsi.l2l.creature.bd.MemoryDecisionState;
+import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
 import br.cefetmg.lsi.l2l.creature.ComponentRef;
 import br.cefetmg.lsi.l2l.creature.common.Action;
 import br.cefetmg.lsi.l2l.creature.common.ActionType;
@@ -476,17 +479,43 @@ public class FullAppraisal extends CreatureComponent {
         ChosenActionState chosenActionState = new ChosenActionState(change,
                 actionSelection.lastSelectionType(), action.type, action.perception.id,
                 inferenceMs, focalDrive);
+        // Plan A.3: the transition rows join this batch, so their cycle is this cycle's decision cycle.
+        List<PersistenceState> batch = new ArrayList<>(List.of(change, chosenActionState));
         if (cycleDecision != null && cycleExecuted != null) {
             // Issue #105: the arbitration row goes in the same batch as the cycle's chosen-action row (#84 atomicity).
-            persist(change, chosenActionState, ArbitrationDecisionState.of(id.key, arbitrationDecisionSeq++,
+            batch.add(ArbitrationDecisionState.of(id.key, arbitrationDecisionSeq++,
                     System.currentTimeMillis(), cycleDecisionCycle, focalDrive, cycleContext.efficiency(),
-                    cycleDecision, cycleExecuted));
-        } else {
-            persist(change, chosenActionState);
+                    cycleDecision, cycleExecuted, cycleLevels));
         }
+        if (learningSettings.isTransitionLoggingEnabled()) {
+            transitionRows(emotional, action, batch);
+        }
+        persist(batch.toArray(new PersistenceState[0]));
         cycleDecision = null;
         cycleExecuted = null;
         persistMemoryDecision();
+    }
+
+    /**
+     * Plan A.3 (JEPA transition log): this cycle's {@code decision_steps} row and one {@code decision_percepts} row per
+     * perception of the candidate set, appended to the decision's batch. The cycle is {@link #cycleDecisionCycle},
+     * which sendArbiterMessages sets this cycle; the flag requires the focus tracker, which is what runs it.
+     */
+    private void transitionRows(EmotionalStimulus emotional, Action action, List<PersistenceState> batch) {
+        long cycle = cycleDecisionCycle;
+        batch.add(new DecisionStepState(id.key, cycle, action.type.name(),
+                action.getTarget() != null ? action.getTarget().name() : null,
+                action.perception.id, cycleLevels, focalDrive));
+        List<Perception> candidates = emotional.getPerceptions();
+        for (int rank = 0; rank < candidates.size(); rank++) {
+            Perception c = candidates.get(rank);
+            WorldObjectType type = c.objectType.getOrElse(null);
+            // Contact as EngramKeyEncoder derives it: not the creature itself, and within the object's contact distance.
+            boolean contact = type != null && !(type instanceof Self) && c.distance <= contactDistance(type);
+            batch.add(new DecisionPerceptState(id.key, cycle, rank,
+                    c.id != null ? c.id.key : null, c.id != null ? c.id.sequential : null,
+                    type != null ? type.name() : null, c.distance, c.angle, contact));
+        }
     }
 
     /**

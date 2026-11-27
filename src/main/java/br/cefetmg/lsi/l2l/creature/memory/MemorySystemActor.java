@@ -9,6 +9,8 @@ import br.cefetmg.lsi.l2l.creature.arbiter.DecisionRecord;
 import br.cefetmg.lsi.l2l.creature.arbiter.EpisodeBuffer;
 import br.cefetmg.lsi.l2l.creature.arbiter.FocusEvent;
 import br.cefetmg.lsi.l2l.creature.arbiter.HomeostaticValue;
+import br.cefetmg.lsi.l2l.creature.bd.CycleOutcomeState;
+import br.cefetmg.lsi.l2l.creature.bd.PersistenceState;
 import br.cefetmg.lsi.l2l.metrics.MetricsExtension;
 
 import java.util.*;
@@ -54,9 +56,21 @@ public class MemorySystemActor implements MemorySystem {
     }
 
     public MemorySystemActor(SequentialId creatureId, MetricsExtension.Impl metricsExt) {
+        this(creatureId, metricsExt, null);
+    }
+
+    /**
+     * @param transitionSink where {@code cycle_outcomes} rows go (BDActor), or null when transition logging is off.
+     *                       Written by this actor with a fire-and-forget {@code tell}, so the hot path never blocks.
+     */
+    public MemorySystemActor(SequentialId creatureId, MetricsExtension.Impl metricsExt, ComponentRef transitionSink) {
         this.creatureId = creatureId;
         this.metricsExt = metricsExt;
+        this.transitionSink = transitionSink;
     }
+
+    /** Plan A.3: null unless transition logging is on; then every attributed outcome is also written as a row. */
+    private final ComponentRef transitionSink;
 
     @Override
     public void addShortTermMemory(ShortTermMemory stm) {
@@ -165,6 +179,11 @@ public class MemorySystemActor implements MemorySystem {
 
     @Override
     public void recordOutcome(double[] k) {
+        // Plan A.3: written before the episodes guard, so it lands even when no episode buffer is enabled.
+        if (transitionSink != null) {
+            transitionSink.tell(new PersistenceState[] {
+                    new CycleOutcomeState(creatureId.key, decisionCycle, k)});
+        }
         episodeCall(() -> episodes.onOutcome((int) decisionCycle, k));
     }
 

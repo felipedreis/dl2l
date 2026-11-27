@@ -417,7 +417,13 @@ public final class TableSchemas {
                                 col("executed_sigma", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getExecutedSigma()))),
                         controllerColumns(),
                         List.<Column<ArbitrationDecisionState>>of(
-                                col("novelty_bonus", ColType.DOUBLE, ArbitrationDecisionState::getNoveltyBonus)))));
+                                col("novelty_bonus", ColType.DOUBLE, ArbitrationDecisionState::getNoveltyBonus),
+                                // Plan A.3: the drive levels at decision time and the executed target, for replay.
+                                col("h_hunger", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getH(0))),
+                                col("h_sleep", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getH(1))),
+                                col("h_pain", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getH(2))),
+                                col("h_tedium", ColType.DOUBLE, (ArbitrationDecisionState s) -> nanToNull(s.getH(3))),
+                                col("executed_target_key", ColType.INT64, ArbitrationDecisionState::getExecutedTargetKey)))));
 
         // Operant table (A2): one row per update of a (object type, action) cell.
         all.add(table("operant_update_state", OperantUpdateState.class, OperantUpdateState::getId, List.of(
@@ -465,6 +471,39 @@ public final class TableSchemas {
         }
         all.add(table("episodic_engram", EpisodicEngramState.class, EpisodicEngramState::getId,
                 concat(engramBase, engramKey)));
+
+        // Plan A.3 (JEPA transition log): written only with transitionLoggingEnabled, so absent from flag-off dumps.
+        all.add(table("decision_steps", DecisionStepState.class, DecisionStepState::getId, List.of(
+                col("creature_key", ColType.INT64, DecisionStepState::getCreatureKey),
+                col("cycle", ColType.INT64, DecisionStepState::getCycle),
+                col("action", ColType.STRING, DecisionStepState::getAction),
+                col("object_type", ColType.STRING, DecisionStepState::getObjectType),
+                col("target_key", ColType.INT64, DecisionStepState::getTargetKey),
+                col("target_sequential", ColType.INT64, DecisionStepState::getTargetSequential),
+                col("h_hunger", ColType.DOUBLE, (DecisionStepState s) -> s.getH(0)),
+                col("h_sleep", ColType.DOUBLE, (DecisionStepState s) -> s.getH(1)),
+                col("h_pain", ColType.DOUBLE, (DecisionStepState s) -> s.getH(2)),
+                col("h_tedium", ColType.DOUBLE, (DecisionStepState s) -> s.getH(3)),
+                col("focal_drive", ColType.STRING, DecisionStepState::getFocalDrive))));
+
+        all.add(table("cycle_outcomes", CycleOutcomeState.class, CycleOutcomeState::getId, List.of(
+                col("creature_key", ColType.INT64, CycleOutcomeState::getCreatureKey),
+                col("cycle", ColType.INT64, CycleOutcomeState::getCycle),
+                col("d_hunger", ColType.DOUBLE, (CycleOutcomeState s) -> s.getD(0)),
+                col("d_sleep", ColType.DOUBLE, (CycleOutcomeState s) -> s.getD(1)),
+                col("d_pain", ColType.DOUBLE, (CycleOutcomeState s) -> s.getD(2)),
+                col("d_tedium", ColType.DOUBLE, (CycleOutcomeState s) -> s.getD(3)))));
+
+        all.add(table("decision_percepts", DecisionPerceptState.class, DecisionPerceptState::getId, List.of(
+                col("creature_key", ColType.INT64, DecisionPerceptState::getCreatureKey),
+                col("cycle", ColType.INT64, DecisionPerceptState::getCycle),
+                col("rank", ColType.INT32, DecisionPerceptState::getRank),
+                col("object_key", ColType.INT64, DecisionPerceptState::getObjectKey),
+                col("object_sequential", ColType.INT64, DecisionPerceptState::getObjectSequential),
+                col("object_type", ColType.STRING, DecisionPerceptState::getObjectType),
+                col("distance", ColType.DOUBLE, DecisionPerceptState::getDistance),
+                col("angle", ColType.DOUBLE, DecisionPerceptState::getAngle),
+                col("contact", ColType.BOOLEAN, DecisionPerceptState::isContact))));
 
         return List.copyOf(all);
     }

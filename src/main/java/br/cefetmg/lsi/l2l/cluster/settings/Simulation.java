@@ -172,7 +172,9 @@ public class Simulation {
                         ? LearningSettings.ArbiterStopRule.valueOf(ls.getString("arbiterStopRule").toUpperCase(java.util.Locale.ROOT))
                         : LearningSettings.ArbiterStopRule.TOP_TWO,
                 !ls.hasPath("timeoutZeroesApproach") || ls.getBoolean("timeoutZeroesApproach"),
-                ls.hasPath("arbiterTheta") ? ls.getDouble("arbiterTheta") : LearningSettings.DEFAULT_ARBITER_THETA);
+                ls.hasPath("arbiterTheta") ? ls.getDouble("arbiterTheta") : LearningSettings.DEFAULT_ARBITER_THETA,
+                // Plan A.3: per-cycle transition rows (decision_steps, decision_percepts, cycle_outcomes). Default off.
+                ls.hasPath("transitionLoggingEnabled") && ls.getBoolean("transitionLoggingEnabled"));
     }
 
     public Long getNumHolders() {
